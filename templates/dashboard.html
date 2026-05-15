@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventory Reconciliation Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --primary: #1b3a2d; --primary-light: #2d5a3d; --primary-hover: #234a35;
+      --primary-soft: #e8f2ec;
+      --bg: #f2ede6; --surface: #ffffff; --surface-2: #f7f3ee;
+      --border: #e5ddd4; --border-light: #ede8e2;
+      --text: #1a1a1a; --text-muted: #6b6560; --text-light: #9e9890;
+      --red: #c0392b; --red-soft: #fdf0ef;
+      --amber: #92400e; --amber-soft: #fef3e2;
+      --green-val: #1b6b3a; --green-soft: #e8f5ee;
+      --blue-val: #2563eb; --blue-soft: #eff6ff;
+    }
+    * { box-sizing: border-box; }
+    body { background: var(--bg); font-family: 'Inter','Segoe UI',sans-serif; margin: 0; color: var(--text); }
+
+    /* Root Labs Logo */
+    .rl-logo { background: var(--primary); border-radius: 8px; padding: 7px 13px; display: flex; flex-direction: column; align-items: center; line-height: 1; gap: 1px; }
+    .rl-root { color: #fff; font-weight: 800; font-size: 17px; letter-spacing: 1.5px; }
+    .rl-labs { color: #8faf9f; font-size: 10px; letter-spacing: 3.5px; font-weight: 500; }
+
+    /* Header */
+    .header { background: var(--surface); padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+    .header-title { font-size: 15px; font-weight: 700; color: var(--primary); }
+    .header-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; letter-spacing: 0.2px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .last-updated { color: var(--text-muted); font-size: 12px; }
+    .btn-refresh { background: var(--surface-2); border: 1.5px solid var(--border); color: var(--primary); padding: 6px 16px; border-radius: 50px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+    .btn-refresh:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* Filter Bar */
+    .filter-bar { background: var(--surface-2); padding: 10px 24px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+    .filter-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .filter-group { display: flex; align-items: center; gap: 10px; }
+    .filter-group.push-right { margin-left: auto; }
+    .filter-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+    .filter-label i { margin-right: 3px; color: var(--primary); }
+    .filter-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-btn { padding: 5px 16px; border-radius: 50px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+    .filter-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+    .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .filter-divider { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+
+    /* Month dropdown */
+    .month-dropdown { position: relative; }
+    .month-dd-btn { padding: 5px 16px; border-radius: 50px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 10px; font-family: inherit; min-width: 170px; justify-content: space-between; }
+    .month-dd-btn:hover, .month-dd-btn.open { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+    .month-dd-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 1000; background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.10); padding: 6px 0; min-width: 200px; max-height: 320px; overflow-y: auto; display: none; }
+    .month-dd-menu.open { display: block; }
+    .month-dd-item { padding: 6px 14px; display: flex; align-items: center; }
+    .month-dd-item:hover { background: var(--primary-soft); }
+    .month-dd-item label { font-size: 12px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; font-weight: 500; }
+    .month-dd-item input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+    .month-dd-divider { height: 1px; background: var(--border-light); margin: 4px 0; }
+
+    /* KPI Cards */
+    .kpi-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; padding: 20px 24px 0; }
+    .kpi-card { background: var(--surface); border-radius: 14px; padding: 18px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--border-light); transition: transform 0.15s, box-shadow 0.15s; }
+    .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.09); }
+    .kpi-card.blue { border-top: 3px solid var(--blue-val); }
+    .kpi-card.red { border-top: 3px solid var(--red); }
+    .kpi-card.orange { border-top: 3px solid #d97706; }
+    .kpi-card.green { border-top: 3px solid var(--primary); }
+    .kpi-card.amber { border-top: 3px solid var(--amber); }
+    .kpi-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 15px; }
+    .kpi-icon.blue { background: var(--blue-soft); color: var(--blue-val); }
+    .kpi-icon.red { background: var(--red-soft); color: var(--red); }
+    .kpi-icon.orange { background: #fffbeb; color: #d97706; }
+    .kpi-icon.green { background: var(--primary-soft); color: var(--primary); }
+    .kpi-icon.amber { background: var(--amber-soft); color: var(--amber); }
+    .kpi-value { font-size: 24px; font-weight: 800; line-height: 1; }
+    .kpi-value.blue { color: var(--blue-val); }
+    .kpi-value.red { color: var(--red); }
+    .kpi-value.orange { color: #d97706; }
+    .kpi-value.green { color: var(--primary); }
+    .kpi-value.amber { color: var(--amber); }
+    .kpi-label { font-size: 10px; color: var(--text-muted); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+    .kpi-sub { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+
+    /* Charts */
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 24px 0; }
+    .chart-card { background: var(--surface); border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--border-light); }
+    .chart-title { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.8px; }
+    .chart-title i { color: var(--primary); }
+    .chart-container { position: relative; height: 220px; }
+
+    /* Tables */
+    .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 24px 0; }
+    .tables-grid.single { grid-template-columns: 1fr; }
+    .table-card { background: var(--surface); border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--border-light); overflow-x: auto; }
+    .table-title { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.8px; }
+    .recon-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .recon-table th { background: var(--primary); color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.3px; }
+    .recon-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-light); color: var(--text); }
+    .recon-table tbody tr:hover { background: var(--primary-soft); }
+    .recon-table tbody tr:last-child td { font-weight: 700; background: var(--surface-2); }
+    .badge-lost { background: var(--red-soft); color: var(--red); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
+    .badge-recovered { background: var(--green-soft); color: var(--green-val); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
+    .badge-pending { background: var(--amber-soft); color: var(--amber); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
+
+    /* Remarks */
+    .remarks-section { padding: 14px 24px 24px; }
+    .remarks-card { background: var(--surface); border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--border-light); }
+    .remarks-title { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.8px; }
+    .remarks-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+    .remark-channel { background: var(--surface-2); border-radius: 10px; padding: 14px; border-left: 3px solid var(--primary); }
+    .remark-channel h4 { font-size: 11px; font-weight: 700; color: var(--primary); margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .remark-item { margin-bottom: 10px; }
+    .remark-month { font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .remark-text { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+    /* Footer */
+    .footer { background: var(--surface); padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+    .footer-left { font-size: 11px; color: var(--text-light); }
+    .btn-email { background: var(--primary); color: #fff; border: none; padding: 8px 20px; border-radius: 50px; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+    .btn-email:hover { background: var(--primary-light); }
+    .btn-export { background: var(--surface); color: var(--primary); border: 1.5px solid var(--primary); padding: 8px 20px; border-radius: 50px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+    .btn-export:hover { background: var(--primary); color: #fff; }
+
+    /* Tab navigation */
+    .tab-nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; }
+    .tab-btn { padding: 12px 22px; font-size: 11px; font-weight: 700; cursor: pointer; border: none; background: none; color: var(--text-muted); border-bottom: 3px solid transparent; margin-bottom: -1px; transition: all 0.15s; font-family: inherit; display: flex; align-items: center; gap: 7px; text-transform: uppercase; letter-spacing: 0.8px; }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* Discrepancy tab */
+    .disc-summary { display: flex; gap: 14px; padding: 20px 24px 0; flex-wrap: wrap; }
+    .disc-channel-card { background: var(--surface); border-radius: 14px; padding: 16px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--border-light); border-top: 3px solid var(--primary); display: flex; align-items: center; gap: 14px; min-width: 170px; }
+    .disc-channel-card .disc-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+    .disc-channel-card .disc-count { font-size: 28px; font-weight: 800; line-height: 1; }
+    .disc-channel-card .disc-label { font-size: 10px; color: var(--text-muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+    .disc-channel-card .disc-sublabel { font-size: 11px; color: var(--text-light); margin-top: 1px; }
+    .disc-table-wrap { padding: 14px 24px 24px; }
+    .disc-table-card { background: var(--surface); border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--border-light); overflow-x: auto; }
+    .disc-search { padding: 7px 14px; border: 1.5px solid var(--border); border-radius: 50px; font-size: 12px; outline: none; width: 240px; font-family: inherit; background: var(--surface-2); color: var(--text); }
+    .disc-search:focus { border-color: var(--primary); background: var(--surface); }
+    .badge-status-open { background: var(--red-soft); color: var(--red); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .badge-status-closed { background: var(--green-soft); color: var(--green-val); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .badge-status-na { background: var(--surface-2); color: var(--text-light); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+    /* Loading */
+    .loading { text-align: center; padding: 60px; color: var(--text-light); }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Alert */
+    .alert-toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 500; z-index: 9999; box-shadow: 0 4px 16px rgba(0,0,0,0.12); display: none; }
+    .alert-success { background: var(--green-soft); color: var(--green-val); border-left: 4px solid var(--primary); }
+    .alert-error { background: var(--red-soft); color: var(--red); border-left: 4px solid var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- Alert Toast -->
+<div id="toast" class="alert-toast"></div>
+
+<!-- Header -->
+<div class="header">
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="rl-logo">
+      <span class="rl-root">ROOT</span>
+      <span class="rl-labs">LABS</span>
+    </div>
+    <div>
+      <div class="header-title">Inventory Reconciliation</div>
+      <div class="header-sub">India → USA Shipment Tracker</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="last-updated" id="lastUpdated">Loading...</span>
+    <button class="btn-refresh" onclick="refreshData()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <!-- Row 1: Year + Month -->
+  <div class="filter-row">
+    <div class="filter-group" id="yearGroup" style="display:none">
+      <span class="filter-label"><i class="fas fa-calendar-alt"></i> Year</span>
+      <div id="yearFilters" class="filter-btns"></div>
+    </div>
+    <div class="filter-group" id="yearGroup" style="display:none"><div class="filter-divider"></div></div>
+    <div class="filter-group">
+      <span class="filter-label"><i class="fas fa-calendar"></i> Month</span>
+      <div class="month-dropdown" id="monthDropdownWrap">
+        <button class="month-dd-btn" id="monthDdBtn" onclick="toggleMonthDropdown(event)">
+          <span id="monthDdLabel">All Months</span>
+          <i class="fas fa-chevron-down" style="font-size:10px"></i>
+        </button>
+        <div class="month-dd-menu" id="monthDdMenu">
+          <div class="month-dd-item">
+            <label><input type="checkbox" id="monthCheckAll" checked onchange="handleMonthCheckAll(this)"> All Months</label>
+          </div>
+          <div class="month-dd-divider"></div>
+          <div id="monthCheckboxes"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Row 2: Channel + View -->
+  <div class="filter-row">
+    <div class="filter-group">
+      <span class="filter-label"><i class="fas fa-store"></i> Channel</span>
+      <div id="channelFilters" class="filter-btns"></div>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="filter-group push-right">
+      <span class="filter-label"><i class="fas fa-eye"></i> View</span>
+      <div id="viewFilters" class="filter-btns">
+        <button class="filter-btn active" data-view="both" onclick="setView('both')">Both</button>
+        <button class="filter-btn" data-view="channel" onclick="setView('channel')">Channel Only</button>
+        <button class="filter-btn" data-view="carrier" onclick="setView('carrier')">Carrier Only</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+    <i class="fas fa-tachometer-alt"></i> Dashboard
+  </button>
+  <button class="tab-btn" data-tab="discrepancy" onclick="switchTab('discrepancy')">
+    <i class="fas fa-exclamation-circle"></i> Discrepancy Shipments
+    <span id="discBadge" style="background:#c62828;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
+  </button>
+</div>
+
+<!-- Main Content -->
+<div id="mainContent">
+  <div class="loading">
+    <div class="spinner"></div>
+    <p>Loading data from Google Sheets...</p>
+  </div>
+</div>
+
+<script>
+let chartInstances = {};
+let _rawData = null;
+let _lastUpdated = null;
+let _filterState = { year: 'all', selectedMonths: [], availableMonths: [], channels: [], view: 'both' };
+let _activeTab = 'dashboard';
+
+const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTH_SHORT = {January:'Jan',February:'Feb',March:'Mar',April:'Apr',May:'May',June:'Jun',July:'Jul',August:'Aug',September:'Sep',October:'Oct',November:'Nov',December:'Dec'};
+
+function formatNum(n) { return (n || 0).toLocaleString('en-IN'); }
+function formatUSD(n) { return '$' + (n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.className = `alert-toast alert-${type}`;
+  t.innerHTML = `<i class="fas fa-${type==='success'?'check-circle':'exclamation-circle'} me-2"></i>${msg}`;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 4000);
+}
+
+function destroyCharts() {
+  Object.values(chartInstances).forEach(c => c.destroy());
+  chartInstances = {};
+}
+
+// ── Filter initialisation ──────────────────────────────────────────────────
+
+function initFilters(data) {
+  const months = data.channel_data?.months || [];
+  const channelNames = Object.keys(data.channel_data?.channels || {});
+
+  // Extract years (handle "Jan 2025", "Jan-25", "January 2024" formats)
+  const years = [...new Set(months.map(m => {
+    const y4 = m.match(/\b(20\d{2})\b/); if (y4) return y4[1];
+    const y2 = m.match(/[-\s](\d{2})$/); if (y2 && +y2[1] >= 20) return '20' + y2[1];
+    return null;
+  }).filter(Boolean))].sort();
+
+  // Show year group only when years are detected
+  const yearGroupEls = document.querySelectorAll('#yearGroup');
+  yearGroupEls.forEach(el => el.style.display = years.length > 0 ? 'flex' : 'none');
+  if (years.length > 0) {
+    document.getElementById('yearFilters').innerHTML =
+      `<button class="filter-btn active" onclick="setYear('all')">All</button>` +
+      years.map(y => `<button class="filter-btn" onclick="setYear('${y}')">${y}</button>`).join('');
+  }
+
+  // Month dropdown — rebuild using all months (year filter will narrow later)
+  rebuildMonthDropdown(months);
+  updateMonthLabel();
+
+  // Channel pills — select all by default on first load
+  if (_filterState.channels.length === 0) _filterState.channels = [...channelNames];
+  document.getElementById('channelFilters').innerHTML = channelNames.map(ch =>
+    `<button class="filter-btn ${_filterState.channels.includes(ch) ? 'active' : ''}" data-channel="${ch}" onclick="toggleChannel('${ch}')">${ch}</button>`
+  ).join('');
+}
+
+// ── Filter handlers ────────────────────────────────────────────────────────
+
+function setYear(year) {
+  _filterState.year = year;
+  document.querySelectorAll('#yearFilters .filter-btn').forEach(b => b.classList.remove('active'));
+  const btn = year === 'all'
+    ? document.querySelector('#yearFilters .filter-btn')
+    : [...document.querySelectorAll('#yearFilters .filter-btn')].find(b => b.textContent === year);
+  if (btn) btn.classList.add('active');
+
+  // Rebuild month dropdown to show only months for selected year
+  const allMonths   = _rawData?.channel_data?.months || [];
+  const yearMonths  = year === 'all' ? allMonths : allMonths.filter(m => m.includes(year));
+  rebuildMonthDropdown(yearMonths);
+  updateMonthLabel();
+  applyAndRender();
+}
+
+function rebuildMonthDropdown(availableMonths) {
+  _filterState.availableMonths = [...availableMonths];
+  _filterState.selectedMonths  = [...availableMonths];
+  document.getElementById('monthCheckAll').checked = true;
+  document.getElementById('monthCheckboxes').innerHTML = availableMonths.map(m =>
+    `<div class="month-dd-item">
+       <label>
+         <input type="checkbox" data-month="${m}" checked onchange="handleMonthCheck('${m}',this)">
+         ${m}
+       </label>
+     </div>`
+  ).join('');
+}
+
+function toggleMonthDropdown(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('monthDdMenu');
+  const btn  = document.getElementById('monthDdBtn');
+  const open = menu.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+function handleMonthCheckAll(cb) {
+  _filterState.selectedMonths = cb.checked ? [..._filterState.availableMonths] : [];
+  document.querySelectorAll('#monthCheckboxes input[type="checkbox"]').forEach(c => c.checked = cb.checked);
+  updateMonthLabel();
+  applyAndRender();
+}
+
+function handleMonthCheck(m, cb) {
+  if (cb.checked) {
+    if (!_filterState.selectedMonths.includes(m)) _filterState.selectedMonths.push(m);
+  } else {
+    _filterState.selectedMonths = _filterState.selectedMonths.filter(x => x !== m);
+  }
+  const allChecked = _filterState.selectedMonths.length === _filterState.availableMonths.length;
+  document.getElementById('monthCheckAll').checked = allChecked;
+  updateMonthLabel();
+  applyAndRender();
+}
+
+function updateMonthLabel() {
+  const n    = _filterState.selectedMonths.length;
+  const total = _filterState.availableMonths.length;
+  const lbl  = n === 0 ? 'None selected' : n === total ? 'All Months' : `${n} month${n > 1 ? 's' : ''} selected`;
+  document.getElementById('monthDdLabel').textContent = lbl;
+}
+
+function toggleChannel(ch) {
+  const idx = _filterState.channels.indexOf(ch);
+  if (idx > -1) {
+    if (_filterState.channels.length === 1) return; // keep at least one
+    _filterState.channels.splice(idx, 1);
+    document.querySelector(`[data-channel="${ch}"]`).classList.remove('active');
+  } else {
+    _filterState.channels.push(ch);
+    document.querySelector(`[data-channel="${ch}"]`).classList.add('active');
+  }
+  applyAndRender();
+}
+
+function setView(view) {
+  _filterState.view = view;
+  document.querySelectorAll('#viewFilters .filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-view="${view}"]`).classList.add('active');
+  applyAndRender();
+}
+
+// ── Filter logic ───────────────────────────────────────────────────────────
+
+function applyFilters(data) {
+  const months = data.channel_data?.months || [];
+  const allChannels = data.channel_data?.channels || {};
+  const allTransporters = data.transporter_data?.transporters || {};
+
+  // Month indices matching selected months
+  const monthIdxs = months.reduce((acc, m, i) => {
+    if (_filterState.selectedMonths.includes(m)) acc.push(i);
+    return acc;
+  }, []);
+
+  const filteredMonths = monthIdxs.map(i => months[i]);
+
+  // Channels filtered by selection + month slice
+  const filteredChannels = {};
+  Object.entries(allChannels).forEach(([name, rows]) => {
+    if (_filterState.channels.includes(name)) {
+      filteredChannels[name] = monthIdxs.map(i => rows[i] || {});
+    }
+  });
+
+  // Grand total per filtered month (sum across selected channels)
+  const filteredGrandTotal = filteredMonths.map((_, mi) => {
+    const row = { qty_sent: 0, lost_stock: 0, expected_reimburs: 0, actual_reimbursed: 0 };
+    Object.values(filteredChannels).forEach(rows => {
+      const r = rows[mi] || {};
+      row.qty_sent += r.qty_sent || 0;
+      row.lost_stock += r.lost_stock || 0;
+      row.expected_reimburs += r.expected_reimburs || 0;
+      row.actual_reimbursed += r.actual_reimbursed || 0;
+    });
+    return row;
+  });
+
+  // Totals
+  const totals = filteredGrandTotal.reduce((acc, r) => ({
+    qty_sent: acc.qty_sent + r.qty_sent,
+    lost_stock: acc.lost_stock + r.lost_stock,
+    expected_reimburs: acc.expected_reimburs + r.expected_reimburs,
+    actual_reimbursed: acc.actual_reimbursed + r.actual_reimbursed
+  }), { qty_sent: 0, lost_stock: 0, expected_reimburs: 0, actual_reimbursed: 0 });
+
+  const pending = totals.expected_reimburs - totals.actual_reimbursed;
+  const loss_rate = totals.qty_sent > 0
+    ? ((totals.lost_stock / totals.qty_sent) * 100).toFixed(2) : '0.00';
+  const recovery_rate = totals.expected_reimburs > 0
+    ? ((totals.actual_reimbursed / totals.expected_reimburs) * 100).toFixed(2) : '0.00';
+
+  // Transporters sliced by month (no channel filter — carrier data is independent)
+  const filteredTransporters = {};
+  Object.entries(allTransporters).forEach(([name, rows]) => {
+    filteredTransporters[name] = monthIdxs.map(i => rows[i] || {});
+  });
+
+  // Filter discrepancy shipments by selected channels + months
+  const filteredDiscrepancies = (data.discrepancies || []).filter(d =>
+    _filterState.channels.includes(d.channel) &&
+    _filterState.selectedMonths.includes(d.month)
+  );
+
+  return {
+    ...data,
+    kpis: {
+      total_shipped: totals.qty_sent,
+      total_lost: totals.lost_stock,
+      loss_rate,
+      expected_recovery: totals.expected_reimburs,
+      actual_recovered: totals.actual_reimbursed,
+      pending_recovery: pending,
+      recovery_rate
+    },
+    channel_data: {
+      ...data.channel_data,
+      months: filteredMonths,
+      channels: filteredChannels,
+      grand_total: filteredGrandTotal,
+      totals
+    },
+    transporter_data: {
+      ...data.transporter_data,
+      transporters: filteredTransporters
+    },
+    discrepancies: filteredDiscrepancies
+  };
+}
+
+function switchTab(tab) {
+  _activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  applyAndRender();
+}
+
+function applyAndRender() {
+  if (!_rawData) return;
+  const filtered = applyFilters(_rawData);
+  if (_activeTab === 'discrepancy') {
+    renderDiscrepancyTab(filtered, _lastUpdated);
+  } else {
+    renderDashboard(filtered, _lastUpdated);
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+
+function renderDiscrepancyTab(data, lastUpdated) {
+  destroyCharts();
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  const disc = data.discrepancies || [];
+
+  // Update badge count on tab
+  const badge = document.getElementById('discBadge');
+  badge.textContent = disc.length;
+  badge.style.display = disc.length > 0 ? 'inline' : 'none';
+
+  // Per-channel counts
+  const channelColors = {
+    Amazon: { border: '#1565c0', icon: 'blue', fa: 'fa-amazon' },
+    Shipbob: { border: '#2e7d32', icon: 'green', fa: 'fa-box' },
+    TikTok: { border: '#ad1457', icon: 'pink', fa: 'fa-music' },
+    Sky2C: { border: '#6a1b9a', icon: 'purple', fa: 'fa-globe' },
+    Other: { border: '#757575', icon: 'grey', fa: 'fa-ellipsis-h' },
+  };
+  const iconBg = { blue:'#e3f2fd', green:'#e8f5e9', pink:'#fce4ec', purple:'#f3e5f5', grey:'#f5f5f5' };
+  const iconColor = { blue:'#1565c0', green:'#2e7d32', pink:'#ad1457', purple:'#6a1b9a', grey:'#757575' };
+
+  const countByChannel = {};
+  const pendingByChannel = {};
+  disc.forEach(d => {
+    countByChannel[d.channel] = (countByChannel[d.channel] || 0) + 1;
+    pendingByChannel[d.channel] = (pendingByChannel[d.channel] || 0) + (d.pending || 0);
+  });
+
+  const summaryCards = Object.entries(countByChannel).sort((a,b) => b[1]-a[1]).map(([ch, cnt]) => {
+    const cfg = channelColors[ch] || { border: '#9e9e9e', icon: 'grey', fa: 'fa-store' };
+    const bg = iconBg[cfg.icon] || '#f5f5f5';
+    const col = iconColor[cfg.icon] || '#757575';
+    const pend = pendingByChannel[ch] || 0;
+    return `
+      <div class="disc-channel-card" style="border-color:${cfg.border}">
+        <div class="disc-icon" style="background:${bg};color:${col}"><i class="fas ${cfg.fa}"></i></div>
+        <div>
+          <div class="disc-count" style="color:${cfg.border}">${cnt}</div>
+          <div class="disc-label">${ch}</div>
+          <div class="disc-sublabel">Pending: ${formatUSD(pend)}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const totalCard = `
+    <div class="disc-channel-card" style="border-color:#c62828;margin-left:auto">
+      <div class="disc-icon" style="background:#ffebee;color:#c62828"><i class="fas fa-exclamation-triangle"></i></div>
+      <div>
+        <div class="disc-count" style="color:#c62828">${disc.length}</div>
+        <div class="disc-label">Total Discrepancies</div>
+        <div class="disc-sublabel">Across all channels</div>
+      </div>
+    </div>`;
+
+  // Table rows
+  const statusBadge = s => {
+    if (!s) return '<span class="badge-status-na">—</span>';
+    const l = s.toLowerCase();
+    if (l.includes('close') || l.includes('reimb') || l.includes('done')) return `<span class="badge-status-closed">${s}</span>`;
+    if (l.includes('open') || l.includes('pend') || l.includes('progress')) return `<span class="badge-status-open">${s}</span>`;
+    return `<span class="badge-status-na">${s}</span>`;
+  };
+
+  const tableRows = disc.map((d, idx) => `
+    <tr class="disc-row" data-ch="${d.channel}" data-awb="${d.awb.toLowerCase()}" data-month="${d.month.toLowerCase()}">
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666">${d.month}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;font-size:12px">${d.awb || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.platform_label || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.channel}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.transporter || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center">${formatNum(d.qty_sent)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center"><span class="badge-lost">${formatNum(d.lost_stock)}</span></td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center">${formatUSD(d.expected_reimburs)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center"><span class="badge-recovered">${formatUSD(d.actual_reimbursed)}</span></td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center"><span class="badge-pending">${formatUSD(d.pending)}</span></td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${statusBadge(d.reimbursement_status)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${statusBadge(d.case_status)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666;max-width:180px">${d.remark || '—'}</td>
+    </tr>`).join('');
+
+  const emptyRow = disc.length === 0
+    ? '<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">No discrepancy shipments found for the selected filters.</td></tr>'
+    : '';
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="disc-summary">${summaryCards}${totalCard}</div>
+
+    <div class="disc-table-wrap">
+      <div class="disc-table-card">
+        <div class="table-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span><i class="fas fa-list-alt" style="color:var(--navy)"></i> &nbsp;Discrepancy Shipment List</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="disc-search" id="discSearch" placeholder="Search AWB, channel, transporter..." oninput="filterDiscTable(this.value)">
+            <button class="btn-export" onclick="exportDiscrepancy()" style="white-space:nowrap">
+              <i class="fas fa-file-excel"></i> Export Excel
+            </button>
+          </div>
+        </div>
+        <table class="recon-table" id="discTable">
+          <thead>
+            <tr>
+              <th style="padding:8px 10px">Month</th>
+              <th style="padding:8px 10px">Shipment AWB</th>
+              <th style="padding:8px 10px">IBR / Label</th>
+              <th style="padding:8px 10px">Channel</th>
+              <th style="padding:8px 10px">Transporter</th>
+              <th style="padding:8px 10px;text-align:center">Qty Sent</th>
+              <th style="padding:8px 10px;text-align:center">Lost Units</th>
+              <th style="padding:8px 10px;text-align:center">Expected ($)</th>
+              <th style="padding:8px 10px;text-align:center">Recovered ($)</th>
+              <th style="padding:8px 10px;text-align:center">Pending ($)</th>
+              <th style="padding:8px 10px">Reimb. Status</th>
+              <th style="padding:8px 10px">Case Status</th>
+              <th style="padding:8px 10px">Remark</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}${emptyRow}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="footer-left">
+        <i class="fas fa-info-circle me-1"></i>
+        Showing shipments where Lost Stock &gt; 0. Filters (Channel, Month) apply above.
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-export" onclick="exportDiscrepancy()">
+          <i class="fas fa-file-excel"></i> Export Excel
+        </button>
+        <button class="btn-email" onclick="sendTestEmail()">
+          <i class="fas fa-paper-plane"></i> Send Report Email Now
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function filterDiscTable(q) {
+  const rows = document.querySelectorAll('#discTable .disc-row');
+  const s = q.toLowerCase();
+  rows.forEach(r => {
+    const text = r.dataset.awb + ' ' + r.dataset.ch + ' ' + r.dataset.month + ' ' + r.textContent.toLowerCase();
+    r.style.display = text.includes(s) ? '' : 'none';
+  });
+}
+
+function renderDashboard(data, lastUpdated) {
+  destroyCharts();
+  const kpis = data.kpis || {};
+  const cd = data.channel_data || {};
+  const td = data.transporter_data || {};
+  const remarks = data.remarks || {};
+  const months = cd.months || [];
+  const channels = cd.channels || {};
+  const transporters = td.transporters || {};
+  const view = _filterState.view;
+  const showChannel = view !== 'carrier';
+  const showCarrier  = view !== 'channel';
+
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  const colors = {
+    Amazon: '#2563eb', Shipbob: '#1b3a2d', TikTok: '#c0392b',
+    DHL: '#d97706', Freightzen: '#7c3aed', UPS: '#0891b2',
+    'Xindus Air': '#b45309', 'Xindus Air + Sea': '#0f766e', 'Channel Freight': '#4d7c0f',
+    Sky2C: '#6b7280', Other: '#9e9890'
+  };
+
+  // ── Channel Summary table rows
+  const channelMonthRows = months.map((m, i) => {
+    const g = (cd.grand_total || [])[i] || {};
+    const pend = (g.expected_reimburs || 0) - (g.actual_reimbursed || 0);
+    return `<tr>
+      <td>${m}</td>
+      <td>${formatNum(g.qty_sent)}</td>
+      <td><span class="badge-lost">${formatNum(g.lost_stock)}</span></td>
+      <td>${formatUSD(g.expected_reimburs)}</td>
+      <td><span class="badge-recovered">${formatUSD(g.actual_reimbursed)}</span></td>
+      <td><span class="badge-pending">${formatUSD(pend)}</span></td>
+    </tr>`;
+  }).join('');
+
+  // ── Transporter table rows
+  const transporterRows = Object.entries(transporters).map(([name, rows]) => {
+    const shipped = rows.reduce((s, r) => s + (r.qty_sent || 0), 0);
+    const lost    = rows.reduce((s, r) => s + (r.lost_stock || 0), 0);
+    const pct = shipped > 0 ? ((lost / shipped) * 100).toFixed(2) : '0.00';
+    if (shipped === 0 && lost === 0) return '';
+    return `<tr>
+      <td>${name}</td>
+      <td>${formatNum(shipped)}</td>
+      <td><span class="badge-lost">${formatNum(lost)}</span></td>
+      <td style="color:${lost > 0 ? 'var(--red)' : 'var(--green)'}">${pct}%</td>
+    </tr>`;
+  }).join('');
+
+  // ── Remarks (temporarily hidden)
+  const remarksHTML = false && Object.keys(remarks).length > 0 ? `
+    <div class="remarks-section">
+      <div class="remarks-card">
+        <div class="remarks-title"><i class="fas fa-clipboard-list" style="color:var(--navy)"></i> Channel Remarks</div>
+        <div class="remarks-grid">
+          ${Object.entries(remarks).map(([ch, md]) => `
+            <div class="remark-channel">
+              <h4>${ch}</h4>
+              ${Object.entries(md).map(([month, text]) => `
+                <div class="remark-item">
+                  <div class="remark-month">${month}</div>
+                  <div class="remark-text">${text}</div>
+                </div>`).join('')}
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>` : '';
+
+  // ── Tables layout: single column when only one view
+  const tablesClass = (showChannel && showCarrier) ? 'tables-grid' : 'tables-grid single';
+
+  const html = `
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card blue">
+        <div class="kpi-icon blue"><i class="fas fa-shipping-fast"></i></div>
+        <div class="kpi-value blue">${formatNum(kpis.total_shipped)}</div>
+        <div class="kpi-label">Total Units Shipped</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-icon red"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="kpi-value red">${formatNum(kpis.total_lost)}</div>
+        <div class="kpi-label">Total Units Lost</div>
+        <div class="kpi-sub">Loss Rate: ${kpis.loss_rate}%</div>
+      </div>
+      <div class="kpi-card amber">
+        <div class="kpi-icon amber"><i class="fas fa-dollar-sign"></i></div>
+        <div class="kpi-value amber">${formatUSD(kpis.expected_recovery)}</div>
+        <div class="kpi-label">Expected Recovery</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-icon green"><i class="fas fa-check-circle"></i></div>
+        <div class="kpi-value green">${formatUSD(kpis.actual_recovered)}</div>
+        <div class="kpi-label">Actual Recovered</div>
+        <div class="kpi-sub">Recovery Rate: ${kpis.recovery_rate}%</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-icon orange"><i class="fas fa-clock"></i></div>
+        <div class="kpi-value orange">${formatUSD(kpis.pending_recovery)}</div>
+        <div class="kpi-label">Pending Recovery</div>
+        <div class="kpi-sub">To be followed up</div>
+      </div>
+    </div>
+
+    ${showChannel ? `
+    <!-- Channel Charts -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title"><i class="fas fa-chart-bar"></i> Lost Units by Channel — Monthly</div>
+        <div class="chart-container"><canvas id="channelLostChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><i class="fas fa-chart-pie"></i> Loss Distribution by Channel</div>
+        <div class="chart-container"><canvas id="lossDistChart"></canvas></div>
+      </div>
+    </div>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title"><i class="fas fa-chart-bar"></i> Recovery Status by Month</div>
+        <div class="chart-container"><canvas id="recoveryChart"></canvas></div>
+      </div>
+      ${showCarrier ? `
+      <div class="chart-card">
+        <div class="chart-title"><i class="fas fa-truck"></i> Lost Units by Transporter</div>
+        <div class="chart-container"><canvas id="transporterChart"></canvas></div>
+      </div>` : '<div></div>'}
+    </div>` : `
+    <!-- Carrier-only chart -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title"><i class="fas fa-truck"></i> Lost Units by Transporter</div>
+        <div class="chart-container"><canvas id="transporterChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><i class="fas fa-chart-pie"></i> Transporter Loss Share</div>
+        <div class="chart-container"><canvas id="transporterDistChart"></canvas></div>
+      </div>
+    </div>`}
+
+    <!-- Tables -->
+    <div class="${tablesClass}">
+      ${showChannel ? `
+      <div class="table-card">
+        <div class="table-title"><i class="fas fa-table" style="color:var(--navy)"></i> Channel Summary</div>
+        <table class="recon-table">
+          <thead><tr><th>Month</th><th>Shipped</th><th>Lost</th><th>Expected</th><th>Recovered</th><th>Pending</th></tr></thead>
+          <tbody>
+            ${channelMonthRows}
+            <tr>
+              <td>Grand Total</td>
+              <td>${formatNum((cd.totals||{}).qty_sent)}</td>
+              <td><span class="badge-lost">${formatNum((cd.totals||{}).lost_stock)}</span></td>
+              <td>${formatUSD((cd.totals||{}).expected_reimburs)}</td>
+              <td><span class="badge-recovered">${formatUSD((cd.totals||{}).actual_reimbursed)}</span></td>
+              <td><span class="badge-pending">${formatUSD(kpis.pending_recovery)}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>` : ''}
+      ${showCarrier ? `
+      <div class="table-card">
+        <div class="table-title"><i class="fas fa-truck" style="color:var(--navy)"></i> Transporter Summary</div>
+        <table class="recon-table">
+          <thead><tr><th>Transporter</th><th>Total Shipped</th><th>Total Lost</th><th>Loss %</th></tr></thead>
+          <tbody>${transporterRows}</tbody>
+        </table>
+      </div>` : ''}
+    </div>
+
+    ${remarksHTML}
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="footer-left">
+        <i class="fas fa-info-circle me-1"></i>
+        Data auto-refreshes every 5 minutes. Weekly email every Monday 12:01 PM IST.
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-export" onclick="exportDashboard()">
+          <i class="fas fa-file-excel"></i> Export Excel
+        </button>
+        <button class="btn-email" onclick="sendTestEmail()">
+          <i class="fas fa-paper-plane"></i> Send Report Email Now
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('mainContent').innerHTML = html;
+
+  // ── Chart 1: Lost by Channel per Month (channel view)
+  if (showChannel && document.getElementById('channelLostChart')) {
+    chartInstances.c1 = new Chart(document.getElementById('channelLostChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: Object.entries(channels).map(([name, rows]) => ({
+          label: name,
+          data: rows.map(r => r.lost_stock || 0),
+          backgroundColor: (colors[name] || '#666') + 'cc',
+          borderColor: colors[name] || '#666',
+          borderWidth: 1, borderRadius: 4
+        }))
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // ── Chart 2: Loss Distribution Donut (channel view)
+  if (showChannel && document.getElementById('lossDistChart')) {
+    const totByChannel = Object.entries(channels).map(([name, rows]) => ({
+      name, total: rows.reduce((s, r) => s + (r.lost_stock || 0), 0)
+    })).filter(c => c.total > 0);
+    chartInstances.c2 = new Chart(document.getElementById('lossDistChart').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: totByChannel.map(c => c.name),
+        datasets: [{ data: totByChannel.map(c => c.total), backgroundColor: totByChannel.map(c => colors[c.name] || '#666'), borderWidth: 2, borderColor: '#fff' }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } } },
+        cutout: '65%'
+      }
+    });
+  }
+
+  // ── Chart 3: Recovery by Month (channel view)
+  if (showChannel && document.getElementById('recoveryChart')) {
+    const grandRows = cd.grand_total || [];
+    chartInstances.c3 = new Chart(document.getElementById('recoveryChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [
+          { label: 'Expected ($)', data: grandRows.map(r => r.expected_reimburs || 0), backgroundColor: '#ff8f0066', borderColor: '#e65100', borderWidth: 1, borderRadius: 4 },
+          { label: 'Recovered ($)', data: grandRows.map(r => r.actual_reimbursed || 0), backgroundColor: '#2e7d3266', borderColor: '#2e7d32', borderWidth: 1, borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 }, callback: v => '$' + v } }
+        }
+      }
+    });
+  }
+
+  // ── Chart 4: Transporter Lost (bar)
+  if (document.getElementById('transporterChart')) {
+    const tData = Object.entries(transporters).map(([name, rows]) => ({
+      name, lost: rows.reduce((s, r) => s + (r.lost_stock || 0), 0)
+    })).filter(t => t.lost > 0).sort((a, b) => b.lost - a.lost);
+    chartInstances.c4 = new Chart(document.getElementById('transporterChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: tData.map(t => t.name),
+        datasets: [{ label: 'Lost Units', data: tData.map(t => t.lost), backgroundColor: tData.map(t => (colors[t.name] || '#666') + 'cc'), borderColor: tData.map(t => colors[t.name] || '#666'), borderWidth: 1, borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 } } },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // ── Chart 5: Transporter Distribution Donut (carrier-only view)
+  if (!showChannel && document.getElementById('transporterDistChart')) {
+    const tDist = Object.entries(transporters).map(([name, rows]) => ({
+      name, lost: rows.reduce((s, r) => s + (r.lost_stock || 0), 0)
+    })).filter(t => t.lost > 0);
+    chartInstances.c5 = new Chart(document.getElementById('transporterDistChart').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: tDist.map(t => t.name),
+        datasets: [{ data: tDist.map(t => t.lost), backgroundColor: tDist.map(t => colors[t.name] || '#666'), borderWidth: 2, borderColor: '#fff' }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } } },
+        cutout: '60%'
+      }
+    });
+  }
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+
+function exportDashboard() {
+  if (!_rawData) return;
+  const filtered = applyFilters(_rawData);
+  const cd = filtered.channel_data;
+  const td = filtered.transporter_data;
+  const months = cd.months || [];
+  const channels = cd.channels || {};
+  const transporters = td.transporters || {};
+  const date = new Date().toISOString().slice(0, 10);
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Channel Summary (one row per month×channel)
+  const chRows = [['Month', 'Channel', 'Qty Sent', 'Lost Stock', 'Expected ($)', 'Recovered ($)', 'Pending ($)']];
+  months.forEach((m, i) => {
+    Object.entries(channels).forEach(([ch, rows]) => {
+      const r = rows[i] || {};
+      const pending = (r.expected_reimburs || 0) - (r.actual_reimbursed || 0);
+      if ((r.qty_sent || 0) > 0 || (r.lost_stock || 0) > 0)
+        chRows.push([m, ch, r.qty_sent || 0, r.lost_stock || 0, r.expected_reimburs || 0, r.actual_reimbursed || 0, +pending.toFixed(2)]);
+    });
+  });
+  const wsChannel = XLSX.utils.aoa_to_sheet(chRows);
+  wsChannel['!cols'] = [14, 12, 10, 10, 14, 14, 12].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, wsChannel, 'Channel Summary');
+
+  // Sheet 2: Transporter Summary
+  const trRows = [['Transporter', 'Total Shipped', 'Total Lost', 'Loss %']];
+  Object.entries(transporters).forEach(([name, rows]) => {
+    const shipped = rows.reduce((s, r) => s + (r.qty_sent || 0), 0);
+    const lost    = rows.reduce((s, r) => s + (r.lost_stock || 0), 0);
+    if (shipped > 0 || lost > 0)
+      trRows.push([name, shipped, lost, shipped > 0 ? +((lost / shipped * 100).toFixed(2)) : 0]);
+  });
+  const wsTr = XLSX.utils.aoa_to_sheet(trRows);
+  wsTr['!cols'] = [20, 14, 12, 10].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, wsTr, 'Transporter Summary');
+
+  XLSX.writeFile(wb, `recon-dashboard-${date}.xlsx`);
+}
+
+function exportDiscrepancy() {
+  if (!_rawData) return;
+  const disc = applyFilters(_rawData).discrepancies || [];
+  const date = new Date().toISOString().slice(0, 10);
+  const wb   = XLSX.utils.book_new();
+
+  const rows = [
+    ['Month', 'Shipment AWB', 'IBR / Label', 'Channel', 'Transporter',
+     'Qty Sent', 'Lost Units', 'Expected ($)', 'Recovered ($)', 'Pending ($)',
+     'Reimb. Status', 'Case Status', 'Remark'],
+    ...disc.map(d => [
+      d.month, d.awb, d.platform_label, d.channel, d.transporter,
+      d.qty_sent, d.lost_stock, d.expected_reimburs, d.actual_reimbursed, d.pending,
+      d.reimbursement_status, d.case_status, d.remark
+    ])
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [14, 18, 18, 10, 14, 10, 10, 13, 13, 12, 14, 14, 30].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Discrepancy Shipments');
+  XLSX.writeFile(wb, `discrepancy-shipments-${date}.xlsx`);
+}
+
+// ── Data loading ───────────────────────────────────────────────────────────
+
+async function loadData() {
+  try {
+    const res = await fetch('/api/data');
+    const json = await res.json();
+    if (json.data) {
+      _rawData = json.data;
+      _lastUpdated = json.last_updated;
+      initFilters(_rawData);
+      // Show total discrepancy count on tab badge
+      const total = (_rawData.discrepancies || []).length;
+      const badge = document.getElementById('discBadge');
+      if (badge) { badge.textContent = total; badge.style.display = total > 0 ? 'inline' : 'none'; }
+      applyAndRender();
+    } else {
+      document.getElementById('mainContent').innerHTML =
+        '<div class="loading"><p style="color:#c62828">Failed to load data. Check Google Sheets connection.</p></div>';
+    }
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="loading"><p style="color:#c62828">Error: ' + e.message + '</p></div>';
+  }
+}
+
+async function refreshData() {
+  showToast('Refreshing data...', 'success');
+  await fetch('/api/refresh');
+  _filterState.channels = []; _filterState.selectedMonths = []; _filterState.availableMonths = []; _filterState.year = 'all';
+  await loadData();
+  showToast('Data refreshed!', 'success');
+}
+
+async function sendTestEmail() {
+  showToast('Sending email...', 'success');
+  try {
+    const res = await fetch('/api/send-test-email');
+    const json = await res.json();
+    if (json.status === 'ok') showToast('Email sent successfully!', 'success');
+    else showToast('Error: ' + json.message, 'error');
+  } catch(e) { showToast('Failed to send email', 'error'); }
+}
+
+// Close month dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!document.getElementById('monthDropdownWrap')?.contains(e.target)) {
+    document.getElementById('monthDdMenu')?.classList.remove('open');
+    document.getElementById('monthDdBtn')?.classList.remove('open');
+  }
+});
+
+// Load on start + auto-refresh every 5 min
+loadData();
+setInterval(() => fetch('/api/refresh').then(() => {
+  fetch('/api/data').then(r => r.json()).then(j => {
+    if (j.data) { _rawData = j.data; _lastUpdated = j.last_updated; applyAndRender(); }
+  });
+}), 5 * 60 * 1000);
+</script>
+</body>
+</html>

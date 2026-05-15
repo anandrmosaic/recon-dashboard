@@ -1,0 +1,21 @@
+{
+  "sheet_id": "1ixmX8rsx9jiGzvSgG8dwXAdQGINGYMprJexgiV4MOwk",
+  "sheet_tab": "Shipment Tracker AWB wise",
+  "recon_tab": "Recon Channel view",
+  "email_recipients": [
+    "rahul.sahu@mosaicwellness.in",
+    "anand.r@mosaicwellness.in",
+    "viral.desai@mosaicwellness.in",
+    "aditya.pandey@mosaicwellness.in"
+  ],
+  "email_from": "anand.r@mosaicwellness.in",
+  "schedule": {
+    "day_of_week": "mon",
+    "hour": 12,
+    "minute": 1,
+    "timezone": "Asia/Kolkata"
+  },
+  "credentials_file": "C:/Users/Admin/gcp-oauth.keys.json",
+  "token_file": "C:/Users/Admin/recon-token.json",
+  "dashboard_url": "https://udder-closure-cardboard.ngrok-free.dev"
+}

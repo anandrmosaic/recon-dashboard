@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+*.pyo
+
+# Credential files — never commit these
+gcp-oauth.keys.json
+recon-token.json
+*token*.json
+*secret*.json
+service_account*.json
+
+# Local debug/data dumps
+api_data_dump.json
+
+# Windows-only scripts (not needed on server)
+*.vbs
+*.bat
+create_task.ps1
+create_ngrok_task.ps1
+kill_and_restart.ps1
+start_provision.bat
+
+# Dev/inspect scripts
+inspect_*.py
+test_*.py
+generate_presentation_doc.py

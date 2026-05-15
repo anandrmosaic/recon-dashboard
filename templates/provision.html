@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Billing Provision — Mosaic Wellness</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #222; min-height: 100vh; }
+
+  .nav { background: #1F3864; padding: 0 28px; display: flex; align-items: center; height: 52px; gap: 24px; }
+  .nav-brand { color: #fff; font-size: 16px; font-weight: 700; letter-spacing: .3px; margin-right: auto; }
+  .nav a { color: #b8cfe8; font-size: 13px; text-decoration: none; padding: 6px 12px; border-radius: 4px; transition: background .15s; }
+  .nav a:hover, .nav a.active { background: rgba(255,255,255,.15); color: #fff; }
+
+  .page { max-width: 1280px; margin: 0 auto; padding: 28px 24px 60px; }
+  .page-title { font-size: 22px; font-weight: 700; color: #1F3864; margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: #666; margin-bottom: 24px; }
+
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.07); padding: 24px; margin-bottom: 20px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #1F3864; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .badge { background: #1F3864; color: #fff; font-size: 11px; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+
+  .form-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  label { font-size: 12px; font-weight: 600; color: #444; }
+  select, input[type=file], input[type=number] {
+    border: 1.5px solid #d0d8e4; border-radius: 6px; padding: 8px 10px;
+    font-size: 13px; background: #fff; outline: none; transition: border .15s;
+  }
+  select:focus, input[type=number]:focus { border-color: #1F3864; }
+  input[type=file] { padding: 6px 10px; cursor: pointer; }
+  input[type=number] { width: 120px; }
+
+  .btn { padding: 9px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 7px; }
+  .btn-primary { background: #1F3864; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #162b50; }
+  .btn-success { background: #1a7f5a; color: #fff; }
+  .btn-success:hover:not(:disabled) { background: #155f44; }
+  .btn-outline { background: transparent; color: #1F3864; border: 1.5px solid #1F3864; }
+  .btn-outline:hover:not(:disabled) { background: #f0f4f8; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+  .rate-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rate-table th { background: #1F3864; color: #fff; padding: 9px 14px; text-align: left; font-size: 12px; }
+  .rate-table td { padding: 8px 14px; border-bottom: 1px solid #eef0f4; }
+  .rate-table tr:last-child td { border-bottom: none; }
+  .rate-table tr:nth-child(even) td { background: #f7f9fc; }
+  .rate-table input[type=number] { width: 160px; text-align: right; }
+  .rate-note { font-size: 11px; color: #888; margin-top: 8px; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .kpi-card { background: #fff; border-radius: 8px; padding: 16px 18px; box-shadow: 0 1px 5px rgba(0,0,0,.06); border-left: 4px solid #1F3864; }
+  .kpi-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .kpi-value { font-size: 20px; font-weight: 700; color: #1F3864; }
+  .kpi-value.small { font-size: 16px; }
+
+  .table-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 5px rgba(0,0,0,.06); }
+  table.data { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+  table.data thead th { background: #1F3864; color: #fff; padding: 9px 12px; text-align: right; font-size: 11px; font-weight: 600; position: sticky; top: 0; }
+  table.data thead th:first-child, table.data thead th:nth-child(2),
+  table.data thead th:nth-child(3), table.data thead th:nth-child(4),
+  table.data thead th:nth-child(5), table.data thead th:nth-child(6),
+  table.data thead th:nth-child(7) { text-align: left; }
+  table.data tbody tr:nth-child(even) td { background: #f7f9fc; }
+  table.data tbody tr:hover td { background: #e8f0fb; }
+  table.data td { padding: 7px 12px; border-bottom: 1px solid #eef0f4; text-align: right; color: #333; }
+  table.data td:first-child, table.data td:nth-child(2), table.data td:nth-child(3),
+  table.data td:nth-child(4), table.data td:nth-child(5), table.data td:nth-child(6),
+  table.data td:nth-child(7) { text-align: left; }
+  table.data tfoot td { background: #1F3864; color: #fff; font-weight: 700; padding: 9px 12px; text-align: right; }
+  table.data tfoot td:first-child { text-align: left; }
+  .unmatched-cell { color: #c0392b; font-weight: 600; }
+
+  .alert { padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .alert-warn { background: #fff8e1; border: 1px solid #f5c842; color: #7a5800; }
+  .alert-error { background: #fdecea; border: 1px solid #f5a0a0; color: #a00; }
+
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  .spinner-dark { border-color: rgba(31,56,100,.2); border-top-color: #1F3864; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none !important; }
+  .divider { height: 1px; background: #e5eaf0; margin: 20px 0; }
+
+  .carrier-fetch-status { font-size: 12px; color: #666; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="nav-brand">Mosaic Wellness — Ops Tools</span>
+  <a href="/">Recon Dashboard</a>
+  <a href="/provision" class="active">Billing Provision</a>
+</nav>
+
+<div class="page">
+  <div class="page-title">Monthly Billing Provision</div>
+  <div class="page-sub">Select month → carriers auto-fetched from Google Sheet → upload Finance file → enter rates → generate</div>
+
+  <!-- STEP 1 -->
+  <div class="card">
+    <div class="card-title"><span class="badge">1</span> Select Month &amp; Upload Finance File</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Month</label>
+        <select id="sel-month">
+          <option value="1">January</option><option value="2">February</option>
+          <option value="3">March</option><option value="4">April</option>
+          <option value="5">May</option><option value="6">June</option>
+          <option value="7">July</option><option value="8">August</option>
+          <option value="9">September</option><option value="10">October</option>
+          <option value="11">November</option><option value="12">December</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Year</label>
+        <select id="sel-year">
+          <option value="2025">2025</option>
+          <option value="2026" selected>2026</option>
+          <option value="2027">2027</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Finance Excel (Tally export)</label>
+        <input type="file" id="finance-file" accept=".xlsx,.xls">
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: Rates -->
+  <div class="card" id="card-rates">
+    <div class="card-title"><span class="badge">2</span> Enter Freight Rates for This Month</div>
+
+    <div class="carrier-fetch-status" id="fetch-status">
+      <span class="spinner spinner-dark"></span>
+      <span id="fetch-status-text">Fetching carriers from Google Sheet…</span>
+    </div>
+
+    <div id="alert-rates" class="alert alert-warn hidden"></div>
+
+    <table class="rate-table hidden" id="rate-table">
+      <thead>
+        <tr>
+          <th style="width:55%">Carrier</th>
+          <th>Rate (₹ per kg Volumetric Weight)</th>
+        </tr>
+      </thead>
+      <tbody id="rate-tbody"></tbody>
+    </table>
+
+    <div id="rate-actions" class="hidden" style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+      <button class="btn btn-outline btn-sm" id="btn-add-row">+ Add Carrier</button>
+      <span class="rate-note">Freight Cost = Rate (₹/kg) × Volumetric Weight (from Google Sheet)</span>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn btn-success" id="btn-generate">&#9654; Generate Report</button>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results-section" class="hidden">
+    <div id="alert-unmatched" class="alert alert-warn hidden"></div>
+    <div class="kpi-grid" id="kpi-grid"></div>
+    <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+      <a id="download-link" class="btn btn-outline" download>&#11015; Download Excel</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Sale Order</th><th>Date</th><th>Product Name</th><th>SKU</th>
+            <th>Mode</th><th>Carrier</th><th>IOR</th><th>Qty</th>
+            <th>Sales (₹)</th><th>Duty %</th><th>Duty Cost (₹)</th>
+            <th>Vol Metric (kg)</th><th>Gr Wt (kg)</th><th>Chargeable Wt (kg)</th>
+            <th>Dest. Charges (₹)</th><th>Freight Cost (₹)</th><th>Total Freight (₹)</th>
+          </tr>
+        </thead>
+        <tbody id="result-tbody"></tbody>
+        <tfoot id="result-tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fmt(n, decimals = 2) {
+  if (n === null || n === undefined || n === '') return '';
+  return Number(n).toLocaleString('en-IN', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
+}
+
+function setBtn(btn, spinning, label) {
+  btn.disabled = spinning;
+  btn.innerHTML = spinning ? `<span class="spinner"></span> ${label}` : label;
+}
+
+function addCarrierRow(carrier, rate) {
+  const tbody = $('rate-tbody');
+  const existing = [...tbody.querySelectorAll('.carrier-name-input')].map(el => el.value.trim());
+  if (carrier && existing.includes(carrier)) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>
+      <input type="text" class="carrier-name-input" value="${carrier}"
+        style="border:none;background:transparent;font-weight:600;font-size:13px;width:100%;outline:none;">
+    </td>
+    <td style="display:flex;align-items:center;gap:8px;">
+      <input type="number" class="rate-input" min="0" step="0.01" placeholder="e.g. 590.00" value="${rate || ''}">
+      <span style="color:#bbb;cursor:pointer;font-size:18px;line-height:1;"
+        onclick="this.closest('tr').remove()" title="Remove">&#10005;</span>
+    </td>`;
+  tbody.appendChild(tr);
+}
+
+// ── Fetch carriers from Google Sheet ──────────────────────────────────────────
+async function fetchCarriers() {
+  const month = $('sel-month').value;
+  const year  = $('sel-year').value;
+
+  // Preserve any rates the user already entered
+  const saved = {};
+  document.querySelectorAll('#rate-tbody tr').forEach(tr => {
+    const n = tr.querySelector('.carrier-name-input')?.value.trim();
+    const r = tr.querySelector('.rate-input')?.value;
+    if (n) saved[n] = r || '';
+  });
+
+  $('fetch-status').classList.remove('hidden');
+  $('fetch-status-text').textContent = 'Fetching carriers from Google Sheet…';
+  $('rate-table').classList.add('hidden');
+  $('rate-tbody').innerHTML = '';
+  $('rate-actions').classList.add('hidden');
+
+  try {
+    const fd = new FormData();
+    fd.append('month', month);
+    fd.append('year', year);
+    const res  = await fetch('/api/provision/detect-carriers', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.message);
+
+    $('fetch-status').classList.add('hidden');
+
+    if (data.carriers.length === 0) {
+      $('fetch-status').classList.remove('hidden');
+      $('fetch-status-text').textContent = `No carriers found in Sheet for selected month. Add manually below.`;
+      // Remove spinner since this isn't loading
+      $('fetch-status').querySelector('.spinner')?.remove();
+    } else {
+      data.carriers.forEach(c => addCarrierRow(c, saved[c] || ''));
+      $('rate-table').classList.remove('hidden');
+    }
+    $('rate-actions').classList.remove('hidden');
+    $('rate-actions').style.display = 'flex';
+  } catch (err) {
+    $('fetch-status').classList.remove('hidden');
+    $('fetch-status-text').textContent = `Could not fetch from Google Sheet: ${err.message}`;
+    $('rate-actions').classList.remove('hidden');
+    $('rate-actions').style.display = 'flex';
+  }
+}
+
+// Init: set current month/year and fetch carriers
+(function() {
+  const now = new Date();
+  $('sel-month').value = now.getMonth() + 1;
+  $('sel-year').value  = now.getFullYear();
+  fetchCarriers();
+})();
+
+$('sel-month').addEventListener('change', fetchCarriers);
+$('sel-year').addEventListener('change',  fetchCarriers);
+
+// Finance file just stored for generate
+$('finance-file').addEventListener('change', () => {});
+
+// ── Add carrier row manually ───────────────────────────────────────────────────
+$('btn-add-row').addEventListener('click', () => {
+  addCarrierRow('', '');
+  $('rate-table').classList.remove('hidden');
+  $('rate-actions').classList.remove('hidden');
+  $('rate-actions').style.display = 'flex';
+});
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+$('btn-generate').addEventListener('click', async () => {
+  const financeFile = $('finance-file').files[0];
+  if (!financeFile) { alert('Please upload the Finance Excel file first.'); return; }
+
+  const rates = {};
+  let missing = [];
+  document.querySelectorAll('#rate-tbody tr').forEach(tr => {
+    const n = tr.querySelector('.carrier-name-input')?.value.trim();
+    const r = tr.querySelector('.rate-input')?.value;
+    if (!n) return;
+    const v = parseFloat(r);
+    if (!r || isNaN(v)) { missing.push(n); rates[n] = 0; }
+    else { rates[n] = v; }
+  });
+
+  if (missing.length) {
+    const w = $('alert-rates');
+    w.textContent = `⚠ No rate for: ${missing.join(', ')} — freight will be ₹0.`;
+    w.classList.remove('hidden');
+  } else {
+    $('alert-rates').classList.add('hidden');
+  }
+
+  setBtn($('btn-generate'), true, 'Generating…');
+
+  const fd = new FormData();
+  fd.append('finance_file', financeFile);
+  fd.append('month', $('sel-month').value);
+  fd.append('year',  $('sel-year').value);
+  fd.append('carrier_rates', JSON.stringify(rates));
+
+  try {
+    const res  = await fetch('/api/provision/generate', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.message);
+    renderResults(data);
+    $('results-section').classList.remove('hidden');
+    $('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    alert('Error: ' + err.message);
+  } finally {
+    setBtn($('btn-generate'), false, '&#9654; Generate Report');
+  }
+});
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderResults({ rows, summary, excel_b64, filename }) {
+  const alertEl = $('alert-unmatched');
+  if (summary.unmatched_orders?.length) {
+    alertEl.textContent = `⚠ ${summary.unmatched_orders.length} orders not in Sheet (freight = ₹0): ` + summary.unmatched_orders.join(', ');
+    alertEl.classList.remove('hidden');
+  } else {
+    alertEl.classList.add('hidden');
+  }
+
+  $('kpi-grid').innerHTML = [
+    ['Total Sale Orders',       summary.total_orders,       0],
+    ['Total Qty Shipped',        summary.total_qty,          0],
+    ['Total Sales Value (₹)',    summary.total_sales_inr,    2],
+    ['Total Duty Cost (₹)',      summary.total_duty_cost,    2],
+    ['Total Volume Metric (kg)', summary.total_vol_metric,   2],
+    ['Total Gross Weight (kg)',  summary.total_gr_wt,        2],
+    ['Total Chargeable Wt (kg)',summary.total_chargeable_wt,2],
+    ['Total Dest. Charges (₹)', summary.total_dest_charges, 2],
+    ['Total Freight Cost (₹)',  summary.total_freight_cost, 2],
+    ['Total Freight incl. all', summary.total_freight_all,  2],
+  ].map(([l, v, d]) => `
+    <div class="kpi-card">
+      <div class="kpi-label">${l}</div>
+      <div class="kpi-value ${d===0?'':'small'}">${fmt(v, d)}</div>
+    </div>`).join('');
+
+  const blob = b64toBlob(excel_b64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const dl = $('download-link');
+  dl.href = URL.createObjectURL(blob);
+  dl.download = filename;
+
+  $('result-tbody').innerHTML = rows.map(r => `
+    <tr>
+      <td class="${r.matched?'':'unmatched-cell'}">${r.sale_order}</td>
+      <td>${r.date}</td><td>${r.product_name}</td><td>${r.sku}</td>
+      <td>${r.mode}</td><td>${r.carrier}</td><td>${r.ior}</td>
+      <td>${fmt(r.qty,0)}</td><td>${fmt(r.sales_inr)}</td>
+      <td>${r.duty_rate?(r.duty_rate*100).toFixed(1)+'%':''}</td>
+      <td>${fmt(r.duty_cost)}</td><td>${fmt(r.vol_metric)}</td>
+      <td>${fmt(r.gr_wt)}</td><td>${fmt(r.chargeable_wt)}</td>
+      <td>${fmt(r.dest_charges)}</td><td>${fmt(r.freight_cost)}</td>
+      <td>${fmt(r.total_freight)}</td>
+    </tr>`).join('');
+
+  $('result-tfoot').innerHTML = `
+    <tr>
+      <td>GRAND TOTAL</td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td>${fmt(summary.total_qty,0)}</td><td>${fmt(summary.total_sales_inr)}</td>
+      <td></td><td>${fmt(summary.total_duty_cost)}</td>
+      <td>${fmt(summary.total_vol_metric)}</td><td>${fmt(summary.total_gr_wt)}</td>
+      <td>${fmt(summary.total_chargeable_wt)}</td><td>${fmt(summary.total_dest_charges)}</td>
+      <td>${fmt(summary.total_freight_cost)}</td><td>${fmt(summary.total_freight_all)}</td>
+    </tr>`;
+}
+
+function b64toBlob(b64, type) {
+  const bytes = atob(b64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type });
+}
+</script>
+</body>
+</html>
