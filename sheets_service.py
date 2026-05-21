@@ -1,5 +1,6 @@
 from googleapiclient.discovery import build
 from collections import defaultdict
+from datetime import datetime, date as date_type
 
 MONTH_ORDER = ['January','February','March','April','May','June',
                'July','August','September','October','November','December']
@@ -42,6 +43,30 @@ def get_sheet_data(creds, sheet_id, awb_tab, recon_tab=None):
     return parse_awb_data(awb_values, remarks)
 
 
+def _parse_aging(date_str):
+    """Return (days_open, bucket_label) from a case raise date string."""
+    if not date_str or not str(date_str).strip():
+        return None, None
+    ds = str(date_str).strip()
+    for fmt in ('%d/%m/%Y', '%m/%d/%Y', '%Y-%m-%d', '%d-%m-%Y', '%d %b %Y', '%d %B %Y'):
+        try:
+            d = datetime.strptime(ds, fmt).date()
+            days = (date_type.today() - d).days
+            if days < 0:
+                return days, None
+            if days <= 30:
+                return days, '0-30 days'
+            elif days <= 60:
+                return days, '31-60 days'
+            elif days <= 90:
+                return days, '61-90 days'
+            else:
+                return days, '90+ days'
+        except ValueError:
+            continue
+    return None, None
+
+
 def parse_awb_data(values, remarks=None):
     # Find the header row (col 0 = "Month", col 1 = "Year")
     header_idx = None
@@ -53,6 +78,32 @@ def parse_awb_data(values, remarks=None):
     if header_idx is None:
         print("[Sheets] Header row not found in AWB tracker")
         return {'channel_data': {}, 'transporter_data': {}, 'remarks': remarks or {}, 'kpis': {}}
+
+    # Detect key columns dynamically from header row (exact / keyword matching)
+    header_row = values[header_idx]
+    headers_lower = [str(c).strip().lower() for c in header_row]
+
+    def col_exact(name, fallback):
+        """Find column whose header is exactly `name` (case-insensitive)."""
+        try:
+            return headers_lower.index(name.lower())
+        except ValueError:
+            return fallback
+
+    def col_contains(keyword, fallback):
+        """Find first column whose header contains `keyword` (case-insensitive)."""
+        for i, h in enumerate(headers_lower):
+            if keyword in h:
+                return i
+        return fallback
+
+    # Channel = exact "Channel" header (not "Channel Shipment Status" etc.)
+    channel_col    = col_exact('channel', fallback=34)
+    # Case Raise Date = first header containing "case raise"
+    case_raise_col = col_contains('case raise', fallback=None)
+    # Case_Current Status is NOT used — that column is for delivery tracking, not reimbursement
+
+    print(f"[Sheets] Columns — channel:{channel_col}  case_raise:{case_raise_col}")
 
     # Aggregate raw rows
     # Key: (month_str, year_int)  →  channel  →  metrics
@@ -82,7 +133,7 @@ def parse_awb_data(values, remarks=None):
         lost_stock     = safe_float(row[27] if len(row) > 27 else 0)
         expected       = safe_float(row[28] if len(row) > 28 else 0)
         actual         = safe_float(row[29] if len(row) > 29 else 0)
-        channel        = str(row[33]).strip() if len(row) > 33 else ''
+        channel        = str(row[channel_col]).strip() if len(row) > channel_col else ''
         transporter    = str(row[8]).strip()  if len(row) > 8  else ''
 
         period_set.add((month, year))
@@ -99,6 +150,12 @@ def parse_awb_data(values, remarks=None):
             t['qty_sent']   += qty_sent
 
         if lost_stock > 0 and channel:
+            case_raise_raw = (
+                str(row[case_raise_col]).strip()
+                if case_raise_col is not None and len(row) > case_raise_col
+                else ''
+            )
+            days_open, aging_bucket = _parse_aging(case_raise_raw)
             discrepancies.append({
                 'month':                f"{month} {year}",
                 'awb':                  str(row[4]).strip()  if len(row) > 4  else '',
@@ -111,8 +168,10 @@ def parse_awb_data(values, remarks=None):
                 'actual_reimbursed':    round(actual, 2),
                 'pending':              round(expected - actual, 2),
                 'reimbursement_status': str(row[30]).strip() if len(row) > 30 else '',
-                'case_status':          str(row[39]).strip() if len(row) > 39 else '',
                 'remark':               str(row[32]).strip() if len(row) > 32 else '',
+                'case_raise_date':      case_raise_raw,
+                'days_open':            days_open,
+                'aging_bucket':         aging_bucket,
             })
             t['lost_stock'] += lost_stock
 

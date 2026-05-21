@@ -63,6 +63,31 @@ def dashboard():
     return render_template('dashboard.html')
 
 
+@app.route('/api/debug-header')
+def api_debug_header():
+    """Temporary: returns sheet header row with index numbers to diagnose column positions."""
+    try:
+        from googleapiclient.discovery import build
+        creds = get_sheets_credentials(CF, TF)
+        service = build('sheets', 'v4', credentials=creds)
+        result = service.spreadsheets().values().get(
+            spreadsheetId=CONFIG['sheet_id'],
+            range=f"'{CONFIG['sheet_tab']}'!A1:AZ10"
+        ).execute()
+        rows = result.get('values', [])
+        header_row = None
+        for i, row in enumerate(rows):
+            if row and str(row[0]).strip().lower() == 'month':
+                header_row = row
+                break
+        if header_row:
+            indexed = {str(i): str(v) for i, v in enumerate(header_row)}
+            return jsonify({'header': indexed, 'len': len(header_row)})
+        return jsonify({'error': 'header row not found'})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
 @app.route('/api/data')
 def api_data():
     if not _cache['data']:
