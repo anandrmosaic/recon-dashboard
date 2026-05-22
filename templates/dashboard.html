@@ -1623,7 +1623,7 @@ setInterval(() => fetch('/api/refresh').then(() => {
   fetch('/api/data').then(r => r.json()).then(j => {
     if (j.data) { _rawData = j.data; _lastUpdated = j.last_updated; applyAndRender(); }
   });
-}), 5 * 60 * 1000);
+}), 20 * 60 * 1000);
 </script>
 </body>
 </html>

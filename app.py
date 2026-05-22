@@ -1,4 +1,6 @@
+import gc
 import json
+import os
 import socket
 import threading
 from datetime import datetime
@@ -21,6 +23,9 @@ from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision
 
 app = Flask(__name__)
+# Only auto-reload templates in local dev, not on Render (saves memory)
+if os.environ.get('RENDER') is None:
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 with open('config.json') as f:
     CONFIG = json.load(f)
@@ -35,6 +40,8 @@ def refresh_data():
     try:
         creds = get_sheets_credentials(CF, TF)
         data = get_sheet_data(creds, CONFIG['sheet_id'], CONFIG['sheet_tab'], CONFIG.get('recon_tab'))
+        _cache['data'] = None   # release old data before storing new (halves peak memory)
+        gc.collect()
         _cache['data'] = data
         _cache['last_updated'] = datetime.now().strftime('%d %b %Y, %I:%M %p IST')
         print(f"[Data] Refreshed at {_cache['last_updated']}")
@@ -102,6 +109,15 @@ def api_data():
 def api_refresh():
     refresh_data()
     return jsonify({'status': 'ok', 'last_updated': _cache['last_updated']})
+
+
+@app.route('/email-preview')
+def email_preview():
+    if not _cache['data']:
+        refresh_data()
+    from email_service import build_enhanced_email_html
+    html = build_enhanced_email_html(_cache['data'], CONFIG['dashboard_url'])
+    return html
 
 
 @app.route('/api/send-test-email')
