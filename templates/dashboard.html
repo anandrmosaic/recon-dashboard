@@ -903,8 +903,8 @@ function renderDashboard(data, lastUpdated) {
       const openWithDays = openDisc.filter(function(d) { return d.days_open != null && d.days_open >= 0; });
       const avgOpen      = openWithDays.length > 0
         ? Math.round(openWithDays.reduce(function(s,d) { return s + d.days_open; }, 0) / openWithDays.length) : null;
-      // Resolved vs rejected breakdown for progress bar
-      const resolvedPct  = withTime.length > 0 ? Math.round(resolvedDisc.length / withTime.length * 100) : 0;
+      // Resolved vs rejected breakdown for progress bar — use closedDisc as base so bar aligns with labels
+      const resolvedPct  = closedDisc.length > 0 ? Math.round(resolvedDisc.length / closedDisc.length * 100) : 0;
 
       // Per-channel unified data (single pass)
       const chData = {};
@@ -955,7 +955,7 @@ function renderDashboard(data, lastUpdated) {
         '<div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border-light);border-top:3px solid var(--primary)">' +
           '<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px"><i class="fas fa-trophy" style="color:var(--primary);margin-right:4px"></i>Success Rate</div>' +
           '<div style="font-size:30px;font-weight:800;color:var(--primary)">' + successRate + '%</div>' +
-          '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + closedDisc.length + ' of ' + allDisc.length + ' cases closed</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + resolvedDisc.length + ' resolved · ' + rejectedDisc.length + ' rejected · ' + openDisc.length + ' open</div>' +
           '<div style="height:4px;background:var(--border);border-radius:50px;margin-top:10px;overflow:hidden"><div style="width:' + successRate + '%;height:100%;background:var(--primary);border-radius:50px"></div></div>' +
         '</div>' +
         '<div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border-light);border-top:3px solid #2e7d32">' +
