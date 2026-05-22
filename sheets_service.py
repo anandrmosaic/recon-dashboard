@@ -70,17 +70,20 @@ def _parse_aging(date_str):
 
 
 def _parse_resolution(raise_date_str, close_date_str, status):
-    """Return (days_to_close, is_closed).
+    """Return (days_to_close, is_closed, is_rejected).
     Uses close_date - raise_date when both dates present.
-    Falls back to status keywords for is_closed when close date is missing."""
-    is_closed_status = bool(status and any(
-        k in status.lower() for k in ['close', 'done', 'reimb', 'resolved', 'completed']
+    Falls back to status keywords for is_closed when close date is missing.
+    is_rejected = True when status contains 'reject' (closed but claim denied)."""
+    status_lower = status.lower() if status else ''
+    is_rejected = 'reject' in status_lower
+    is_closed_status = is_rejected or bool(any(
+        k in status_lower for k in ['close', 'done', 'reimb', 'resolved', 'completed']
     ))
     raise_d = _parse_date_only(raise_date_str)
     close_d = _parse_date_only(close_date_str)
     if raise_d and close_d:
-        return max(0, (close_d - raise_d).days), True
-    return None, is_closed_status
+        return max(0, (close_d - raise_d).days), True, is_rejected
+    return None, is_closed_status, is_rejected
 
 
 def parse_awb_data(values, remarks=None):
@@ -183,7 +186,7 @@ def parse_awb_data(values, remarks=None):
             )
             reimb_status = str(row[30]).strip() if len(row) > 30 else ''
             days_open, aging_bucket = _parse_aging(case_raise_raw)
-            days_to_close, is_closed = _parse_resolution(case_raise_raw, case_close_raw, reimb_status)
+            days_to_close, is_closed, is_rejected = _parse_resolution(case_raise_raw, case_close_raw, reimb_status)
             discrepancies.append({
                 'month':                f"{month} {year}",
                 'awb':                  str(row[4]).strip()  if len(row) > 4  else '',
@@ -203,6 +206,7 @@ def parse_awb_data(values, remarks=None):
                 'aging_bucket':         aging_bucket,
                 'days_to_close':        days_to_close,
                 'is_closed':            is_closed,
+                'is_rejected':          is_rejected,
             })
             if transporter:
                 t['lost_stock'] += lost_stock

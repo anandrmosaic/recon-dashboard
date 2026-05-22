@@ -870,8 +870,10 @@ function renderDashboard(data, lastUpdated) {
       chFinancials[ch] = { expected: exp, actual: act, pending: exp - act };
     });
     if (allDisc.length > 0) {
-      const openDisc   = allDisc.filter(function(d) { return !d.is_closed; });
-      const closedDisc = allDisc.filter(function(d) { return  d.is_closed; });
+      const openDisc     = allDisc.filter(function(d) { return !d.is_closed; });
+      const closedDisc   = allDisc.filter(function(d) { return  d.is_closed; });
+      const resolvedDisc = closedDisc.filter(function(d) { return !d.is_rejected; });
+      const rejectedDisc = closedDisc.filter(function(d) { return  d.is_rejected; });
 
       const BUCKETS    = ['0-30 days', '31-60 days', '61-90 days', '90+ days'];
       const BKT_LABELS = ['0-30 Days', '31-60 Days', '61-90 Days', '90+ Days'];
@@ -893,14 +895,16 @@ function renderDashboard(data, lastUpdated) {
         }
       });
 
-      // Resolution metrics
-      const successRate  = Math.round(closedDisc.length / allDisc.length * 100);
+      // Resolution metrics — success rate uses resolved-only (rejected don't count as wins)
+      const successRate  = Math.round(resolvedDisc.length / allDisc.length * 100);
       const withTime     = closedDisc.filter(function(d) { return d.days_to_close != null; });
       const avgClose     = withTime.length > 0
         ? Math.round(withTime.reduce(function(s,d) { return s + d.days_to_close; }, 0) / withTime.length) : null;
       const openWithDays = openDisc.filter(function(d) { return d.days_open != null && d.days_open >= 0; });
       const avgOpen      = openWithDays.length > 0
         ? Math.round(openWithDays.reduce(function(s,d) { return s + d.days_open; }, 0) / openWithDays.length) : null;
+      // Resolved vs rejected breakdown for progress bar
+      const resolvedPct  = withTime.length > 0 ? Math.round(resolvedDisc.length / withTime.length * 100) : 0;
 
       // Per-channel unified data (single pass)
       const chData = {};
@@ -959,6 +963,20 @@ function renderDashboard(data, lastUpdated) {
           '<div style="font-size:30px;font-weight:800;color:#2e7d32">' + (avgClose != null ? avgClose + 'd' : '&#8212;') + '</div>' +
           '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + withTime.length + ' cases with close date' +
             (withTime.length === 0 ? ' <span style="color:#bbb">&#8212; add Case Close Date to sheet</span>' : '') + '</div>' +
+          (withTime.length > 0 ?
+            '<div style="margin-top:10px">' +
+              '<div style="height:8px;background:var(--border);border-radius:50px;overflow:hidden;display:flex">' +
+                '<div style="width:' + resolvedPct + '%;background:#2e7d32;border-radius:50px 0 0 50px;transition:width .4s"></div>' +
+                '<div style="width:' + (100 - resolvedPct) + '%;background:#c62828;border-radius:0 50px 50px 0"></div>' +
+              '</div>' +
+              '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px">' +
+                '<span><span style="display:inline-block;width:8px;height:8px;background:#2e7d32;border-radius:50%;margin-right:4px"></span>' +
+                  resolvedDisc.length + ' resolved</span>' +
+                '<span><span style="display:inline-block;width:8px;height:8px;background:#c62828;border-radius:50%;margin-right:4px"></span>' +
+                  rejectedDisc.length + ' rejected</span>' +
+              '</div>' +
+            '</div>'
+          : '') +
         '</div>' +
         '<div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border-light);border-top:3px solid #e65100">' +
           '<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px"><i class="fas fa-hourglass-half" style="color:#e65100;margin-right:4px"></i>Avg Days Open</div>' +
