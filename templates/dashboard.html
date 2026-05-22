@@ -39,7 +39,7 @@
     .btn-refresh:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
 
     /* Filter Bar */
-    .filter-bar { background: var(--surface-2); padding: 10px 24px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+    .filter-bar { background: var(--surface-2); padding: 10px 24px; border-bottom: 1px solid var(--border); display: flex; }
     .filter-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .filter-group { display: flex; align-items: center; gap: 10px; }
     .filter-group.push-right { margin-left: auto; }
@@ -231,7 +231,7 @@
 
 <!-- Filter Bar -->
 <div class="filter-bar">
-  <!-- Row 1: Year + Month -->
+  <!-- Single row: Year → Channel → Month → View -->
   <div class="filter-row">
     <div class="filter-group" id="yearGroup" style="display:none">
       <span class="filter-label"><i class="fas fa-calendar-alt"></i> Year</span>
@@ -240,25 +240,6 @@
       </select>
     </div>
     <div class="filter-group" id="yearGroupDivider" style="display:none"><div class="filter-divider"></div></div>
-    <div class="filter-group">
-      <span class="filter-label"><i class="fas fa-calendar"></i> Month</span>
-      <div class="month-dropdown" id="monthDropdownWrap">
-        <button class="month-dd-btn" id="monthDdBtn" onclick="toggleMonthDropdown(event)">
-          <span id="monthDdLabel">All Months</span>
-          <i class="fas fa-chevron-down" style="font-size:10px"></i>
-        </button>
-        <div class="month-dd-menu" id="monthDdMenu">
-          <div class="month-dd-item">
-            <label><input type="checkbox" id="monthCheckAll" checked onchange="handleMonthCheckAll(this)"> All Months</label>
-          </div>
-          <div class="month-dd-divider"></div>
-          <div id="monthCheckboxes"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <!-- Row 2: Channel + View -->
-  <div class="filter-row">
     <div class="filter-group">
       <span class="filter-label"><i class="fas fa-store"></i> Channel</span>
       <div class="month-dropdown" id="channelDropdownWrap">
@@ -272,6 +253,23 @@
           </div>
           <div class="month-dd-divider"></div>
           <div id="channelCheckboxes"></div>
+        </div>
+      </div>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="filter-group">
+      <span class="filter-label"><i class="fas fa-calendar"></i> Month</span>
+      <div class="month-dropdown" id="monthDropdownWrap">
+        <button class="month-dd-btn" id="monthDdBtn" onclick="toggleMonthDropdown(event)">
+          <span id="monthDdLabel">All Months</span>
+          <i class="fas fa-chevron-down" style="font-size:10px"></i>
+        </button>
+        <div class="month-dd-menu" id="monthDdMenu">
+          <div class="month-dd-item">
+            <label><input type="checkbox" id="monthCheckAll" checked onchange="handleMonthCheckAll(this)"> All Months</label>
+          </div>
+          <div class="month-dd-divider"></div>
+          <div id="monthCheckboxes"></div>
         </div>
       </div>
     </div>
