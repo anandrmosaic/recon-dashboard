@@ -49,6 +49,8 @@
     .filter-btn { padding: 5px 16px; border-radius: 50px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
     .filter-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
     .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .filter-select { padding: 5px 28px 5px 14px; border-radius: 50px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; outline: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b6560' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; transition: all 0.15s; }
+    .filter-select:hover, .filter-select:focus { border-color: var(--primary); color: var(--primary); background-color: var(--primary-soft); }
     .filter-divider { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
 
     /* Month dropdown */
@@ -233,9 +235,11 @@
   <div class="filter-row">
     <div class="filter-group" id="yearGroup" style="display:none">
       <span class="filter-label"><i class="fas fa-calendar-alt"></i> Year</span>
-      <div id="yearFilters" class="filter-btns"></div>
+      <select id="yearSelect" class="filter-select" onchange="setYear(this.value)">
+        <option value="all">All Years</option>
+      </select>
     </div>
-    <div class="filter-group" id="yearGroup" style="display:none"><div class="filter-divider"></div></div>
+    <div class="filter-group" id="yearGroupDivider" style="display:none"><div class="filter-divider"></div></div>
     <div class="filter-group">
       <span class="filter-label"><i class="fas fa-calendar"></i> Month</span>
       <div class="month-dropdown" id="monthDropdownWrap">
@@ -257,7 +261,19 @@
   <div class="filter-row">
     <div class="filter-group">
       <span class="filter-label"><i class="fas fa-store"></i> Channel</span>
-      <div id="channelFilters" class="filter-btns"></div>
+      <div class="month-dropdown" id="channelDropdownWrap">
+        <button class="month-dd-btn" id="channelDdBtn" onclick="toggleChannelDropdown(event)">
+          <span id="channelDdLabel">All Channels</span>
+          <i class="fas fa-chevron-down" style="font-size:10px"></i>
+        </button>
+        <div class="month-dd-menu" id="channelDdMenu">
+          <div class="month-dd-item">
+            <label><input type="checkbox" id="channelCheckAll" checked onchange="handleChannelCheckAll(this)"> All Channels</label>
+          </div>
+          <div class="month-dd-divider"></div>
+          <div id="channelCheckboxes"></div>
+        </div>
+      </div>
     </div>
     <div class="filter-divider"></div>
     <div class="filter-group push-right">
@@ -366,38 +382,42 @@ function initFilters(data) {
   }).filter(Boolean))].sort();
 
   // Show year group only when years are detected
-  const yearGroupEls = document.querySelectorAll('#yearGroup');
+  const yearGroupEls = document.querySelectorAll('#yearGroup, #yearGroupDivider');
   yearGroupEls.forEach(el => el.style.display = years.length > 0 ? 'flex' : 'none');
   if (years.length > 0) {
-    document.getElementById('yearFilters').innerHTML =
-      `<button class="filter-btn active" onclick="setYear('all')">All</button>` +
-      years.map(y => `<button class="filter-btn" onclick="setYear('${y}')">${y}</button>`).join('');
+    const sel = document.getElementById('yearSelect');
+    sel.innerHTML = `<option value="all">All Years</option>` +
+      years.map(y => `<option value="${y}">${y}</option>`).join('');
+    sel.value = _filterState.year;
   }
 
   // Month dropdown — rebuild using all months (year filter will narrow later)
   rebuildMonthDropdown(months);
   updateMonthLabel();
 
-  // Channel pills — select all by default on first load
+  // Channel dropdown — select all by default on first load
   if (_filterState.channels.length === 0) _filterState.channels = [...channelNames];
-  document.getElementById('channelFilters').innerHTML = channelNames.map(ch =>
-    `<button class="filter-btn ${_filterState.channels.includes(ch) ? 'active' : ''}" data-channel="${ch}" onclick="toggleChannel('${ch}')">${ch}</button>`
+  document.getElementById('channelCheckboxes').innerHTML = channelNames.map(ch =>
+    `<div class="month-dd-item">
+       <label>
+         <input type="checkbox" data-channel="${ch}" ${_filterState.channels.includes(ch) ? 'checked' : ''} onchange="handleChannelCheck('${ch}',this)">
+         ${ch}
+       </label>
+     </div>`
   ).join('');
+  document.getElementById('channelCheckAll').checked = _filterState.channels.length === channelNames.length;
+  updateChannelLabel();
 }
 
 // ── Filter handlers ────────────────────────────────────────────────────────
 
 function setYear(year) {
   _filterState.year = year;
-  document.querySelectorAll('#yearFilters .filter-btn').forEach(b => b.classList.remove('active'));
-  const btn = year === 'all'
-    ? document.querySelector('#yearFilters .filter-btn')
-    : [...document.querySelectorAll('#yearFilters .filter-btn')].find(b => b.textContent === year);
-  if (btn) btn.classList.add('active');
+  document.getElementById('yearSelect').value = year;
 
   // Rebuild month dropdown to show only months for selected year
-  const allMonths   = _rawData?.channel_data?.months || [];
-  const yearMonths  = year === 'all' ? allMonths : allMonths.filter(m => m.includes(year));
+  const allMonths  = _rawData?.channel_data?.months || [];
+  const yearMonths = year === 'all' ? allMonths : allMonths.filter(m => m.includes(year));
   rebuildMonthDropdown(yearMonths);
   updateMonthLabel();
   applyAndRender();
@@ -454,17 +474,44 @@ function updateMonthLabel() {
   document.getElementById('monthDdLabel').textContent = lbl;
 }
 
-function toggleChannel(ch) {
-  const idx = _filterState.channels.indexOf(ch);
-  if (idx > -1) {
-    if (_filterState.channels.length === 1) return; // keep at least one
-    _filterState.channels.splice(idx, 1);
-    document.querySelector(`[data-channel="${ch}"]`).classList.remove('active');
-  } else {
-    _filterState.channels.push(ch);
-    document.querySelector(`[data-channel="${ch}"]`).classList.add('active');
-  }
+function toggleChannelDropdown(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('channelDdMenu');
+  const btn  = document.getElementById('channelDdBtn');
+  const open = menu.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+function handleChannelCheckAll(cb) {
+  const channelNames = Object.keys(_rawData?.channel_data?.channels || {}).sort();
+  _filterState.channels = cb.checked ? [...channelNames] : [channelNames[0]];
+  document.querySelectorAll('#channelCheckboxes input[type="checkbox"]').forEach(c => {
+    c.checked = _filterState.channels.includes(c.dataset.channel);
+  });
+  updateChannelLabel();
   applyAndRender();
+}
+
+function handleChannelCheck(ch, cb) {
+  if (cb.checked) {
+    if (!_filterState.channels.includes(ch)) _filterState.channels.push(ch);
+  } else {
+    if (_filterState.channels.length === 1) { cb.checked = true; return; }
+    _filterState.channels = _filterState.channels.filter(x => x !== ch);
+  }
+  const channelNames = Object.keys(_rawData?.channel_data?.channels || {});
+  const allChecked = _filterState.channels.length === channelNames.length;
+  document.getElementById('channelCheckAll').checked = allChecked;
+  updateChannelLabel();
+  applyAndRender();
+}
+
+function updateChannelLabel() {
+  const channelNames = Object.keys(_rawData?.channel_data?.channels || {});
+  const n = _filterState.channels.length;
+  const total = channelNames.length;
+  document.getElementById('channelDdLabel').textContent =
+    n === 0 ? 'None' : n === total ? 'All Channels' : `${n} channel${n > 1 ? 's' : ''} selected`;
 }
 
 function setView(view) {
@@ -1421,11 +1468,15 @@ async function sendTestEmail() {
   } catch(e) { showToast('Failed to send email', 'error'); }
 }
 
-// Close month dropdown when clicking outside
+// Close dropdowns when clicking outside
 document.addEventListener('click', e => {
   if (!document.getElementById('monthDropdownWrap')?.contains(e.target)) {
     document.getElementById('monthDdMenu')?.classList.remove('open');
     document.getElementById('monthDdBtn')?.classList.remove('open');
+  }
+  if (!document.getElementById('channelDropdownWrap')?.contains(e.target)) {
+    document.getElementById('channelDdMenu')?.classList.remove('open');
+    document.getElementById('channelDdBtn')?.classList.remove('open');
   }
 });
 
