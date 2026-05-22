@@ -166,12 +166,16 @@ def parse_awb_data(values, remarks=None):
             t = tr_agg[(month, year)][transporter]
             t['qty_sent']   += qty_sent
 
-        if lost_stock > 0 and channel:
-            case_raise_raw = (
-                str(row[case_raise_col]).strip()
-                if case_raise_col is not None and len(row) > case_raise_col
-                else ''
-            )
+        # Extract case raise date before the condition so it can be used as a trigger
+        case_raise_raw = (
+            str(row[case_raise_col]).strip()
+            if case_raise_col is not None and len(row) > case_raise_col
+            else ''
+        )
+
+        # Include any row where a case was raised (has raise date) or has lost stock —
+        # covers Excess Receive / Inventory Relocated rows that have lost_stock=0
+        if (lost_stock > 0 or case_raise_raw) and channel:
             case_close_raw = (
                 str(row[case_close_col]).strip()
                 if case_close_col is not None and len(row) > case_close_col
@@ -200,7 +204,8 @@ def parse_awb_data(values, remarks=None):
                 'days_to_close':        days_to_close,
                 'is_closed':            is_closed,
             })
-            t['lost_stock'] += lost_stock
+            if transporter:
+                t['lost_stock'] += lost_stock
 
     # Sort periods chronologically: year ASC, then calendar month order
     sorted_periods = sorted(period_set, key=lambda x: (x[1], MONTH_ORDER.index(x[0])))
