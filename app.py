@@ -39,7 +39,7 @@ TF = CONFIG.get('token_file')
 def refresh_data():
     try:
         creds = get_sheets_credentials(CF, TF)
-        data = get_sheet_data(creds, CONFIG['sheet_id'], CONFIG['sheet_tab'], CONFIG.get('recon_tab'))
+        data = get_sheet_data(creds, CONFIG['sheet_id'], CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
         _cache['data'] = None   # release old data before storing new (halves peak memory)
         gc.collect()
         _cache['data'] = data

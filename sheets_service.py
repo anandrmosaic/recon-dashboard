@@ -13,7 +13,7 @@ def safe_float(val):
         return 0.0
 
 
-def get_sheet_data(creds, sheet_id, awb_tab, recon_tab=None):
+def get_sheet_data(creds, sheet_id, awb_tab, recon_tab=None, data_since=None):
     service = build('sheets', 'v4', credentials=creds)
 
     # Read AWB tracker raw data
@@ -40,7 +40,7 @@ def get_sheet_data(creds, sheet_id, awb_tab, recon_tab=None):
         except Exception as e:
             print(f"[Sheets] Could not read remarks: {e}")
 
-    return parse_awb_data(awb_values, remarks)
+    return parse_awb_data(awb_values, remarks, data_since=data_since)
 
 
 def _parse_date_only(date_str):
@@ -86,7 +86,10 @@ def _parse_resolution(raise_date_str, close_date_str, status):
     return None, is_closed_status, is_rejected
 
 
-def parse_awb_data(values, remarks=None):
+def parse_awb_data(values, remarks=None, data_since=None):
+    # Cutoff: skip rows before (since_year, since_month)
+    since_year  = int(data_since['year'])  if data_since else None
+    since_month = int(data_since['month']) if data_since else None
     # Find the header row (col 0 = "Month", col 1 = "Year")
     header_idx = None
     for i, row in enumerate(values):
@@ -153,6 +156,12 @@ def parse_awb_data(values, remarks=None):
         if not year_raw.isdigit():
             continue
         year = int(year_raw)
+
+        # Skip rows before the configured cutoff (archive filter)
+        if since_year is not None:
+            month_idx = MONTH_ORDER.index(month) + 1  # 1-based
+            if (year < since_year) or (year == since_year and month_idx < since_month):
+                continue
 
         qty_sent        = safe_float(row[15] if len(row) > 15 else 0)
         lost_stock      = safe_float(row[27] if len(row) > 27 else 0)
