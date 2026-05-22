@@ -981,8 +981,13 @@ function renderDashboard(data, lastUpdated) {
           }
           cells += '</td>';
         });
+        const openCount   = c.total - c.closed;
         chBodyHTML += '<tr>' +
           '<td style="font-weight:600;padding:8px 12px;border-bottom:1px solid #f0f0f0">' + ch + '</td>' +
+          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' +
+            '<span style="font-weight:700;font-size:14px">' + c.total + '</span>' +
+            '<div style="font-size:10px;color:#999;margin-top:2px">' + openCount + ' open / ' + c.closed + ' closed</div>' +
+          '</td>' +
           cells +
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#aaa">' + (c.no_date.count || '&#8212;') + '</td>' +
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:700;color:' + rateCol + '">' + rate + '%</td>' +
@@ -995,7 +1000,9 @@ function renderDashboard(data, lastUpdated) {
         ? '<div class="aging-matrix-card">' +
             '<div class="aging-matrix-title"><i class="fas fa-table" style="color:var(--navy)"></i> Channel &times; Case Health</div>' +
             '<table class="recon-table" style="width:100%"><thead><tr>' +
-              '<th style="padding:8px 12px">Channel</th>' + hdrCells +
+              '<th style="padding:8px 12px">Channel</th>' +
+              '<th style="padding:8px 10px;text-align:center">Total</th>' +
+              hdrCells +
               '<th style="padding:8px 10px;text-align:center;color:#9e9e9e">No Date</th>' +
               '<th style="padding:8px 10px;text-align:center">Success %</th>' +
               '<th style="padding:8px 10px;text-align:center">Avg Close</th>' +
