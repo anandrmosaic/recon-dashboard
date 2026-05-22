@@ -858,6 +858,17 @@ function renderDashboard(data, lastUpdated) {
   let caseHealthHTML = '';
   try {
     const allDisc = data.discrepancies || [];
+
+    // Pre-compute per-channel financial totals from channel_data (same source as KPI cards)
+    // This guarantees Expected/Actual/Pending in the table always match the KPI numbers
+    const chFinancials = {};
+    const cdChannels = (data.channel_data || {}).channels || {};
+    Object.keys(cdChannels).forEach(function(ch) {
+      const months = cdChannels[ch];
+      let exp = 0, act = 0;
+      months.forEach(function(m) { exp += (m.expected_reimburs || 0); act += (m.actual_reimbursed || 0); });
+      chFinancials[ch] = { expected: exp, actual: act, pending: exp - act };
+    });
     if (allDisc.length > 0) {
       const openDisc   = allDisc.filter(function(d) { return !d.is_closed; });
       const closedDisc = allDisc.filter(function(d) { return  d.is_closed; });
@@ -895,14 +906,12 @@ function renderDashboard(data, lastUpdated) {
       const chData = {};
       allDisc.forEach(function(d) {
         if (!chData[d.channel]) {
-          chData[d.channel] = {bkts:{}, no_date:{count:0,pending:0}, total:0, closed:0, tSum:0, tCnt:0, openArr:[], totalExpected:0, totalActual:0};
+          chData[d.channel] = {bkts:{}, no_date:{count:0,pending:0}, total:0, closed:0, tSum:0, tCnt:0, openArr:[]};
           BUCKETS.forEach(function(b) { chData[d.channel].bkts[b] = {count:0,pending:0}; });
         }
         const c    = chData[d.channel];
         const pend = d.pending || 0;
         c.total++;
-        c.totalExpected += (d.expected_reimburs || 0);
-        c.totalActual   += (d.actual_reimbursed || 0);
         if (d.is_closed) {
           c.closed++;
           if (d.days_to_close != null) { c.tSum += d.days_to_close; c.tCnt++; }
@@ -982,7 +991,8 @@ function renderDashboard(data, lastUpdated) {
           }
           cells += '</td>';
         });
-        const openCount   = c.total - c.closed;
+        const openCount = c.total - c.closed;
+        const fin       = chFinancials[ch] || {expected:0, actual:0, pending:0};
         chBodyHTML += '<tr>' +
           '<td style="font-weight:600;padding:8px 12px;border-bottom:1px solid #f0f0f0">' + ch + '</td>' +
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' +
@@ -994,9 +1004,9 @@ function renderDashboard(data, lastUpdated) {
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:700;color:' + rateCol + '">' + rate + '%</td>' +
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + (ac != null ? ac+'d' : '<span style="color:#bbb">&#8212;</span>') + '</td>' +
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + (ao != null ? ao+'d' : '<span style="color:#bbb">&#8212;</span>') + '</td>' +
-          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + formatUSD(c.totalExpected) + '</td>' +
-          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + formatUSD(c.totalActual) + '</td>' +
-          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0"><span class="badge-pending">' + formatUSD(c.totalExpected - c.totalActual) + '</span></td>' +
+          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + formatUSD(fin.expected) + '</td>' +
+          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + formatUSD(fin.actual) + '</td>' +
+          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0"><span class="badge-pending">' + formatUSD(fin.pending) + '</span></td>' +
           '</tr>';
       });
       const tableHTML = chNames.length > 0
