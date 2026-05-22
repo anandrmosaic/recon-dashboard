@@ -1239,6 +1239,13 @@ function renderDashboard(data, lastUpdated) {
         <div class="chart-container"><canvas id="lossDistChart"></canvas></div>
       </div>
     </div>
+    <!-- Cases Raised Trend — full width -->
+    <div style="padding:14px 24px 0">
+      <div class="chart-card">
+        <div class="chart-title"><i class="fas fa-calendar-plus"></i> Cases Raised — Monthly Trend</div>
+        <div class="chart-container" style="height:180px"><canvas id="caseTrendChart"></canvas></div>
+      </div>
+    </div>
     <div class="charts-grid">
       <div class="chart-card">
         <div class="chart-title"><i class="fas fa-chart-bar"></i> Recovery Status by Month</div>
@@ -1333,6 +1340,67 @@ function renderDashboard(data, lastUpdated) {
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 11 } } },
           y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // ── Chart: Cases Raised — Monthly Trend
+  if (document.getElementById('caseTrendChart')) {
+    const disc = (data.discrepancies || []).filter(d => d.case_raise_date);
+    // Build ordered month buckets from the filtered months list
+    const caseCounts = {};
+    months.forEach(m => { caseCounts[m] = 0; });
+    disc.forEach(d => {
+      // Parse case_raise_date into "Month YYYY" label
+      const raw = d.case_raise_date;
+      let label = null;
+      const parts = raw.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+      if (parts) {
+        const [, a, b, y] = parts;
+        const yr = y.length === 2 ? '20' + y : y;
+        // Try dd/mm/yyyy first then mm/dd/yyyy
+        const dayFirst = new Date(`${yr}-${b.padStart(2,'0')}-${a.padStart(2,'0')}`);
+        const dt = isNaN(dayFirst) ? new Date(`${yr}-${a.padStart(2,'0')}-${b.padStart(2,'0')}`) : dayFirst;
+        if (!isNaN(dt)) {
+          label = dt.toLocaleString('en-US', { month: 'long' }) + ' ' + dt.getFullYear();
+        }
+      }
+      if (label && caseCounts.hasOwnProperty(label)) caseCounts[label]++;
+    });
+    const caseLabels = months;
+    const caseData = months.map(m => caseCounts[m] || 0);
+    const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#1b3a2d';
+    chartInstances.caseTrend = new Chart(document.getElementById('caseTrendChart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: caseLabels,
+        datasets: [{
+          label: 'Cases Raised',
+          data: caseData,
+          borderColor: primaryColor,
+          backgroundColor: primaryColor + '18',
+          borderWidth: 2.5,
+          pointBackgroundColor: primaryColor,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          fill: true,
+          tension: 0.35
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.parsed.y} case${ctx.parsed.y !== 1 ? 's' : ''} raised`
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 }, stepSize: 1 } }
         }
       }
     });
