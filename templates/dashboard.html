@@ -895,17 +895,18 @@ function renderDashboard(data, lastUpdated) {
       const chData = {};
       allDisc.forEach(function(d) {
         if (!chData[d.channel]) {
-          chData[d.channel] = {bkts:{}, no_date:{count:0,pending:0}, total:0, closed:0, tSum:0, tCnt:0, openArr:[], totalPending:0};
+          chData[d.channel] = {bkts:{}, no_date:{count:0,pending:0}, total:0, closed:0, tSum:0, tCnt:0, openArr:[], totalExpected:0, totalActual:0};
           BUCKETS.forEach(function(b) { chData[d.channel].bkts[b] = {count:0,pending:0}; });
         }
         const c    = chData[d.channel];
         const pend = d.pending || 0;
         c.total++;
+        c.totalExpected += (d.expected_reimburs || 0);
+        c.totalActual   += (d.actual_reimbursed || 0);
         if (d.is_closed) {
           c.closed++;
           if (d.days_to_close != null) { c.tSum += d.days_to_close; c.tCnt++; }
         } else {
-          c.totalPending += pend;
           if (d.aging_bucket && BUCKETS.indexOf(d.aging_bucket) > -1) {
             c.bkts[d.aging_bucket].count++;
             c.bkts[d.aging_bucket].pending += pend;
@@ -993,7 +994,9 @@ function renderDashboard(data, lastUpdated) {
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:700;color:' + rateCol + '">' + rate + '%</td>' +
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + (ac != null ? ac+'d' : '<span style="color:#bbb">&#8212;</span>') + '</td>' +
           '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + (ao != null ? ao+'d' : '<span style="color:#bbb">&#8212;</span>') + '</td>' +
-          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0"><span class="badge-pending">' + formatUSD(c.totalPending) + '</span></td>' +
+          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + formatUSD(c.totalExpected) + '</td>' +
+          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">' + formatUSD(c.totalActual) + '</td>' +
+          '<td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0"><span class="badge-pending">' + formatUSD(c.totalExpected - c.totalActual) + '</span></td>' +
           '</tr>';
       });
       const tableHTML = chNames.length > 0
@@ -1007,7 +1010,9 @@ function renderDashboard(data, lastUpdated) {
               '<th style="padding:8px 10px;text-align:center">Success %</th>' +
               '<th style="padding:8px 10px;text-align:center">Avg Close</th>' +
               '<th style="padding:8px 10px;text-align:center">Avg Open</th>' +
-              '<th style="padding:8px 10px;text-align:center">Open Pending</th>' +
+              '<th style="padding:8px 10px;text-align:center">Expected</th>' +
+              '<th style="padding:8px 10px;text-align:center">Actual</th>' +
+              '<th style="padding:8px 10px;text-align:center">Pending</th>' +
             '</tr></thead><tbody>' + chBodyHTML + '</tbody></table></div>'
         : '';
 
