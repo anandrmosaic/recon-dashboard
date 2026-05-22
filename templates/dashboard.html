@@ -49,8 +49,6 @@
     .filter-btn { padding: 5px 16px; border-radius: 50px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
     .filter-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
     .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .filter-select { padding: 5px 28px 5px 14px; border-radius: 50px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; outline: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b6560' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; transition: all 0.15s; }
-    .filter-select:hover, .filter-select:focus { border-color: var(--primary); color: var(--primary); background-color: var(--primary-soft); }
     .filter-divider { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
 
     /* Month dropdown */
@@ -63,6 +61,10 @@
     .month-dd-item:hover { background: var(--primary-soft); }
     .month-dd-item label { font-size: 12px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; font-weight: 500; }
     .month-dd-item input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+    /* Year single-select dropdown */
+    .year-dd-option { padding: 7px 14px; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: space-between; border-radius: 6px; margin: 2px 6px; transition: background 0.1s, color 0.1s; }
+    .year-dd-option:hover { background: var(--primary-soft); color: var(--primary); }
+    .year-dd-option.selected { background: var(--primary); color: #fff; }
     .month-dd-divider { height: 1px; background: var(--border-light); margin: 4px 0; }
 
     /* KPI Cards */
@@ -235,9 +237,15 @@
   <div class="filter-row">
     <div class="filter-group" id="yearGroup" style="display:none">
       <span class="filter-label"><i class="fas fa-calendar-alt"></i> Year</span>
-      <select id="yearSelect" class="filter-select" onchange="setYear(this.value)">
-        <option value="all">All Years</option>
-      </select>
+      <div class="month-dropdown" id="yearDropdownWrap">
+        <button class="month-dd-btn" id="yearDdBtn" onclick="toggleYearDropdown(event)" style="min-width:110px">
+          <span id="yearDdLabel">All Years</span>
+          <i class="fas fa-chevron-down" style="font-size:10px"></i>
+        </button>
+        <div class="month-dd-menu" id="yearDdMenu" style="min-width:130px">
+          <div id="yearOptions"></div>
+        </div>
+      </div>
     </div>
     <div class="filter-group" id="yearGroupDivider" style="display:none"><div class="filter-divider"></div></div>
     <div class="filter-group">
@@ -383,10 +391,7 @@ function initFilters(data) {
   const yearGroupEls = document.querySelectorAll('#yearGroup, #yearGroupDivider');
   yearGroupEls.forEach(el => el.style.display = years.length > 0 ? 'flex' : 'none');
   if (years.length > 0) {
-    const sel = document.getElementById('yearSelect');
-    sel.innerHTML = `<option value="all">All Years</option>` +
-      years.map(y => `<option value="${y}">${y}</option>`).join('');
-    sel.value = _filterState.year;
+    rebuildYearOptions(years);
   }
 
   // Month dropdown — rebuild using all months (year filter will narrow later)
@@ -409,16 +414,42 @@ function initFilters(data) {
 
 // ── Filter handlers ────────────────────────────────────────────────────────
 
-function setYear(year) {
-  _filterState.year = year;
-  document.getElementById('yearSelect').value = year;
+function rebuildYearOptions(years) {
+  const allOpts = ['all', ...years];
+  document.getElementById('yearOptions').innerHTML = allOpts.map(y =>
+    `<div class="year-dd-option${_filterState.year === y ? ' selected' : ''}" onclick="selectYear('${y}')">
+       ${y === 'all' ? 'All Years' : y}
+       ${_filterState.year === y ? '<i class="fas fa-check" style="font-size:10px;opacity:0.7"></i>' : ''}
+     </div>`
+  ).join('');
+  document.getElementById('yearDdLabel').textContent = _filterState.year === 'all' ? 'All Years' : _filterState.year;
+}
 
-  // Rebuild month dropdown to show only months for selected year
+function toggleYearDropdown(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('yearDdMenu');
+  const btn  = document.getElementById('yearDdBtn');
+  const open = menu.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+function selectYear(year) {
+  _filterState.year = year;
+  document.getElementById('yearDdMenu').classList.remove('open');
+  document.getElementById('yearDdBtn').classList.remove('open');
+  const years = [...new Set((_rawData?.channel_data?.months || []).map(m => {
+    const y4 = m.match(/\b(20\d{2})\b/); return y4 ? y4[1] : null;
+  }).filter(Boolean))].sort();
+  rebuildYearOptions(years);
   const allMonths  = _rawData?.channel_data?.months || [];
   const yearMonths = year === 'all' ? allMonths : allMonths.filter(m => m.includes(year));
   rebuildMonthDropdown(yearMonths);
   updateMonthLabel();
   applyAndRender();
+}
+
+function setYear(year) {
+  selectYear(year);
 }
 
 function rebuildMonthDropdown(availableMonths) {
@@ -1475,6 +1506,10 @@ document.addEventListener('click', e => {
   if (!document.getElementById('channelDropdownWrap')?.contains(e.target)) {
     document.getElementById('channelDdMenu')?.classList.remove('open');
     document.getElementById('channelDdBtn')?.classList.remove('open');
+  }
+  if (!document.getElementById('yearDropdownWrap')?.contains(e.target)) {
+    document.getElementById('yearDdMenu')?.classList.remove('open');
+    document.getElementById('yearDdBtn')?.classList.remove('open');
   }
 });
 
