@@ -645,7 +645,15 @@ function renderDiscrepancyTab(data, lastUpdated) {
     return `<span class="badge-status-na">${s}</span>`;
   };
 
-  const agingBadge = (bucket, days) => {
+  const agingBadge = (bucket, days, isClosed, daysToClose) => {
+    if (isClosed) {
+      if (daysToClose != null) {
+        const col = daysToClose <= 30 ? '#2e7d32' : daysToClose <= 60 ? '#f57f17' : daysToClose <= 90 ? '#e65100' : '#c62828';
+        const bg  = daysToClose <= 30 ? '#e8f5e9' : daysToClose <= 60 ? '#fff8e1' : daysToClose <= 90 ? '#fff3e0' : '#ffebee';
+        return `<span style="background:${bg};color:${col};padding:2px 8px;border-radius:50px;font-size:11px;font-weight:600;white-space:nowrap">✓ ${daysToClose}d to close</span>`;
+      }
+      return `<span class="badge-status-closed">Closed</span>`;
+    }
     if (!bucket) return '<span class="badge-aging-na">No date</span>';
     const label = days != null ? `${bucket} (${days}d)` : bucket;
     if (bucket === '0-30 days')  return `<span class="badge-aging-fresh">${label}</span>`;
@@ -668,7 +676,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center"><span class="badge-recovered">${formatUSD(d.actual_reimbursed)}</span></td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center"><span class="badge-pending">${formatUSD(d.pending)}</span></td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${statusBadge(d.reimbursement_status)}</td>
-      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${agingBadge(d.aging_bucket, d.days_open)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${agingBadge(d.aging_bucket, d.days_open, d.is_closed, d.days_to_close)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666;max-width:180px">${d.remark || '—'}</td>
     </tr>`).join('');
 
@@ -676,10 +684,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
     ? '<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">No discrepancy shipments found for the selected filters.</td></tr>'
     : '';
 
-  const closedCount = disc.filter(d => {
-    const s = (d.reimbursement_status || '').toLowerCase();
-    return s.includes('close') || s.includes('reimb') || s.includes('done');
-  }).length;
+  const closedCount = disc.filter(d => d.is_closed).length;
   const resPct = disc.length > 0 ? Math.round(closedCount / disc.length * 100) : 0;
 
   // Sort disc table if a sort col is active
@@ -988,6 +993,100 @@ function renderDashboard(data, lastUpdated) {
     </div>
 
     ${agingHTML}
+
+    ${(() => {
+      const allD = data.discrepancies || [];
+      const closed = allD.filter(d => d.is_closed);
+      const openD  = allD.filter(d => !d.is_closed);
+      const successRate = allD.length > 0 ? Math.round(closed.length / allD.length * 100) : 0;
+
+      const withTime = closed.filter(d => d.days_to_close != null);
+      const avgClose = withTime.length > 0
+        ? Math.round(withTime.reduce((s,d) => s + d.days_to_close, 0) / withTime.length) : null;
+      const openWithDays = openD.filter(d => d.days_open != null && d.days_open >= 0);
+      const avgOpen = openWithDays.length > 0
+        ? Math.round(openWithDays.reduce((s,d) => s + d.days_open, 0) / openWithDays.length) : null;
+      const sla30 = withTime.filter(d => d.days_to_close <= 30).length;
+      const sla60 = withTime.filter(d => d.days_to_close <= 60).length;
+      const sla90 = withTime.filter(d => d.days_to_close <= 90).length;
+      const pct = n => withTime.length > 0 ? Math.round(n / withTime.length * 100) : 0;
+
+      // Per-channel breakdown
+      const chRes = {};
+      allD.forEach(d => {
+        if (!chRes[d.channel]) chRes[d.channel] = { total:0, closed:0, tSum:0, tCnt:0, openArr:[] };
+        chRes[d.channel].total++;
+        if (d.is_closed) {
+          chRes[d.channel].closed++;
+          if (d.days_to_close != null) { chRes[d.channel].tSum += d.days_to_close; chRes[d.channel].tCnt++; }
+        } else if (d.days_open != null && d.days_open >= 0) {
+          chRes[d.channel].openArr.push(d.days_open);
+        }
+      });
+      const chRows = Object.entries(chRes).map(([ch, c]) => {
+        const rate = c.total > 0 ? Math.round(c.closed / c.total * 100) : 0;
+        const ac = c.tCnt > 0 ? Math.round(c.tSum / c.tCnt) : null;
+        const ao = c.openArr.length > 0 ? Math.round(c.openArr.reduce((s,x)=>s+x,0)/c.openArr.length) : null;
+        const rateCol = rate >= 70 ? 'var(--green-val)' : rate >= 40 ? '#d97706' : 'var(--red)';
+        return `<tr>
+          <td style="padding:7px 12px;border-bottom:1px solid #f5f5f5;font-weight:600">${ch}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;text-align:center">${c.total}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;text-align:center"><span class="badge-recovered">${c.closed}</span></td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;text-align:center">${c.total-c.closed > 0 ? `<span class="badge-pending">${c.total-c.closed}</span>` : '—'}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;text-align:center;font-weight:700;color:${rateCol}">${rate}%</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;text-align:center">${ac != null ? ac+'d' : '<span style="color:#bbb">—</span>'}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;text-align:center">${ao != null ? ao+'d' : '<span style="color:#bbb">—</span>'}</td>
+        </tr>`;
+      }).join('');
+
+      if (!allD.length) return '';
+      return `<div style="padding:0 24px 14px">
+        <div class="aging-section-title"><i class="fas fa-clipboard-check" style="color:var(--primary)"></i> Case Resolution Analytics
+          ${withTime.length === 0 ? '<span style="font-weight:400;color:#bbb;font-size:10px;text-transform:none;letter-spacing:0;margin-left:4px">— add Case Close Date to sheet for time-to-close metrics</span>' : ''}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+          <div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border-light);border-top:3px solid var(--primary)">
+            <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px"><i class="fas fa-trophy" style="color:var(--primary);margin-right:4px"></i>Success Rate</div>
+            <div style="font-size:30px;font-weight:800;color:var(--primary)">${successRate}%</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${closed.length} of ${allD.length} cases closed</div>
+            <div style="height:4px;background:var(--border);border-radius:50px;margin-top:10px;overflow:hidden"><div style="width:${successRate}%;height:100%;background:var(--primary);border-radius:50px"></div></div>
+          </div>
+          <div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border-light);border-top:3px solid #2e7d32">
+            <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px"><i class="fas fa-check-circle" style="color:#2e7d32;margin-right:4px"></i>Avg Time to Close</div>
+            <div style="font-size:30px;font-weight:800;color:#2e7d32">${avgClose != null ? avgClose+'d' : '—'}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${withTime.length} cases with close date</div>
+          </div>
+          <div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border-light);border-top:3px solid #e65100">
+            <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px"><i class="fas fa-hourglass-half" style="color:#e65100;margin-right:4px"></i>Avg Days Open</div>
+            <div style="font-size:30px;font-weight:800;color:#e65100">${avgOpen != null ? avgOpen+'d' : '—'}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${openD.length} cases still open</div>
+          </div>
+          <div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border-light);border-top:3px solid #7c3aed">
+            <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px"><i class="fas fa-shield-alt" style="color:#7c3aed;margin-right:4px"></i>SLA Compliance</div>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text-muted)">≤ 30 days</span><span style="font-weight:700;color:#2e7d32">${pct(sla30)}%</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text-muted)">≤ 60 days</span><span style="font-weight:700;color:#f57f17">${pct(sla60)}%</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text-muted)">≤ 90 days</span><span style="font-weight:700;color:#e65100">${pct(sla90)}%</span></div>
+            </div>
+          </div>
+        </div>
+        ${chRows ? `<div style="background:var(--surface);border-radius:12px;overflow:hidden;border:1px solid var(--border-light)">
+          <div class="aging-matrix-title"><i class="fas fa-table" style="color:var(--primary)"></i> Resolution by Channel</div>
+          <table class="recon-table" style="width:100%">
+            <thead><tr>
+              <th style="padding:8px 12px">Channel</th>
+              <th style="padding:8px 10px;text-align:center">Total Cases</th>
+              <th style="padding:8px 10px;text-align:center">Closed</th>
+              <th style="padding:8px 10px;text-align:center">Open</th>
+              <th style="padding:8px 10px;text-align:center">Success Rate</th>
+              <th style="padding:8px 10px;text-align:center">Avg Days to Close</th>
+              <th style="padding:8px 10px;text-align:center">Avg Days Open</th>
+            </tr></thead>
+            <tbody>${chRows}</tbody>
+          </table>
+        </div>` : ''}
+      </div>`;
+    })()}
 
     ${(() => {
       const top5 = [...(data.discrepancies || [])].sort((a,b) => (b.pending||0)-(a.pending||0)).slice(0,5);

@@ -43,28 +43,44 @@ def get_sheet_data(creds, sheet_id, awb_tab, recon_tab=None):
     return parse_awb_data(awb_values, remarks)
 
 
-def _parse_aging(date_str):
-    """Return (days_open, bucket_label) from a case raise date string."""
+def _parse_date_only(date_str):
     if not date_str or not str(date_str).strip():
-        return None, None
+        return None
     ds = str(date_str).strip()
     for fmt in ('%d/%m/%Y', '%m/%d/%Y', '%Y-%m-%d', '%d-%m-%Y', '%d %b %Y', '%d %B %Y'):
         try:
-            d = datetime.strptime(ds, fmt).date()
-            days = (date_type.today() - d).days
-            if days < 0:
-                return days, None
-            if days <= 30:
-                return days, '0-30 days'
-            elif days <= 60:
-                return days, '31-60 days'
-            elif days <= 90:
-                return days, '61-90 days'
-            else:
-                return days, '90+ days'
+            return datetime.strptime(ds, fmt).date()
         except ValueError:
             continue
-    return None, None
+    return None
+
+
+def _parse_aging(date_str):
+    """Return (days_open, bucket_label) from a case raise date string."""
+    d = _parse_date_only(date_str)
+    if d is None:
+        return None, None
+    days = (date_type.today() - d).days
+    if days < 0:
+        return days, None
+    if days <= 30:   return days, '0-30 days'
+    elif days <= 60: return days, '31-60 days'
+    elif days <= 90: return days, '61-90 days'
+    else:            return days, '90+ days'
+
+
+def _parse_resolution(raise_date_str, close_date_str, status):
+    """Return (days_to_close, is_closed).
+    Uses close_date - raise_date when both dates present.
+    Falls back to status keywords for is_closed when close date is missing."""
+    is_closed_status = bool(status and any(
+        k in status.lower() for k in ['close', 'done', 'reimb', 'resolved', 'completed']
+    ))
+    raise_d = _parse_date_only(raise_date_str)
+    close_d = _parse_date_only(close_date_str)
+    if raise_d and close_d:
+        return max(0, (close_d - raise_d).days), True
+    return None, is_closed_status
 
 
 def parse_awb_data(values, remarks=None):
@@ -101,9 +117,10 @@ def parse_awb_data(values, remarks=None):
     channel_col    = col_exact('channel', fallback=34)
     # Case Raise Date = first header containing "case raise"
     case_raise_col = col_contains('case raise', fallback=None)
+    case_close_col = col_contains('case close', fallback=None)
     # Case_Current Status is NOT used — that column is for delivery tracking, not reimbursement
 
-    print(f"[Sheets] Columns — channel:{channel_col}  case_raise:{case_raise_col}")
+    print(f"[Sheets] Columns — channel:{channel_col}  case_raise:{case_raise_col}  case_close:{case_close_col}")
 
     # Aggregate raw rows
     # Key: (month_str, year_int)  →  channel  →  metrics
@@ -155,7 +172,14 @@ def parse_awb_data(values, remarks=None):
                 if case_raise_col is not None and len(row) > case_raise_col
                 else ''
             )
+            case_close_raw = (
+                str(row[case_close_col]).strip()
+                if case_close_col is not None and len(row) > case_close_col
+                else ''
+            )
+            reimb_status = str(row[30]).strip() if len(row) > 30 else ''
             days_open, aging_bucket = _parse_aging(case_raise_raw)
+            days_to_close, is_closed = _parse_resolution(case_raise_raw, case_close_raw, reimb_status)
             discrepancies.append({
                 'month':                f"{month} {year}",
                 'awb':                  str(row[4]).strip()  if len(row) > 4  else '',
@@ -167,11 +191,14 @@ def parse_awb_data(values, remarks=None):
                 'expected_reimburs':    round(expected, 2),
                 'actual_reimbursed':    round(actual, 2),
                 'pending':              round(expected - actual, 2),
-                'reimbursement_status': str(row[30]).strip() if len(row) > 30 else '',
+                'reimbursement_status': reimb_status,
                 'remark':               str(row[32]).strip() if len(row) > 32 else '',
                 'case_raise_date':      case_raise_raw,
+                'case_close_date':      case_close_raw,
                 'days_open':            days_open,
                 'aging_bucket':         aging_bucket,
+                'days_to_close':        days_to_close,
+                'is_closed':            is_closed,
             })
             t['lost_stock'] += lost_stock
 
