@@ -1173,29 +1173,30 @@ function renderDashboard(data, lastUpdated) {
     ${(() => {
       const channelNames = Object.keys(channels);
       if (!channelNames.length || !months.length) return '';
-      const headerCells = channelNames.map(ch =>
-        `<th style="text-align:center">${ch}</th>`
+      const P = 'padding:5px 12px;font-size:12px;border-bottom:1px solid var(--border-light)';
+      const monthHeaders = months.map(m =>
+        `<th style="${P};text-align:center;font-weight:600;white-space:nowrap">${m.replace(' 20',' \'')}</th>`
       ).join('');
-      const bodyRows = months.map((m, i) => {
-        const total = channelNames.reduce((s, ch) => s + ((channels[ch][i]||{}).shipment_count||0), 0);
-        const cells = channelNames.map(ch => {
+      const bodyRows = channelNames.map(ch => {
+        const chTotal = channels[ch].reduce((s,r) => s+(r.shipment_count||0), 0);
+        const cells = months.map((m, i) => {
           const cnt = (channels[ch][i]||{}).shipment_count || 0;
-          return `<td style="text-align:center;color:${cnt>0?'var(--text)':'#ccc'}">${cnt > 0 ? formatNum(cnt) : '—'}</td>`;
+          return `<td style="${P};text-align:center;color:${cnt>0?'var(--text)':'#ccc'}">${cnt > 0 ? formatNum(cnt) : '—'}</td>`;
         }).join('');
-        return `<tr><td style="font-weight:600">${m}</td>${cells}<td style="text-align:center;font-weight:700;color:var(--primary)">${formatNum(total)}</td></tr>`;
+        return `<tr><td style="${P};font-weight:600">${ch}</td>${cells}<td style="${P};text-align:center;font-weight:700;color:var(--primary)">${formatNum(chTotal)}</td></tr>`;
       }).join('');
-      const grandCells = channelNames.map(ch => {
-        const t = channels[ch].reduce((s,r) => s+(r.shipment_count||0), 0);
-        return `<td style="text-align:center;font-weight:700">${formatNum(t)}</td>`;
+      const grandCells = months.map((m, i) => {
+        const t = channelNames.reduce((s,ch) => s+((channels[ch][i]||{}).shipment_count||0), 0);
+        return `<td style="${P};text-align:center;font-weight:700;color:#fff">${formatNum(t)}</td>`;
       }).join('');
       const grand = channelNames.reduce((s,ch) => s+channels[ch].reduce((ss,r)=>ss+(r.shipment_count||0),0), 0);
-      const totalRow = `<tr style="background:var(--primary);color:#fff"><td style="font-weight:700;color:#fff">Grand Total</td>${grandCells}<td style="text-align:center;font-weight:800;color:#fff">${formatNum(grand)}</td></tr>`;
+      const totalRow = `<tr style="background:var(--primary)"><td style="${P};font-weight:700;color:#fff">Total</td>${grandCells}<td style="${P};text-align:center;font-weight:800;color:#fff">${formatNum(grand)}</td></tr>`;
       return `
       <div style="padding:14px 24px 0">
-        <div class="table-card">
-          <div class="table-title"><i class="fas fa-boxes" style="color:var(--primary)"></i> Shipments Sent by Channel — Monthly</div>
-          <table class="recon-table">
-            <thead><tr><th>Month</th>${headerCells}<th style="text-align:center">Total</th></tr></thead>
+        <div class="table-card" style="padding:14px 16px">
+          <div class="table-title" style="margin-bottom:10px"><i class="fas fa-boxes" style="color:var(--primary)"></i> Shipments Sent by Channel — Monthly</div>
+          <table class="recon-table" style="font-size:12px">
+            <thead><tr><th style="${P}">Channel</th>${monthHeaders}<th style="${P};text-align:center">Total</th></tr></thead>
             <tbody>${bodyRows}${totalRow}</tbody>
           </table>
         </div>
