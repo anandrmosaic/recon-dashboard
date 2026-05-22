@@ -117,13 +117,18 @@ def parse_awb_data(values, remarks=None):
         return fallback
 
     # Channel = exact "Channel" header (not "Channel Shipment Status" etc.)
-    channel_col    = col_exact('channel', fallback=34)
+    channel_col      = col_exact('channel', fallback=34)
     # Case Raise Date = first header containing "case raise"
-    case_raise_col = col_contains('case raise', fallback=None)
-    case_close_col = col_contains('case close', fallback=None)
-    # Case_Current Status is NOT used — that column is for delivery tracking, not reimbursement
+    case_raise_col   = col_contains('case raise', fallback=None)
+    case_close_col   = col_contains('case close', fallback=None)
+    # Current Status (ship partner portal) — used to exclude Abandon / RTO from shipment count
+    ship_status_col  = col_contains('ship partner portal', fallback=None)
+    if ship_status_col is None:
+        ship_status_col = col_contains('current status', fallback=None)
 
-    print(f"[Sheets] Columns — channel:{channel_col}  case_raise:{case_raise_col}  case_close:{case_close_col}")
+    EXCLUDE_STATUSES = {'abandon', 'rto'}
+
+    print(f"[Sheets] Columns — channel:{channel_col}  case_raise:{case_raise_col}  case_close:{case_close_col}  ship_status:{ship_status_col}")
 
     # Aggregate raw rows
     # Key: (month_str, year_int)  →  channel  →  metrics
@@ -165,7 +170,13 @@ def parse_awb_data(values, remarks=None):
             d['lost_stock']        += lost_stock
             d['expected_reimburs'] += expected
             d['actual_reimbursed'] += actual
-            d['shipment_count']    += 1
+            ship_status = (
+                str(row[ship_status_col]).strip().lower()
+                if ship_status_col is not None and len(row) > ship_status_col
+                else ''
+            )
+            if ship_status not in EXCLUDE_STATUSES:
+                d['shipment_count'] += 1
 
         if transporter:
             t = tr_agg[(month, year)][transporter]
