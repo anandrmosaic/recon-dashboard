@@ -176,6 +176,32 @@
     .alert-toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 500; z-index: 9999; box-shadow: 0 4px 16px rgba(0,0,0,0.12); display: none; }
     .alert-success { background: var(--green-soft); color: var(--green-val); border-left: 4px solid var(--primary); }
     .alert-error { background: var(--red-soft); color: var(--red); border-left: 4px solid var(--red); }
+
+    /* Sortable table headers */
+    .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+    .sortable-th:hover { background: rgba(255,255,255,0.15); }
+    .sort-icon { margin-left: 4px; font-size: 9px; opacity: 0.7; }
+
+    /* Resolution progress bar */
+    .resolution-bar-wrap { background: var(--surface); border-radius: 12px; padding: 12px 16px; border: 1px solid var(--border-light); margin-bottom: 14px; display: flex; align-items: center; gap: 16px; }
+    .resolution-bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 50px; overflow: hidden; }
+    .resolution-bar-fill { height: 100%; background: var(--primary); border-radius: 50px; transition: width 0.4s; }
+
+    /* Top 5 pending */
+    .top5-section { padding: 0 24px 14px; }
+    .top5-card { background: var(--surface); border-radius: 14px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--border-light); overflow-x: auto; }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+      .tables-grid { grid-template-columns: 1fr; }
+      .aging-buckets-row { grid-template-columns: repeat(2, 1fr); }
+      .remarks-grid { grid-template-columns: 1fr; }
+      .filter-row { flex-direction: column; align-items: flex-start; }
+      .filter-group.push-right { margin-left: 0; }
+      .disc-summary { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
@@ -270,6 +296,8 @@ let _rawData = null;
 let _lastUpdated = null;
 let _filterState = { year: 'all', selectedMonths: [], availableMonths: [], channels: [], view: 'both' };
 let _activeTab = 'dashboard';
+let _discSortCol = null;
+let _discSortDir = 1;
 
 const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTH_SHORT = {January:'Jan',February:'Feb',March:'Mar',April:'Apr',May:'May',June:'Jun',July:'Jul',August:'Aug',September:'Sep',October:'Oct',November:'Nov',December:'Dec'};
@@ -288,6 +316,40 @@ function showToast(msg, type='success') {
 function destroyCharts() {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
+}
+
+function computeTrends(filteredData) {
+  const gt = filteredData.channel_data?.grand_total || [];
+  if (gt.length < 2) return null;
+  const curr = gt[gt.length - 1], prev = gt[gt.length - 2];
+  const months = filteredData.channel_data?.months || [];
+  const currM = months[months.length - 1], prevM = months[months.length - 2];
+  const disc = filteredData.discrepancies || [];
+  const currPend = disc.filter(d => d.month === currM).reduce((s, d) => s + (d.pending || 0), 0);
+  const prevPend = disc.filter(d => d.month === prevM).reduce((s, d) => s + (d.pending || 0), 0);
+  return {
+    shipped:   [curr.qty_sent || 0,           prev.qty_sent || 0],
+    lost:      [curr.lost_stock || 0,          prev.lost_stock || 0],
+    expected:  [curr.expected_reimburs || 0,   prev.expected_reimburs || 0],
+    recovered: [curr.actual_reimbursed || 0,   prev.actual_reimbursed || 0],
+    pending:   [currPend, prevPend],
+    label: prevM
+  };
+}
+
+function trendBadge(curr, prev, lowerIsBetter) {
+  if (!prev || prev === 0) return '';
+  const pct = ((curr - prev) / prev * 100).toFixed(1);
+  const up = curr > prev;
+  const isGood = lowerIsBetter ? !up : up;
+  const col = isGood ? 'var(--green-val)' : 'var(--red)';
+  return `<span style="font-size:10px;color:${col};font-weight:600;margin-left:4px">${up ? '↑' : '↓'} ${up ? '+' : ''}${pct}%</span>`;
+}
+
+function sortDisc(col) {
+  if (_discSortCol === col) _discSortDir *= -1;
+  else { _discSortCol = col; _discSortDir = 1; }
+  applyAndRender();
 }
 
 // ── Filter initialisation ──────────────────────────────────────────────────
@@ -342,13 +404,16 @@ function setYear(year) {
 }
 
 function rebuildMonthDropdown(availableMonths) {
+  const prev = _filterState.selectedMonths;
   _filterState.availableMonths = [...availableMonths];
-  _filterState.selectedMonths  = [...availableMonths];
-  document.getElementById('monthCheckAll').checked = true;
+  const preserved = prev.length > 0 ? availableMonths.filter(m => prev.includes(m)) : [];
+  _filterState.selectedMonths = preserved.length > 0 ? preserved : [...availableMonths];
+  const allChecked = _filterState.selectedMonths.length === availableMonths.length;
+  document.getElementById('monthCheckAll').checked = allChecked;
   document.getElementById('monthCheckboxes').innerHTML = availableMonths.map(m =>
     `<div class="month-dd-item">
        <label>
-         <input type="checkbox" data-month="${m}" checked onchange="handleMonthCheck('${m}',this)">
+         <input type="checkbox" data-month="${m}" ${_filterState.selectedMonths.includes(m) ? 'checked' : ''} onchange="handleMonthCheck('${m}',this)">
          ${m}
        </label>
      </div>`
@@ -590,7 +655,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
     return `<span class="badge-aging-na">${label}</span>`;
   };
 
-  const tableRows = disc.map((d, idx) => `
+  const tableRows = sortedDisc.map((d, idx) => `
     <tr class="disc-row" data-ch="${d.channel}" data-awb="${d.awb.toLowerCase()}" data-month="${d.month.toLowerCase()}">
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666">${d.month}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;font-size:12px">${d.awb || '—'}</td>
@@ -611,8 +676,34 @@ function renderDiscrepancyTab(data, lastUpdated) {
     ? '<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">No discrepancy shipments found for the selected filters.</td></tr>'
     : '';
 
+  const closedCount = disc.filter(d => {
+    const s = (d.reimbursement_status || '').toLowerCase();
+    return s.includes('close') || s.includes('reimb') || s.includes('done');
+  }).length;
+  const resPct = disc.length > 0 ? Math.round(closedCount / disc.length * 100) : 0;
+
+  // Sort disc table if a sort col is active
+  const sortedDisc = _discSortCol ? [...disc].sort((a, b) => {
+    let av = a[_discSortCol] ?? '', bv = b[_discSortCol] ?? '';
+    if (typeof av === 'string') av = av.toLowerCase(), bv = bv.toLowerCase();
+    return av < bv ? -_discSortDir : av > bv ? _discSortDir : 0;
+  }) : disc;
+
   document.getElementById('mainContent').innerHTML = `
     <div class="disc-summary">${summaryCards}${totalCard}</div>
+
+    <div style="padding:10px 24px 0">
+      <div class="resolution-bar-wrap">
+        <div style="white-space:nowrap;font-size:12px;font-weight:600;color:var(--text-muted)">
+          <i class="fas fa-tasks me-1" style="color:var(--primary)"></i>
+          Resolution Progress
+        </div>
+        <div class="resolution-bar-track">
+          <div class="resolution-bar-fill" style="width:${resPct}%"></div>
+        </div>
+        <div style="white-space:nowrap;font-size:12px;font-weight:700;color:var(--primary)">${closedCount}/${disc.length} <span style="font-weight:400;color:var(--text-muted)">(${resPct}%)</span></div>
+      </div>
+    </div>
 
     <div class="disc-table-wrap">
       <div class="disc-table-card">
@@ -628,18 +719,15 @@ function renderDiscrepancyTab(data, lastUpdated) {
         <table class="recon-table" id="discTable">
           <thead>
             <tr>
-              <th style="padding:8px 10px">Month</th>
-              <th style="padding:8px 10px">Shipment AWB</th>
-              <th style="padding:8px 10px">IBR / Label</th>
-              <th style="padding:8px 10px">Channel</th>
-              <th style="padding:8px 10px">Transporter</th>
+              ${[['month','Month'],['awb','Shipment AWB'],['platform_label','IBR / Label'],['channel','Channel'],['transporter','Transporter']].map(([col,lbl]) =>
+                `<th class="sortable-th" onclick="sortDisc('${col}')" style="padding:8px 10px">${lbl}<span class="sort-icon">${_discSortCol===col?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>`).join('')}
               <th style="padding:8px 10px;text-align:center">Qty Sent</th>
-              <th style="padding:8px 10px;text-align:center">Lost Units</th>
-              <th style="padding:8px 10px;text-align:center">Expected ($)</th>
-              <th style="padding:8px 10px;text-align:center">Recovered ($)</th>
-              <th style="padding:8px 10px;text-align:center">Pending ($)</th>
-              <th style="padding:8px 10px">Reimb. Status</th>
-              <th style="padding:8px 10px">Aging</th>
+              <th class="sortable-th" onclick="sortDisc('lost_stock')" style="padding:8px 10px;text-align:center">Lost Units<span class="sort-icon">${_discSortCol==='lost_stock'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
+              <th class="sortable-th" onclick="sortDisc('expected_reimburs')" style="padding:8px 10px;text-align:center">Expected ($)<span class="sort-icon">${_discSortCol==='expected_reimburs'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
+              <th class="sortable-th" onclick="sortDisc('actual_reimbursed')" style="padding:8px 10px;text-align:center">Recovered ($)<span class="sort-icon">${_discSortCol==='actual_reimbursed'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
+              <th class="sortable-th" onclick="sortDisc('pending')" style="padding:8px 10px;text-align:center">Pending ($)<span class="sort-icon">${_discSortCol==='pending'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
+              <th class="sortable-th" onclick="sortDisc('reimbursement_status')" style="padding:8px 10px">Reimb. Status<span class="sort-icon">${_discSortCol==='reimbursement_status'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
+              <th class="sortable-th" onclick="sortDisc('days_open')" style="padding:8px 10px">Aging<span class="sort-icon">${_discSortCol==='days_open'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
               <th style="padding:8px 10px">Remark</th>
             </tr>
           </thead>
@@ -676,6 +764,7 @@ function filterDiscTable(q) {
 
 function renderDashboard(data, lastUpdated) {
   destroyCharts();
+  const trends = computeTrends(data);
   const kpis = data.kpis || {};
   const cd = data.channel_data || {};
   const td = data.transporter_data || {};
@@ -710,22 +799,36 @@ function renderDashboard(data, lastUpdated) {
     </tr>`;
   }).join('');
 
+  // ── Transporter $ aggregation from discrepancies
+  const trMoney = {};
+  (data.discrepancies || []).forEach(d => {
+    if (!d.transporter) return;
+    if (!trMoney[d.transporter]) trMoney[d.transporter] = { expected: 0, recovered: 0, pending: 0 };
+    trMoney[d.transporter].expected  += d.expected_reimburs || 0;
+    trMoney[d.transporter].recovered += d.actual_reimbursed || 0;
+    trMoney[d.transporter].pending   += d.pending || 0;
+  });
+
   // ── Transporter table rows
   const transporterRows = Object.entries(transporters).map(([name, rows]) => {
     const shipped = rows.reduce((s, r) => s + (r.qty_sent || 0), 0);
     const lost    = rows.reduce((s, r) => s + (r.lost_stock || 0), 0);
     const pct = shipped > 0 ? ((lost / shipped) * 100).toFixed(2) : '0.00';
     if (shipped === 0 && lost === 0) return '';
+    const m = trMoney[name] || { expected: 0, recovered: 0, pending: 0 };
     return `<tr>
       <td>${name}</td>
       <td>${formatNum(shipped)}</td>
       <td><span class="badge-lost">${formatNum(lost)}</span></td>
-      <td style="color:${lost > 0 ? 'var(--red)' : 'var(--green)'}">${pct}%</td>
+      <td style="color:${lost > 0 ? 'var(--red)' : 'var(--green-val)'}">${pct}%</td>
+      <td>${formatUSD(m.expected)}</td>
+      <td><span class="badge-recovered">${formatUSD(m.recovered)}</span></td>
+      <td><span class="badge-pending">${formatUSD(m.pending)}</span></td>
     </tr>`;
   }).join('');
 
   // ── Remarks (temporarily hidden)
-  const remarksHTML = false && Object.keys(remarks).length > 0 ? `
+  const remarksHTML = Object.keys(remarks).length > 0 ? `
     <div class="remarks-section">
       <div class="remarks-card">
         <div class="remarks-title"><i class="fas fa-clipboard-list" style="color:var(--navy)"></i> Channel Remarks</div>
@@ -856,33 +959,55 @@ function renderDashboard(data, lastUpdated) {
         <div class="kpi-icon blue"><i class="fas fa-shipping-fast"></i></div>
         <div class="kpi-value blue">${formatNum(kpis.total_shipped)}</div>
         <div class="kpi-label">Total Units Shipped</div>
+        <div class="kpi-sub">${trends ? trendBadge(trends.shipped[0], trends.shipped[1], false) + ' vs ' + trends.label : '&nbsp;'}</div>
       </div>
       <div class="kpi-card red">
         <div class="kpi-icon red"><i class="fas fa-exclamation-triangle"></i></div>
         <div class="kpi-value red">${formatNum(kpis.total_lost)}</div>
         <div class="kpi-label">Total Units Lost</div>
-        <div class="kpi-sub">Loss Rate: ${kpis.loss_rate}%</div>
+        <div class="kpi-sub">Loss Rate: ${kpis.loss_rate}% ${trends ? trendBadge(trends.lost[0], trends.lost[1], true) : ''}</div>
       </div>
       <div class="kpi-card amber">
         <div class="kpi-icon amber"><i class="fas fa-dollar-sign"></i></div>
         <div class="kpi-value amber">${formatUSD(kpis.expected_recovery)}</div>
         <div class="kpi-label">Expected Recovery</div>
+        <div class="kpi-sub">${trends ? trendBadge(trends.expected[0], trends.expected[1], false) + ' vs ' + trends.label : '&nbsp;'}</div>
       </div>
       <div class="kpi-card green">
         <div class="kpi-icon green"><i class="fas fa-check-circle"></i></div>
         <div class="kpi-value green">${formatUSD(kpis.actual_recovered)}</div>
         <div class="kpi-label">Actual Recovered</div>
-        <div class="kpi-sub">Recovery Rate: ${kpis.recovery_rate}%</div>
+        <div class="kpi-sub">Recovery Rate: ${kpis.recovery_rate}% ${trends ? trendBadge(trends.recovered[0], trends.recovered[1], false) : ''}</div>
       </div>
       <div class="kpi-card orange">
         <div class="kpi-icon orange"><i class="fas fa-clock"></i></div>
         <div class="kpi-value orange">${formatUSD(kpis.pending_recovery)}</div>
         <div class="kpi-label">Pending Recovery</div>
-        <div class="kpi-sub">To be followed up</div>
+        <div class="kpi-sub">${trends ? trendBadge(trends.pending[0], trends.pending[1], true) + ' vs ' + trends.label : 'To be followed up'}</div>
       </div>
     </div>
 
     ${agingHTML}
+
+    ${(() => {
+      const top5 = [...(data.discrepancies || [])].sort((a,b) => (b.pending||0)-(a.pending||0)).slice(0,5);
+      if (!top5.length) return '';
+      const rows = top5.map(d => `<tr>
+        <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;font-size:11px;color:#666">${d.month}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;font-weight:600;font-size:12px">${d.awb||'—'}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5">${d.channel}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5">${d.transporter||'—'}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;text-align:right"><span class="badge-pending">${formatUSD(d.pending)}</span></td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;font-size:11px">${d.reimbursement_status||'—'}</td>
+      </tr>`).join('');
+      return `<div class="top5-section"><div class="top5-card">
+        <div class="table-title"><i class="fas fa-fire" style="color:#c62828"></i> Top 5 Highest Pending Reimbursements</div>
+        <table class="recon-table" style="width:100%">
+          <thead><tr><th>Month</th><th>AWB</th><th>Channel</th><th>Transporter</th><th style="text-align:right">Pending $</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div></div>`;
+    })()}
 
     ${showChannel ? `
     <!-- Channel Charts -->
@@ -943,7 +1068,7 @@ function renderDashboard(data, lastUpdated) {
       <div class="table-card">
         <div class="table-title"><i class="fas fa-truck" style="color:var(--navy)"></i> Transporter Summary</div>
         <table class="recon-table">
-          <thead><tr><th>Transporter</th><th>Total Shipped</th><th>Total Lost</th><th>Loss %</th></tr></thead>
+          <thead><tr><th>Transporter</th><th>Total Shipped</th><th>Total Lost</th><th>Loss %</th><th>Expected ($)</th><th>Recovered ($)</th><th>Pending ($)</th></tr></thead>
           <tbody>${transporterRows}</tbody>
         </table>
       </div>` : ''}
@@ -1023,7 +1148,9 @@ function renderDashboard(data, lastUpdated) {
         labels: months,
         datasets: [
           { label: 'Expected ($)', data: grandRows.map(r => r.expected_reimburs || 0), backgroundColor: '#ff8f0066', borderColor: '#e65100', borderWidth: 1, borderRadius: 4 },
-          { label: 'Recovered ($)', data: grandRows.map(r => r.actual_reimbursed || 0), backgroundColor: '#2e7d3266', borderColor: '#2e7d32', borderWidth: 1, borderRadius: 4 }
+          { label: 'Recovered ($)', data: grandRows.map(r => r.actual_reimbursed || 0), backgroundColor: '#2e7d3266', borderColor: '#2e7d32', borderWidth: 1, borderRadius: 4 },
+          { label: 'Recovery Rate (%)', type: 'line', data: grandRows.map(r => r.expected_reimburs > 0 ? +((r.actual_reimbursed / r.expected_reimburs * 100).toFixed(1)) : 0),
+            yAxisID: 'y2', borderColor: '#7c3aed', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3 }
         ]
       },
       options: {
@@ -1031,7 +1158,8 @@ function renderDashboard(data, lastUpdated) {
         plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } } },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-          y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 }, callback: v => '$' + v } }
+          y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 }, callback: v => '$' + v } },
+          y2: { position: 'right', grid: { display: false }, min: 0, max: 100, ticks: { font: { size: 10 }, callback: v => v + '%' } }
         }
       }
     });
@@ -1173,7 +1301,6 @@ async function loadData() {
 async function refreshData() {
   showToast('Refreshing data...', 'success');
   await fetch('/api/refresh');
-  _filterState.channels = []; _filterState.selectedMonths = []; _filterState.availableMonths = []; _filterState.year = 'all';
   await loadData();
   showToast('Data refreshed!', 'success');
 }
