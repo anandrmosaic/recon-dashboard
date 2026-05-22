@@ -636,6 +636,13 @@ function renderDiscrepancyTab(data, lastUpdated) {
       </div>
     </div>`;
 
+  // Sort disc table if a sort col is active (must be before tableRows)
+  const sortedDisc = _discSortCol ? [...disc].sort((a, b) => {
+    let av = a[_discSortCol] ?? '', bv = b[_discSortCol] ?? '';
+    if (typeof av === 'string') av = av.toLowerCase(), bv = bv.toLowerCase();
+    return av < bv ? -_discSortDir : av > bv ? _discSortDir : 0;
+  }) : disc;
+
   // Table rows
   const statusBadge = s => {
     if (!s) return '<span class="badge-status-na">—</span>';
@@ -686,13 +693,6 @@ function renderDiscrepancyTab(data, lastUpdated) {
 
   const closedCount = disc.filter(d => d.is_closed).length;
   const resPct = disc.length > 0 ? Math.round(closedCount / disc.length * 100) : 0;
-
-  // Sort disc table if a sort col is active
-  const sortedDisc = _discSortCol ? [...disc].sort((a, b) => {
-    let av = a[_discSortCol] ?? '', bv = b[_discSortCol] ?? '';
-    if (typeof av === 'string') av = av.toLowerCase(), bv = bv.toLowerCase();
-    return av < bv ? -_discSortDir : av > bv ? _discSortDir : 0;
-  }) : disc;
 
   document.getElementById('mainContent').innerHTML = `
     <div class="disc-summary">${summaryCards}${totalCard}</div>
