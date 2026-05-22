@@ -128,7 +128,7 @@ def parse_awb_data(values, remarks=None):
     # Aggregate raw rows
     # Key: (month_str, year_int)  →  channel  →  metrics
     ch_agg = defaultdict(lambda: defaultdict(lambda: {
-        'qty_sent': 0.0, 'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0
+        'qty_sent': 0.0, 'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0, 'shipment_count': 0
     }))
     tr_agg = defaultdict(lambda: defaultdict(lambda: {'qty_sent': 0.0, 'lost_stock': 0.0}))
 
@@ -149,12 +149,13 @@ def parse_awb_data(values, remarks=None):
             continue
         year = int(year_raw)
 
-        qty_sent       = safe_float(row[15] if len(row) > 15 else 0)
-        lost_stock     = safe_float(row[27] if len(row) > 27 else 0)
-        expected       = safe_float(row[28] if len(row) > 28 else 0)
-        actual         = safe_float(row[29] if len(row) > 29 else 0)
-        channel        = str(row[channel_col]).strip() if len(row) > channel_col else ''
-        transporter    = str(row[8]).strip()  if len(row) > 8  else ''
+        qty_sent        = safe_float(row[15] if len(row) > 15 else 0)
+        lost_stock      = safe_float(row[27] if len(row) > 27 else 0)
+        expected        = safe_float(row[28] if len(row) > 28 else 0)
+        actual          = safe_float(row[29] if len(row) > 29 else 0)
+        channel         = str(row[channel_col]).strip() if len(row) > channel_col else ''
+        transporter     = str(row[8]).strip()  if len(row) > 8  else ''
+        platform_label  = str(row[5]).strip()  if len(row) > 5  else ''
 
         period_set.add((month, year))
 
@@ -164,6 +165,7 @@ def parse_awb_data(values, remarks=None):
             d['lost_stock']        += lost_stock
             d['expected_reimburs'] += expected
             d['actual_reimbursed'] += actual
+            d['shipment_count']    += 1
 
         if transporter:
             t = tr_agg[(month, year)][transporter]
@@ -228,6 +230,7 @@ def parse_awb_data(values, remarks=None):
                 'lost_stock':        ch_agg[p].get(ch, {}).get('lost_stock', 0.0),
                 'expected_reimburs': ch_agg[p].get(ch, {}).get('expected_reimburs', 0.0),
                 'actual_reimbursed': ch_agg[p].get(ch, {}).get('actual_reimbursed', 0.0),
+                'shipment_count':    ch_agg[p].get(ch, {}).get('shipment_count', 0),
             }
             for p in sorted_periods
         ]

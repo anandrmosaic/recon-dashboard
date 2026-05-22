@@ -1169,6 +1169,39 @@ function renderDashboard(data, lastUpdated) {
       </div>
     </div>
 
+    <!-- Shipment Count by Channel per Month -->
+    ${(() => {
+      const channelNames = Object.keys(channels);
+      if (!channelNames.length || !months.length) return '';
+      const headerCells = channelNames.map(ch =>
+        `<th style="text-align:center">${ch}</th>`
+      ).join('');
+      const bodyRows = months.map((m, i) => {
+        const total = channelNames.reduce((s, ch) => s + ((channels[ch][i]||{}).shipment_count||0), 0);
+        const cells = channelNames.map(ch => {
+          const cnt = (channels[ch][i]||{}).shipment_count || 0;
+          return `<td style="text-align:center;color:${cnt>0?'var(--text)':'#ccc'}">${cnt > 0 ? formatNum(cnt) : '—'}</td>`;
+        }).join('');
+        return `<tr><td style="font-weight:600">${m}</td>${cells}<td style="text-align:center;font-weight:700;color:var(--primary)">${formatNum(total)}</td></tr>`;
+      }).join('');
+      const grandCells = channelNames.map(ch => {
+        const t = channels[ch].reduce((s,r) => s+(r.shipment_count||0), 0);
+        return `<td style="text-align:center;font-weight:700">${formatNum(t)}</td>`;
+      }).join('');
+      const grand = channelNames.reduce((s,ch) => s+channels[ch].reduce((ss,r)=>ss+(r.shipment_count||0),0), 0);
+      const totalRow = `<tr style="background:var(--primary);color:#fff"><td style="font-weight:700;color:#fff">Grand Total</td>${grandCells}<td style="text-align:center;font-weight:800;color:#fff">${formatNum(grand)}</td></tr>`;
+      return `
+      <div style="padding:14px 24px 0">
+        <div class="table-card">
+          <div class="table-title"><i class="fas fa-boxes" style="color:var(--primary)"></i> Shipments Sent by Channel — Monthly</div>
+          <table class="recon-table">
+            <thead><tr><th>Month</th>${headerCells}<th style="text-align:center">Total</th></tr></thead>
+            <tbody>${bodyRows}${totalRow}</tbody>
+          </table>
+        </div>
+      </div>`;
+    })()}
+
     ${caseHealthHTML}
 
     ${(() => {
