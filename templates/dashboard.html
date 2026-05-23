@@ -1236,7 +1236,12 @@ function renderDashboard(data, lastUpdated) {
       </div>
       <div class="chart-card">
         <div class="chart-title"><i class="fas fa-chart-pie"></i> Loss Distribution by Channel</div>
-        <div class="chart-container"><canvas id="lossDistChart"></canvas></div>
+        <div style="display:flex;align-items:center;gap:16px;height:190px">
+          <div style="position:relative;flex:0 0 170px;height:100%">
+            <canvas id="lossDistChart"></canvas>
+          </div>
+          <div id="lossDistLegend" style="flex:1;display:flex;flex-direction:column;gap:10px;justify-content:center"></div>
+        </div>
       </div>
     </div>
     <!-- Cases Raised Trend — full width -->
@@ -1411,6 +1416,7 @@ function renderDashboard(data, lastUpdated) {
     const totByChannel = Object.entries(channels).map(([name, rows]) => ({
       name, total: rows.reduce((s, r) => s + (r.lost_stock || 0), 0)
     })).filter(c => c.total > 0);
+    const grandTotal = totByChannel.reduce((s, c) => s + c.total, 0);
     chartInstances.c2 = new Chart(document.getElementById('lossDistChart').getContext('2d'), {
       type: 'doughnut',
       data: {
@@ -1419,10 +1425,30 @@ function renderDashboard(data, lastUpdated) {
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } } },
-        cutout: '65%'
+        plugins: { legend: { display: false } },
+        cutout: '68%'
       }
     });
+    // Custom right-side legend
+    const legendEl = document.getElementById('lossDistLegend');
+    if (legendEl) {
+      legendEl.innerHTML = totByChannel.map(c => {
+        const pct = grandTotal > 0 ? (c.total / grandTotal * 100).toFixed(1) : 0;
+        const col = colors[c.name] || '#666';
+        return `
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:11px;height:11px;border-radius:50%;background:${col};flex-shrink:0"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap">${c.name}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${formatNum(c.total)} units</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:14px;font-weight:800;color:${col}">${pct}%</div>
+              <div style="font-size:10px;color:var(--text-muted)">of total</div>
+            </div>
+          </div>`;
+      }).join(`<div style="height:1px;background:var(--border-light);margin:2px 0"></div>`);
+    }
   }
 
   // ── Chart 3: Recovery by Month (channel view)
