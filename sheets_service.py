@@ -19,7 +19,7 @@ def get_sheet_data(creds, sheet_id, awb_tab, recon_tab=None, data_since=None):
     # Read AWB tracker raw data
     awb_result = service.spreadsheets().values().get(
         spreadsheetId=sheet_id,
-        range=f"'{awb_tab}'!A1:AQ3000"
+        range=f"'{awb_tab}'!A1:AQ8000"
     ).execute()
     awb_values = awb_result.get('values', [])
 
