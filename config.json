@@ -4,7 +4,11 @@
   "data_since": {"year": 2026, "month": 1},
   "recon_tab": "Recon Channel view",
   "email_recipients": [
-    "anand.r@mosaicwellness.in"
+    "rahul.sahu@mosaicwellness.in",
+    "anand.r@mosaicwellness.in",
+    "viral.desai@mosaicwellness.in",
+    "aditya.pandey@mosaicwellness.in",
+    "pavan.jadon@mosaicwellness.in"
   ],
   "email_from": "anand.r@mosaicwellness.in",
   "schedule": {
@@ -15,5 +19,6 @@
   },
   "credentials_file": "C:/Users/Admin/gcp-oauth.keys.json",
   "token_file": "C:/Users/Admin/recon-token.json",
-  "dashboard_url": "https://recon-dashboard.onrender.com"
+  "dashboard_url": "https://recon-dashboard.onrender.com",
+  "outward_loss_sheet_id": "1Jmz65AFJ8QTvai6c4jHdk67mv-WBAwTesC6iv6Sm114"
 }

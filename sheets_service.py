@@ -372,3 +372,18 @@ def calculate_kpis(channel_data):
         'recovery_rate':    recovery_rate,
         'loss_rate':        loss_rate,
     }
+
+
+def get_outward_loss_data(creds, sheet_id):
+    if not sheet_id:
+        return {'headers': [], 'rows': []}
+    from googleapiclient.discovery import build
+    service = build('sheets', 'v4', credentials=creds)
+    result = service.spreadsheets().values().get(
+        spreadsheetId=sheet_id,
+        range="Sheet1!A1:F5000"
+    ).execute()
+    values = result.get('values', [])
+    if not values:
+        return {'headers': [], 'rows': []}
+    return {'headers': values[0], 'rows': values[1:]}

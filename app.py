@@ -18,7 +18,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_sheet_data
+from sheets_service import get_sheet_data, get_outward_loss_data
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision
 
@@ -40,6 +40,7 @@ def refresh_data():
     try:
         creds = get_sheets_credentials(CF, TF)
         data = get_sheet_data(creds, CONFIG['sheet_id'], CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
+        data['outward_loss'] = get_outward_loss_data(creds, CONFIG.get('outward_loss_sheet_id', ''))
         _cache['data'] = None   # release old data before storing new (halves peak memory)
         gc.collect()
         _cache['data'] = data

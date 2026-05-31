@@ -527,7 +527,101 @@ def build_enhanced_email_html(data, dashboard_url):
       </table>
     </div>'''
 
-    # ── 8. Urgency alerts ──────────────────────────────────────────────────
+    # ── 8. Shipbob Outward Loss (D2C) ────────────────────────────────────
+    outward_loss = data.get('outward_loss', {})
+    ol_headers = outward_loss.get('headers', [])
+    ol_rows    = outward_loss.get('rows', [])
+
+    outward_loss_html = ''
+    if ol_headers and ol_rows:
+        def _ol_status(val):
+            if not val or not val.strip():
+                return '—'
+            clean = val.strip().lstrip('✅🔄⬜ ').strip()
+            v = clean.lower()
+            if 'recover' in v or v in ('resolved', 'closed', 'done'):
+                return f'<span style="color:#2e7d32;font-weight:600">✅ {clean}</span>'
+            elif 'progress' in v or v in ('open', 'pending'):
+                return f'<span style="color:#e65100;font-weight:600">🔄 {clean}</span>'
+            return clean
+
+        # Compute summary stats (skip TOTAL row)
+        data_rows = [r for r in ol_rows if r and str(r[0]).strip() not in ('', '—', '-') and str(r[1]).strip().lower() != 'total']
+        total_units    = 0
+        total_value    = 0.0
+        recovered_cnt  = 0
+        inprogress_cnt = 0
+        for r in data_rows:
+            padded = r + [''] * max(0, 5 - len(r))
+            try: total_units += int(str(padded[2]).replace(',','').strip()) if padded[2] and padded[2] not in ('-','—') else 0
+            except: pass
+            try:
+                v = str(padded[3]).replace(',','').replace('$','').strip()
+                total_value += float(v) if v and v not in ('-','—') else 0.0
+            except: pass
+            st = str(padded[4]).strip().lower() if len(padded) > 4 else ''
+            if 'recover' in st or st in ('resolved','closed','done'): recovered_cnt += 1
+            elif 'progress' in st or st in ('open','pending'): inprogress_cnt += 1
+
+        body_rows = ''
+        for i, row in enumerate(ol_rows):
+            if not row: continue
+            padded = row + [''] * max(0, len(ol_headers) - len(row))
+            sr     = padded[0] if padded else ''
+            desc   = padded[1] if len(padded) > 1 else ''
+            units  = padded[2] if len(padded) > 2 else ''
+            value  = padded[3] if len(padded) > 3 else ''
+            status = padded[4] if len(padded) > 4 else ''
+            notes  = padded[5] if len(padded) > 5 else ''
+            is_total = str(desc).strip().upper() == 'TOTAL'
+            bg = '#e8f5e9' if is_total else ('#fafafa' if i % 2 else '#fff')
+            fw = 'font-weight:700' if is_total else ''
+            value_str = f'<span style="color:#1565c0;font-weight:600">{value}</span>' if value and value not in ('-','—') else '—'
+            units_str = f'<strong>{units}</strong>' if is_total else (units or '—')
+            body_rows += f'''<tr style="background:{bg}">
+              <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#999;font-size:11px;{fw}">{sr or '—'}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;{fw}">{desc or '—'}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center;{fw}">{units_str}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center;{fw}">{value_str}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center">{_ol_status(status) if not is_total else '—'}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#777">{notes or '—'}</td>
+            </tr>'''
+
+        outward_loss_html = f'''
+    <div style="padding:20px 24px 0">
+      {_section_title('📦 Shipbob Outward Loss — D2C Orders')}
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <div style="background:#e3f2fd;border-radius:6px;padding:12px 18px;text-align:center;flex:1;min-width:110px">
+          <div style="font-size:20px;font-weight:700;color:#1565c0">{total_units:,}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">Total Units</div>
+        </div>
+        <div style="background:#e8f5e9;border-radius:6px;padding:12px 18px;text-align:center;flex:1;min-width:110px">
+          <div style="font-size:20px;font-weight:700;color:#2e7d32">${total_value:,.2f}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">Total Value</div>
+        </div>
+        <div style="background:#e8f5e9;border-radius:6px;padding:12px 18px;text-align:center;flex:1;min-width:110px">
+          <div style="font-size:20px;font-weight:700;color:#2e7d32">{recovered_cnt}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">Batches Recovered</div>
+        </div>
+        <div style="background:#fff8e1;border-radius:6px;padding:12px 18px;text-align:center;flex:1;min-width:110px">
+          <div style="font-size:20px;font-weight:700;color:#e65100">{inprogress_cnt}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">In Progress</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#1565c0;color:#fff">
+          <th style="padding:8px 10px;text-align:left;font-weight:500">#</th>
+          <th style="padding:8px 10px;text-align:left;font-weight:500">Description</th>
+          <th style="padding:8px 10px;text-align:center;font-weight:500">Units</th>
+          <th style="padding:8px 10px;text-align:center;font-weight:500">Value ($)</th>
+          <th style="padding:8px 10px;text-align:center;font-weight:500">Status</th>
+          <th style="padding:8px 10px;text-align:left;font-weight:500">Notes</th>
+        </tr></thead>
+        <tbody>{body_rows}</tbody>
+      </table>
+    </div>'''
+
+    # ── 9. Urgency alerts ──────────────────────────────────────────────────
     alerts = []
     for ch, rows in channels.items():
         exp = sum(r.get('expected_reimburs', 0) for r in rows)
@@ -606,6 +700,7 @@ def build_enhanced_email_html(data, dashboard_url):
   {cases_html}
   {carrier_html}
   {recoveries_html}
+  {outward_loss_html}
   {alert_html}
 
   <!-- CTA -->
