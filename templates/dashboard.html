@@ -1208,7 +1208,9 @@ function renderDashboard(data, lastUpdated) {
     ${caseHealthHTML}
 
     ${(() => {
-      const top5 = [...(data.discrepancies || [])].sort((a,b) => (b.pending||0)-(a.pending||0)).slice(0,5);
+      const top5 = [...(data.discrepancies || [])]
+        .filter(d => !(d.reimbursement_status||'').toLowerCase().includes('reimb'))
+        .sort((a,b) => (b.pending||0)-(a.pending||0)).slice(0,5);
       if (!top5.length) return '';
       const rows = top5.map(d => `<tr>
         <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;font-size:11px;color:#666">${d.month}</td>

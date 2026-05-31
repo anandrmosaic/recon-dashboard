@@ -1,6 +1,6 @@
 from googleapiclient.discovery import build
 from collections import defaultdict
-from datetime import datetime, date as date_type
+from datetime import datetime, date as date_type, timedelta
 
 MONTH_ORDER = ['January','February','March','April','May','June',
                'July','August','September','October','November','December']
@@ -73,17 +73,20 @@ def _parse_resolution(raise_date_str, close_date_str, status):
     """Return (days_to_close, is_closed, is_rejected).
     Uses close_date - raise_date when both dates present.
     Falls back to status keywords for is_closed when close date is missing.
-    is_rejected = True when status contains 'reject' (closed but claim denied)."""
+    is_rejected = True when status contains 'reject' (closed but claim denied).
+    'No Discrepancy' statuses are excluded — close date present but no real resolution."""
     status_lower = status.lower() if status else ''
     is_rejected = 'reject' in status_lower
+    # No discrepancy = case closed because no issue was found, not a real win or loss
+    no_discrepancy = 'no' in status_lower and 'discrep' in status_lower
     is_closed_status = is_rejected or bool(any(
         k in status_lower for k in ['close', 'done', 'reimb', 'resolved', 'completed']
     ))
     raise_d = _parse_date_only(raise_date_str)
     close_d = _parse_date_only(close_date_str)
     if raise_d and close_d:
-        return max(0, (close_d - raise_d).days), True, is_rejected
-    return None, is_closed_status, is_rejected
+        return max(0, (close_d - raise_d).days), not no_discrepancy, is_rejected
+    return None, is_closed_status and not no_discrepancy, is_rejected
 
 
 def parse_awb_data(values, remarks=None, data_since=None):
@@ -128,10 +131,21 @@ def parse_awb_data(values, remarks=None, data_since=None):
     ship_status_col  = col_contains('ship partner portal', fallback=None)
     if ship_status_col is None:
         ship_status_col = col_contains('current status', fallback=None)
+    # Pickup Date — used for week-on-week comparison
+    pickup_date_col  = col_contains('pick up', fallback=None)
 
     EXCLUDE_STATUSES = {'abandon', 'rto'}
 
-    print(f"[Sheets] Columns — channel:{channel_col}  case_raise:{case_raise_col}  case_close:{case_close_col}  ship_status:{ship_status_col}")
+    print(f"[Sheets] Columns — channel:{channel_col}  case_raise:{case_raise_col}  case_close:{case_close_col}  ship_status:{ship_status_col}  pickup_date:{pickup_date_col}")
+
+    # Weekly buckets: this_week = last 7 days, last_week = 7-14 days ago (by pickup date)
+    today_d    = date_type.today()
+    week_start = today_d - timedelta(days=7)
+    prev_start = today_d - timedelta(days=14)
+    weekly = {
+        'this_week': {'shipments': 0, 'lost_stock': 0, 'expected': 0.0, 'actual': 0.0},
+        'last_week': {'shipments': 0, 'lost_stock': 0, 'expected': 0.0, 'actual': 0.0},
+    }
 
     # Aggregate raw rows
     # Key: (month_str, year_int)  →  channel  →  metrics
@@ -186,6 +200,23 @@ def parse_awb_data(values, remarks=None, data_since=None):
             )
             if ship_status not in EXCLUDE_STATUSES:
                 d['shipment_count'] += 1
+
+        # Weekly bucketing by pickup date
+        if pickup_date_col is not None and len(row) > pickup_date_col:
+            pickup_d = _parse_date_only(str(row[pickup_date_col]).strip())
+            if pickup_d is not None:
+                if week_start <= pickup_d < today_d:
+                    bucket = weekly['this_week']
+                elif prev_start <= pickup_d < week_start:
+                    bucket = weekly['last_week']
+                else:
+                    bucket = None
+                if bucket is not None:
+                    if platform_label:
+                        bucket['shipments'] += 1
+                    bucket['lost_stock'] += lost_stock
+                    bucket['expected']   += expected
+                    bucket['actual']     += actual
 
         if transporter:
             t = tr_agg[(month, year)][transporter]
@@ -297,6 +328,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
         'remarks':          remarks or {},
         'kpis':             calculate_kpis(channel_data),
         'discrepancies':    discrepancies,
+        'weekly':           weekly,
     }
 
 
