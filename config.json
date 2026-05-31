@@ -15,5 +15,5 @@
   },
   "credentials_file": "C:/Users/Admin/gcp-oauth.keys.json",
   "token_file": "C:/Users/Admin/recon-token.json",
-  "dashboard_url": "https://udder-closure-cardboard.ngrok-free.dev"
+  "dashboard_url": "https://recon-dashboard.onrender.com"
 }
