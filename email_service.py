@@ -145,8 +145,31 @@ def build_email_html(kpis, data, dashboard_url):
 # ── Enhanced email (preview + new mailer) ─────────────────────────────────
 
 def build_enhanced_email_html(data, dashboard_url):
-    kpis     = data.get('kpis', {})
-    cd       = data.get('channel_data', {})
+    # Filter channel data to 2026 only for the email
+    cd_full  = data.get('channel_data', {})
+    all_months = cd_full.get('months', [])
+    idx_2026 = [i for i, m in enumerate(all_months) if '2026' in m]
+
+    cd = {}
+    if idx_2026:
+        cd['months']      = [all_months[i] for i in idx_2026]
+        cd['grand_total'] = [cd_full.get('grand_total', [])[i] for i in idx_2026]
+        cd['channels']    = {
+            ch: [rows[i] for i in idx_2026]
+            for ch, rows in cd_full.get('channels', {}).items()
+        }
+        cd['totals'] = cd_full.get('totals', {})
+        # Recalculate totals for 2026 only
+        totals_2026 = {'qty_sent': 0.0, 'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0}
+        for row in cd['grand_total']:
+            for k in totals_2026:
+                totals_2026[k] += row.get(k, 0)
+        cd['totals'] = totals_2026
+    else:
+        cd = cd_full
+
+    from sheets_service import calculate_kpis
+    kpis     = calculate_kpis(cd) if idx_2026 else data.get('kpis', {})
     td       = data.get('transporter_data', {})
     months   = cd.get('months', [])
     channels = cd.get('channels', {})
@@ -156,13 +179,19 @@ def build_enhanced_email_html(data, dashboard_url):
     today = datetime.now().strftime('%A, %d %B %Y')
 
     # ── 1. Month-over-month ────────────────────────────────────────────────
-    # Use the last two COMPLETE months (skip current in-progress month)
+    # Skip current month (in progress) + previous month (being actively worked on)
+    # Compare the two fully settled months before that: months[-3] vs months[-4]
     mom_html = ''
-    if len(grand) >= 3:
+    if len(grand) >= 4:
+        cur  = grand[-3]
+        prev = grand[-4]
+        cur_label  = months[-3]
+        prev_label = months[-4]
+    elif len(grand) == 3:
         cur  = grand[-2]
         prev = grand[-3]
-        cur_label  = months[-2] if len(months) >= 2 else ''
-        prev_label = months[-3] if len(months) >= 3 else ''
+        cur_label  = months[-2]
+        prev_label = months[-3]
     elif len(grand) == 2:
         cur  = grand[-1]
         prev = grand[-2]
@@ -593,7 +622,7 @@ def build_enhanced_email_html(data, dashboard_url):
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <div style="background:#e3f2fd;border-radius:6px;padding:12px 18px;text-align:center;flex:1;min-width:110px">
           <div style="font-size:20px;font-weight:700;color:#1565c0">{total_units:,}</div>
-          <div style="font-size:11px;color:#888;margin-top:2px">Total Units</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">Total Order ID count</div>
         </div>
         <div style="background:#e8f5e9;border-radius:6px;padding:12px 18px;text-align:center;flex:1;min-width:110px">
           <div style="font-size:20px;font-weight:700;color:#2e7d32">${total_value:,.2f}</div>
@@ -612,7 +641,7 @@ def build_enhanced_email_html(data, dashboard_url):
         <thead><tr style="background:#1565c0;color:#fff">
           <th style="padding:8px 10px;text-align:left;font-weight:500">#</th>
           <th style="padding:8px 10px;text-align:left;font-weight:500">Description</th>
-          <th style="padding:8px 10px;text-align:center;font-weight:500">Units</th>
+          <th style="padding:8px 10px;text-align:center;font-weight:500">Order ID count</th>
           <th style="padding:8px 10px;text-align:center;font-weight:500">Value ($)</th>
           <th style="padding:8px 10px;text-align:center;font-weight:500">Status</th>
           <th style="padding:8px 10px;text-align:left;font-weight:500">Notes</th>
