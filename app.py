@@ -40,7 +40,11 @@ def refresh_data():
     try:
         creds = get_sheets_credentials(CF, TF)
         data = get_sheet_data(creds, CONFIG['sheet_id'], CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
-        data['outward_loss'] = get_outward_loss_data(creds, CONFIG.get('outward_loss_sheet_id', ''))
+        try:
+            data['outward_loss'] = get_outward_loss_data(creds, CONFIG.get('outward_loss_sheet_id', ''))
+        except Exception as ol_err:
+            print(f"[Data] Outward loss load failed (non-fatal): {ol_err}")
+            data['outward_loss'] = {'headers': [], 'rows': []}
         _cache['data'] = None   # release old data before storing new (halves peak memory)
         gc.collect()
         _cache['data'] = data
