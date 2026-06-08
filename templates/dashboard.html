@@ -667,15 +667,18 @@ function renderDiscrepancyTab(data, lastUpdated) {
   destroyCharts();
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
 
-  const allDisc = data.discrepancies || [];
-  const activeDisc   = allDisc.filter(d => !d.is_closed);
-  const resolvedDisc = allDisc.filter(d => d.is_closed);
-  const disc = _discView === 'resolved' ? resolvedDisc : activeDisc;
+  const allDisc        = data.discrepancies || [];
+  const needsActionDisc = allDisc.filter(d => !d.is_closed && !d.case_raise_date);
+  const inProgressDisc  = allDisc.filter(d => !d.is_closed && d.case_raise_date);
+  const resolvedDisc    = allDisc.filter(d => d.is_closed);
+  const disc = _discView === 'resolved'    ? resolvedDisc
+             : _discView === 'in_progress' ? inProgressDisc
+             : needsActionDisc;
 
-  // Update badge count on tab — show only active
+  // Update badge count on tab — show only needs-action count
   const badge = document.getElementById('discBadge');
-  badge.textContent = activeDisc.length;
-  badge.style.display = activeDisc.length > 0 ? 'inline' : 'none';
+  badge.textContent = needsActionDisc.length;
+  badge.style.display = needsActionDisc.length > 0 ? 'inline' : 'none';
 
   // Per-channel counts
   const channelColors = {
@@ -773,19 +776,22 @@ function renderDiscrepancyTab(data, lastUpdated) {
     </tr>`).join('');
 
   const emptyRow = disc.length === 0
-    ? `<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">${_discView === 'resolved' ? 'No resolved shipments yet.' : 'No active discrepancies — all clear! ✅'}</td></tr>`
+    ? `<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">${_discView === 'resolved' ? 'No resolved shipments yet.' : _discView === 'in_progress' ? 'No cases in progress.' : 'No unactioned discrepancies — all cases have been raised! ✅'}</td></tr>`
     : '';
 
   const closedCount = resolvedDisc.length;
   const resPct = allDisc.length > 0 ? Math.round(closedCount / allDisc.length * 100) : 0;
 
   const viewToggle = `
-    <div style="display:flex;gap:6px;padding:10px 24px 0">
-      <button onclick="switchDiscView('active')" style="padding:6px 16px;border-radius:20px;border:2px solid ${_discView==='active'?'var(--primary)':'#ddd'};background:${_discView==='active'?'var(--primary)':'#fff'};color:${_discView==='active'?'#fff':'#666'};font-size:12px;font-weight:600;cursor:pointer">
-        ⚠️ Active Discrepancies <span style="background:${_discView==='active'?'rgba(255,255,255,0.3)':'#ffebee'};color:${_discView==='active'?'#fff':'#c62828'};padding:1px 7px;border-radius:10px;margin-left:4px">${activeDisc.length}</span>
+    <div style="display:flex;gap:8px;padding:12px 24px 0;flex-wrap:wrap">
+      <button onclick="switchDiscView('needs_action')" style="padding:7px 18px;border-radius:20px;border:2px solid ${_discView==='needs_action'?'#c62828':'#ddd'};background:${_discView==='needs_action'?'#c62828':'#fff'};color:${_discView==='needs_action'?'#fff':'#666'};font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s">
+        🔴 Needs Action <span style="background:${_discView==='needs_action'?'rgba(255,255,255,0.25)':'#ffebee'};color:${_discView==='needs_action'?'#fff':'#c62828'};padding:1px 8px;border-radius:10px;margin-left:4px;font-weight:700">${needsActionDisc.length}</span>
       </button>
-      <button onclick="switchDiscView('resolved')" style="padding:6px 16px;border-radius:20px;border:2px solid ${_discView==='resolved'?'#2e7d32':'#ddd'};background:${_discView==='resolved'?'#2e7d32':'#fff'};color:${_discView==='resolved'?'#fff':'#666'};font-size:12px;font-weight:600;cursor:pointer">
-        ✅ Resolved / Archived <span style="background:${_discView==='resolved'?'rgba(255,255,255,0.3)':'#e8f5e9'};color:${_discView==='resolved'?'#fff':'#2e7d32'};padding:1px 7px;border-radius:10px;margin-left:4px">${resolvedDisc.length}</span>
+      <button onclick="switchDiscView('in_progress')" style="padding:7px 18px;border-radius:20px;border:2px solid ${_discView==='in_progress'?'#e65100':'#ddd'};background:${_discView==='in_progress'?'#e65100':'#fff'};color:${_discView==='in_progress'?'#fff':'#666'};font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s">
+        🟡 In Progress <span style="background:${_discView==='in_progress'?'rgba(255,255,255,0.25)':'#fff8e1'};color:${_discView==='in_progress'?'#fff':'#e65100'};padding:1px 8px;border-radius:10px;margin-left:4px;font-weight:700">${inProgressDisc.length}</span>
+      </button>
+      <button onclick="switchDiscView('resolved')" style="padding:7px 18px;border-radius:20px;border:2px solid ${_discView==='resolved'?'#2e7d32':'#ddd'};background:${_discView==='resolved'?'#2e7d32':'#fff'};color:${_discView==='resolved'?'#fff':'#666'};font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s">
+        ✅ Resolved / Archived <span style="background:${_discView==='resolved'?'rgba(255,255,255,0.25)':'#e8f5e9'};color:${_discView==='resolved'?'#fff':'#2e7d32'};padding:1px 8px;border-radius:10px;margin-left:4px;font-weight:700">${resolvedDisc.length}</span>
       </button>
     </div>`;
 
@@ -810,7 +816,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
     <div class="disc-table-wrap">
       <div class="disc-table-card">
         <div class="table-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span><i class="fas fa-list-alt" style="color:var(--navy)"></i> &nbsp;${_discView === 'resolved' ? 'Resolved / Archived Shipments' : 'Active Discrepancy Shipments'}</span>
+          <span><i class="fas fa-list-alt" style="color:var(--navy)"></i> &nbsp;${_discView === 'resolved' ? 'Resolved / Archived Shipments' : _discView === 'in_progress' ? 'In Progress — Cases Being Chased' : 'Needs Action — No Case Raised Yet'}</span>
           <div style="display:flex;gap:8px;align-items:center">
             <input class="disc-search" id="discSearch" placeholder="Search AWB, channel, transporter..." oninput="filterDiscTable(this.value)">
             <button class="btn-export" onclick="exportDiscrepancy()" style="white-space:nowrap">
@@ -1012,23 +1018,56 @@ function renderDashboard(data, lastUpdated) {
         }
       });
 
-      // Bucket cards row (open cases only)
+      // ── Action Summary Row (3 cards) ──────────────────────────────────
       const hasAging = BUCKETS.some(function(b) { return bktTotals[b].count > 0; });
-      let bucketCardsHTML = '';
-      BUCKETS.forEach(function(b, i) {
-        bucketCardsHTML += '<div class="aging-bucket-card" style="border-top-color:' + BKT_COLORS[i] + '">' +
-          '<div class="aging-bucket-label" style="color:' + BKT_COLORS[i] + '">' + BKT_LABELS[i] + '</div>' +
-          '<div class="aging-bucket-count" style="color:' + BKT_COLORS[i] + '">' + bktTotals[b].count + '</div>' +
-          '<div class="aging-bucket-sub">open cases</div>' +
-          '<div class="aging-bucket-pending" style="color:' + BKT_COLORS[i] + '">' + formatUSD(bktTotals[b].pending) + '</div>' +
-          '<div class="aging-bucket-sub">pending</div></div>';
-      });
-      bucketCardsHTML += '<div class="aging-bucket-card" style="border-top-color:#9e9e9e">' +
-        '<div class="aging-bucket-label" style="color:#9e9e9e">No Date Set</div>' +
-        '<div class="aging-bucket-count" style="color:#9e9e9e">' + noDateTot.count + '</div>' +
-        '<div class="aging-bucket-sub">open cases</div>' +
-        '<div class="aging-bucket-pending" style="color:#9e9e9e">' + formatUSD(noDateTot.pending) + '</div>' +
-        '<div class="aging-bucket-sub">pending</div></div>';
+      const inProgressCount   = BUCKETS.reduce(function(s,b) { return s + bktTotals[b].count; }, 0);
+      const inProgressPending = BUCKETS.reduce(function(s,b) { return s + bktTotals[b].pending; }, 0);
+      const resolvedActual    = resolvedDisc.reduce(function(s,d) { return s + (d.actual_reimbursed||0); }, 0);
+
+      // ── Aging chips for In Progress card ──────────────────────────────
+      const agingChips = BUCKETS.map(function(b, i) {
+        const cnt = bktTotals[b].count;
+        const bg  = cnt > 0 ? (i === 0 ? '#e8f5e9' : i === 1 ? '#fff8e1' : i === 2 ? '#fff3e0' : '#ffebee') : '#f5f5f5';
+        const col = cnt > 0 ? BKT_COLORS[i] : '#ccc';
+        return '<div style="flex:1;background:' + bg + ';border-radius:8px;padding:6px 8px;text-align:center">' +
+          '<div style="font-size:16px;font-weight:800;color:' + col + '">' + cnt + '</div>' +
+          '<div style="font-size:9px;color:' + col + ';font-weight:600;margin-top:1px">' + BKT_LABELS[i].replace(' days','d').replace(' Days','d') + '</div>' +
+        '</div>';
+      }).join('');
+
+      const actionSummaryRow =
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">' +
+
+        // Needs Action
+        '<div style="background:#fff5f5;border-radius:12px;padding:16px;border:1px solid #ffcdd2;border-left:5px solid #c62828">' +
+          '<div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🔴 Needs Action</div>' +
+          '<div style="font-size:32px;font-weight:800;color:#c62828;line-height:1">' + noDateTot.count + '</div>' +
+          '<div style="font-size:11px;color:#888;margin-top:4px">cases — no case raised yet</div>' +
+          '<div style="font-size:14px;font-weight:700;color:#c62828;margin-top:10px">' + formatUSD(noDateTot.pending) + '</div>' +
+          '<div style="font-size:10px;color:#888">pending recovery</div>' +
+        '</div>' +
+
+        // In Progress — with aging chips inside
+        '<div style="background:#fffbf0;border-radius:12px;padding:16px;border:1px solid #ffe0b2;border-left:5px solid #e65100">' +
+          '<div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🟡 In Progress</div>' +
+          '<div style="font-size:32px;font-weight:800;color:#e65100;line-height:1">' + inProgressCount + '</div>' +
+          '<div style="font-size:11px;color:#888;margin-top:4px">cases — being chased</div>' +
+          '<div style="font-size:14px;font-weight:700;color:#e65100;margin-top:10px">' + formatUSD(inProgressPending) + '</div>' +
+          '<div style="font-size:10px;color:#888;margin-bottom:10px">pending recovery</div>' +
+          '<div style="display:flex;gap:5px;margin-top:8px;border-top:1px solid #ffe0b2;padding-top:10px">' + agingChips + '</div>' +
+        '</div>' +
+
+        // Resolved
+        '<div style="background:#f0fdf4;border-radius:12px;padding:16px;border:1px solid #c8e6c9;border-left:5px solid #2e7d32">' +
+          '<div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">✅ Resolved</div>' +
+          '<div style="font-size:32px;font-weight:800;color:#2e7d32;line-height:1">' + (resolvedDisc.length + rejectedDisc.length) + '</div>' +
+          '<div style="font-size:11px;color:#888;margin-top:4px">' + resolvedDisc.length + ' recovered · ' + rejectedDisc.length + ' rejected</div>' +
+          '<div style="font-size:14px;font-weight:700;color:#2e7d32;margin-top:10px">' + formatUSD(resolvedActual) + '</div>' +
+          '<div style="font-size:10px;color:#888">total recovered</div>' +
+        '</div>' +
+        '</div>';
+
+      const agingRowHTML = '';
 
       // 3-metric summary row
       const metricRow =
@@ -1115,7 +1154,7 @@ function renderDashboard(data, lastUpdated) {
               '<th style="padding:8px 12px">Channel</th>' +
               '<th style="padding:8px 10px;text-align:center">Total</th>' +
               hdrCells +
-              '<th style="padding:8px 10px;text-align:center;color:#9e9e9e">No Date</th>' +
+              '<th style="padding:8px 10px;text-align:center;color:#c62828">🔴 Needs Action</th>' +
               '<th style="padding:8px 10px;text-align:center">Success %</th>' +
               '<th style="padding:8px 10px;text-align:center">Avg Close</th>' +
               '<th style="padding:8px 10px;text-align:center">Avg Open</th>' +
@@ -1129,7 +1168,8 @@ function renderDashboard(data, lastUpdated) {
         '<span style="font-weight:400;color:#bbb;font-size:10px;text-transform:none;letter-spacing:0;margin-left:4px">&#8212; add Case Raise Date to sheet to activate aging</span>';
       caseHealthHTML = '<div class="aging-section">' +
         '<div class="aging-section-title"><i class="fas fa-heartbeat" style="color:var(--amber)"></i> Case Health Overview ' + hintTxt + '</div>' +
-        '<div class="aging-buckets-row">' + bucketCardsHTML + '</div>' +
+        actionSummaryRow +
+        agingRowHTML +
         metricRow +
         tableHTML +
         '</div>';
