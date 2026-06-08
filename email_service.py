@@ -179,19 +179,13 @@ def build_enhanced_email_html(data, dashboard_url):
     today = datetime.now().strftime('%A, %d %B %Y')
 
     # ── 1. Month-over-month ────────────────────────────────────────────────
-    # Skip current month (in progress) + previous month (being actively worked on)
-    # Compare the two fully settled months before that: months[-3] vs months[-4]
+    # Skip only the current in-progress month (last entry), compare previous two complete months
     mom_html = ''
-    if len(grand) >= 4:
-        cur  = grand[-3]
-        prev = grand[-4]
-        cur_label  = months[-3]
-        prev_label = months[-4]
-    elif len(grand) == 3:
+    if len(grand) >= 3:
         cur  = grand[-2]
         prev = grand[-3]
-        cur_label  = months[-2]
-        prev_label = months[-3]
+        cur_label  = months[-2] if len(months) >= 2 else ''
+        prev_label = months[-3] if len(months) >= 3 else ''
     elif len(grand) == 2:
         cur  = grand[-1]
         prev = grand[-2]

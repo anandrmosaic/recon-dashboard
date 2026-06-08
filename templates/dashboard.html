@@ -909,23 +909,7 @@ function renderDashboard(data, lastUpdated) {
   }).join('');
 
   // ── Remarks (temporarily hidden)
-  const remarksHTML = Object.keys(remarks).length > 0 ? `
-    <div class="remarks-section">
-      <div class="remarks-card">
-        <div class="remarks-title"><i class="fas fa-clipboard-list" style="color:var(--navy)"></i> Channel Remarks</div>
-        <div class="remarks-grid">
-          ${Object.entries(remarks).map(([ch, md]) => `
-            <div class="remark-channel">
-              <h4>${ch}</h4>
-              ${Object.entries(md).map(([month, text]) => `
-                <div class="remark-item">
-                  <div class="remark-month">${month}</div>
-                  <div class="remark-text">${text}</div>
-                </div>`).join('')}
-            </div>`).join('')}
-        </div>
-      </div>
-    </div>` : '';
+  const remarksHTML = '';
 
   // ── Tables layout: single column when only one view
   const tablesClass = (showChannel && showCarrier) ? 'tables-grid' : 'tables-grid single';
