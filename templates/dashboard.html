@@ -108,9 +108,9 @@
     .recon-table td { padding: 5px 10px; border-bottom: 1px solid var(--border-light); color: var(--text); }
     .recon-table tbody tr:hover { background: var(--primary-soft); }
     .recon-table tbody tr:last-child td { font-weight: 700; background: var(--surface-2); }
-    .badge-lost { background: var(--red-soft); color: var(--red); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
-    .badge-recovered { background: var(--green-soft); color: var(--green-val); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
-    .badge-pending { background: var(--amber-soft); color: var(--amber); padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
+    .badge-lost { background: var(--red-soft) !important; color: var(--red) !important; padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
+    .badge-recovered { background: var(--green-soft) !important; color: var(--green-val) !important; padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
+    .badge-pending { background: var(--amber-soft) !important; color: var(--amber) !important; padding: 2px 8px; border-radius: 50px; font-size: 11px; font-weight: 600; }
 
     /* Aging bucket badges */
     .badge-aging-fresh    { background:#e8f5e9; color:#2e7d32; padding:2px 8px; border-radius:50px; font-size:11px; font-weight:600; white-space:nowrap; }
@@ -779,6 +779,27 @@ function renderDiscrepancyTab(data, lastUpdated) {
     ? `<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">${_discView === 'resolved' ? 'No resolved shipments yet.' : _discView === 'in_progress' ? 'No cases in progress.' : 'No unactioned discrepancies — all cases have been raised! ✅'}</td></tr>`
     : '';
 
+  const totQty      = disc.reduce((s,d) => s + (d.qty_sent||0), 0);
+  const totLost     = disc.reduce((s,d) => s + (d.lost_stock||0), 0);
+  const totExpected = disc.reduce((s,d) => s + (d.expected_reimburs||0), 0);
+  const totRecov    = disc.reduce((s,d) => s + (d.actual_reimbursed||0), 0);
+  const totPending  = disc.reduce((s,d) => s + (d.pending||0), 0);
+  const summaryRow  = disc.length === 0 ? '' : `
+    <tr style="background:#f0f4ff;font-weight:700;border-top:2px solid #c5cae9">
+      <td style="padding:8px 10px;color:#1a237e;font-size:12px" colspan="2">TOTAL (${disc.length} rows)</td>
+      <td style="padding:8px 10px"></td>
+      <td style="padding:8px 10px"></td>
+      <td style="padding:8px 10px"></td>
+      <td style="padding:8px 10px;text-align:center;color:#1a237e">${formatNum(totQty)}</td>
+      <td style="padding:8px 10px;text-align:center"><span class="badge-lost">${formatNum(totLost)}</span></td>
+      <td style="padding:8px 10px;text-align:center;color:#1a237e">${formatUSD(totExpected)}</td>
+      <td style="padding:8px 10px;text-align:center"><span class="badge-recovered">${formatUSD(totRecov)}</span></td>
+      <td style="padding:8px 10px;text-align:center"><span class="badge-pending">${formatUSD(totPending)}</span></td>
+      <td style="padding:8px 10px"></td>
+      <td style="padding:8px 10px"></td>
+      <td style="padding:8px 10px"></td>
+    </tr>`;
+
   const closedCount = resolvedDisc.length;
   const resPct = allDisc.length > 0 ? Math.round(closedCount / allDisc.length * 100) : 0;
 
@@ -839,7 +860,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
               <th style="padding:8px 10px">Remark</th>
             </tr>
           </thead>
-          <tbody>${tableRows}${emptyRow}</tbody>
+          <tbody>${tableRows}${emptyRow}${summaryRow}</tbody>
         </table>
       </div>
     </div>
