@@ -320,6 +320,7 @@ let _filterState = { year: 'all', selectedMonths: [], availableMonths: [], chann
 let _activeTab = 'dashboard';
 let _discSortCol = null;
 let _discSortDir = 1;
+let _discView = 'active'; // 'active' | 'resolved'
 
 const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTH_SHORT = {January:'Jan',February:'Feb',March:'Mar',April:'Apr',May:'May',June:'Jun',July:'Jul',August:'Aug',September:'Sep',October:'Oct',November:'Nov',December:'Dec'};
@@ -638,6 +639,11 @@ function applyFilters(data) {
   };
 }
 
+function switchDiscView(view) {
+  _discView = view;
+  applyAndRender();
+}
+
 function switchTab(tab) {
   _activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -661,12 +667,15 @@ function renderDiscrepancyTab(data, lastUpdated) {
   destroyCharts();
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
 
-  const disc = data.discrepancies || [];
+  const allDisc = data.discrepancies || [];
+  const activeDisc   = allDisc.filter(d => !d.is_closed);
+  const resolvedDisc = allDisc.filter(d => d.is_closed);
+  const disc = _discView === 'resolved' ? resolvedDisc : activeDisc;
 
-  // Update badge count on tab
+  // Update badge count on tab — show only active
   const badge = document.getElementById('discBadge');
-  badge.textContent = disc.length;
-  badge.style.display = disc.length > 0 ? 'inline' : 'none';
+  badge.textContent = activeDisc.length;
+  badge.style.display = activeDisc.length > 0 ? 'inline' : 'none';
 
   // Per-channel counts
   const channelColors = {
@@ -764,11 +773,21 @@ function renderDiscrepancyTab(data, lastUpdated) {
     </tr>`).join('');
 
   const emptyRow = disc.length === 0
-    ? '<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">No discrepancy shipments found for the selected filters.</td></tr>'
+    ? `<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">${_discView === 'resolved' ? 'No resolved shipments yet.' : 'No active discrepancies — all clear! ✅'}</td></tr>`
     : '';
 
-  const closedCount = disc.filter(d => d.is_closed).length;
-  const resPct = disc.length > 0 ? Math.round(closedCount / disc.length * 100) : 0;
+  const closedCount = resolvedDisc.length;
+  const resPct = allDisc.length > 0 ? Math.round(closedCount / allDisc.length * 100) : 0;
+
+  const viewToggle = `
+    <div style="display:flex;gap:6px;padding:10px 24px 0">
+      <button onclick="switchDiscView('active')" style="padding:6px 16px;border-radius:20px;border:2px solid ${_discView==='active'?'var(--primary)':'#ddd'};background:${_discView==='active'?'var(--primary)':'#fff'};color:${_discView==='active'?'#fff':'#666'};font-size:12px;font-weight:600;cursor:pointer">
+        ⚠️ Active Discrepancies <span style="background:${_discView==='active'?'rgba(255,255,255,0.3)':'#ffebee'};color:${_discView==='active'?'#fff':'#c62828'};padding:1px 7px;border-radius:10px;margin-left:4px">${activeDisc.length}</span>
+      </button>
+      <button onclick="switchDiscView('resolved')" style="padding:6px 16px;border-radius:20px;border:2px solid ${_discView==='resolved'?'#2e7d32':'#ddd'};background:${_discView==='resolved'?'#2e7d32':'#fff'};color:${_discView==='resolved'?'#fff':'#666'};font-size:12px;font-weight:600;cursor:pointer">
+        ✅ Resolved / Archived <span style="background:${_discView==='resolved'?'rgba(255,255,255,0.3)':'#e8f5e9'};color:${_discView==='resolved'?'#fff':'#2e7d32'};padding:1px 7px;border-radius:10px;margin-left:4px">${resolvedDisc.length}</span>
+      </button>
+    </div>`;
 
   document.getElementById('mainContent').innerHTML = `
     <div class="disc-summary">${summaryCards}${totalCard}</div>
@@ -782,14 +801,16 @@ function renderDiscrepancyTab(data, lastUpdated) {
         <div class="resolution-bar-track">
           <div class="resolution-bar-fill" style="width:${resPct}%"></div>
         </div>
-        <div style="white-space:nowrap;font-size:12px;font-weight:700;color:var(--primary)">${closedCount}/${disc.length} <span style="font-weight:400;color:var(--text-muted)">(${resPct}%)</span></div>
+        <div style="white-space:nowrap;font-size:12px;font-weight:700;color:var(--primary)">${closedCount}/${allDisc.length} <span style="font-weight:400;color:var(--text-muted)">(${resPct}%)</span></div>
       </div>
     </div>
+
+    ${viewToggle}
 
     <div class="disc-table-wrap">
       <div class="disc-table-card">
         <div class="table-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span><i class="fas fa-list-alt" style="color:var(--navy)"></i> &nbsp;Discrepancy Shipment List</span>
+          <span><i class="fas fa-list-alt" style="color:var(--navy)"></i> &nbsp;${_discView === 'resolved' ? 'Resolved / Archived Shipments' : 'Active Discrepancy Shipments'}</span>
           <div style="display:flex;gap:8px;align-items:center">
             <input class="disc-search" id="discSearch" placeholder="Search AWB, channel, transporter..." oninput="filterDiscTable(this.value)">
             <button class="btn-export" onclick="exportDiscrepancy()" style="white-space:nowrap">
