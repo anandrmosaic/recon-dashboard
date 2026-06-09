@@ -302,6 +302,10 @@
     <i class="fas fa-exclamation-circle"></i> Discrepancy Shipments
     <span id="discBadge" style="background:#c62828;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
+  <button class="tab-btn" data-tab="ups_claims" onclick="switchTab('ups_claims')">
+    <i class="fas fa-shipping-fast"></i> UPS Claims
+    <span id="upsBadge" style="background:#e65100;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
+  </button>
 </div>
 
 <!-- Main Content -->
@@ -656,12 +660,122 @@ function applyAndRender() {
   const filtered = applyFilters(_rawData);
   if (_activeTab === 'discrepancy') {
     renderDiscrepancyTab(filtered, _lastUpdated);
+  } else if (_activeTab === 'ups_claims') {
+    renderUPSClaimsTab(filtered, _lastUpdated);
   } else {
     renderDashboard(filtered, _lastUpdated);
   }
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
+
+function renderUPSClaimsTab(data, lastUpdated) {
+  destroyCharts();
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  const ups    = (data.ups_claims) || {};
+  const summ   = ups.summary || {};
+  const claims = ups.claims  || [];
+
+  // Update badge — show not-filed count
+  const badge = document.getElementById('upsBadge');
+  const notFiled = summ.not_filed || 0;
+  badge.textContent = notFiled;
+  badge.style.display = notFiled > 0 ? 'inline' : 'none';
+
+  const amountReceived = claims.filter(c => c.state === 'amount_received');
+  const filedPending   = claims.filter(c => c.state === 'filed_pending');
+
+  // ── Summary Cards ──────────────────────────────────────────────────
+  const summaryCards = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:16px 20px 0">
+      <div style="background:#fff5f5;border-radius:12px;padding:16px;border:1px solid #ffcdd2;border-left:5px solid #c62828">
+        <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🔴 Claim Form Awaited</div>
+        <div style="font-size:36px;font-weight:800;color:#c62828;line-height:1">${summ.not_filed || 0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">AWBs — claim form not received from UPS</div>
+        <div style="font-size:11px;color:#c62828;margin-top:8px;font-weight:600">⏳ Waiting on UPS</div>
+      </div>
+      <div style="background:#fffbf0;border-radius:12px;padding:16px;border:1px solid #ffe0b2;border-left:5px solid #e65100">
+        <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🟡 Form Received — Pending Payment</div>
+        <div style="font-size:36px;font-weight:800;color:#e65100;line-height:1">${filedPending.length}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">UPS sent form · we submitted back · awaiting amount</div>
+        <div style="font-size:11px;color:#e65100;margin-top:8px;font-weight:600">${summ.claim_filed || 0} total forms received</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:12px;padding:16px;border:1px solid #c8e6c9;border-left:5px solid #2e7d32">
+        <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">✅ Amount Received</div>
+        <div style="font-size:36px;font-weight:800;color:#2e7d32;line-height:1">${amountReceived.length} <span style="font-size:14px;font-weight:500;color:#888">AWBs</span></div>
+        <div style="font-size:18px;font-weight:700;color:#2e7d32;margin-top:8px">${(() => { const tot = amountReceived.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s + (isNaN(v)?0:v); }, 0); return '₹' + tot.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}); })()}</div>
+        <div style="font-size:10px;color:#888;margin-top:2px">total received from UPS</div>
+        <div style="font-size:11px;color:#2e7d32;margin-top:6px;font-weight:600">${summ.total_awbs || 0} total lost AWBs</div>
+      </div>
+    </div>`;
+
+  // ── View toggle ────────────────────────────────────────────────────
+  const views = [
+    { key: 'all',             label: 'All Claims',           count: claims.length,         col: '#1a237e' },
+    { key: 'amount_received', label: '✅ Amount Received',   count: amountReceived.length,  col: '#2e7d32' },
+    { key: 'filed_pending',   label: '🟡 Filed / Pending',   count: filedPending.length,    col: '#e65100' },
+  ];
+  let upsView = window._upsView || 'all';
+  window._upsView = upsView;
+
+  const toggleBtns = views.map(v => {
+    const active = upsView === v.key;
+    return `<button onclick="window._upsView='${v.key}';applyAndRender()" style="padding:6px 16px;border-radius:20px;border:2px solid ${active ? v.col : '#ddd'};background:${active ? v.col : '#fff'};color:${active ? '#fff' : '#666'};font-size:12px;font-weight:600;cursor:pointer">
+      ${v.label} <span style="background:${active ? 'rgba(255,255,255,0.25)' : '#f0f0f0'};color:${active ? '#fff' : '#666'};padding:1px 8px;border-radius:10px;margin-left:4px">${v.count}</span>
+    </button>`;
+  }).join('');
+
+  const viewDisp = upsView === 'amount_received' ? amountReceived : upsView === 'filed_pending' ? filedPending : claims;
+
+  // ── Table ──────────────────────────────────────────────────────────
+  const stateTag = s => {
+    if (s === 'amount_received') return '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">✅ Received</span>';
+    if (s === 'filed_pending')   return '<span style="background:#fff8e1;color:#e65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🟡 Pending</span>';
+    return '<span style="background:#ffebee;color:#c62828;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🔴 Not Filed</span>';
+  };
+
+  const tableRows = viewDisp.map((c, i) => `
+    <tr style="background:${i%2===0?'#fff':'#fafafa'}">
+      <td style="padding:8px 10px;font-size:11px;color:#666;font-weight:600">${c.parent_awb || '—'}</td>
+      <td style="padding:8px 10px;font-weight:600;font-size:12px">${c.lost_awb || '—'}</td>
+      <td style="padding:8px 10px;text-align:center">${c.lost_qty || '—'}</td>
+      <td style="padding:8px 10px;text-align:center;font-weight:600;color:${c.claim_amount ? '#2e7d32' : '#ccc'}">${c.claim_amount || '—'}</td>
+      <td style="padding:8px 10px;text-align:center;font-size:11px">${c.form_received || '—'}</td>
+      <td style="padding:8px 10px;text-align:center;font-size:11px">${c.approved_date || '—'}</td>
+      <td style="padding:8px 10px;text-align:center;font-size:11px">${c.settled_date || '—'}</td>
+      <td style="padding:8px 10px;text-align:center">${stateTag(c.state)}</td>
+    </tr>`).join('');
+
+  const emptyRow = viewDisp.length === 0
+    ? '<tr><td colspan="8" style="text-align:center;padding:40px;color:#aaa">No records found.</td></tr>' : '';
+
+  document.getElementById('mainContent').innerHTML = `
+    ${summaryCards}
+    <div style="padding:12px 20px 0;display:flex;gap:8px;flex-wrap:wrap">${toggleBtns}</div>
+    <div style="padding:12px 20px 20px">
+      <div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);border:1px solid #e0e0e0;overflow:hidden">
+        <div style="padding:12px 16px;font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid #f0f0f0">
+          <i class="fas fa-list-alt" style="color:#1a237e"></i>&nbsp; UPS Claims — ${viewDisp.length} records
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:#1a237e;color:#fff">
+              <th style="padding:8px 10px;text-align:left;white-space:nowrap">Parent AWB</th>
+              <th style="padding:8px 10px;text-align:left;white-space:nowrap">Lost AWB</th>
+              <th style="padding:8px 10px;text-align:center">Lost Qty</th>
+              <th style="padding:8px 10px;text-align:center">Claim Amount (₹)</th>
+              <th style="padding:8px 10px;text-align:center;white-space:nowrap">Claim Form Received</th>
+              <th style="padding:8px 10px;text-align:center;white-space:nowrap">Approved Date</th>
+              <th style="padding:8px 10px;text-align:center;white-space:nowrap">Settled Date</th>
+              <th style="padding:8px 10px;text-align:center">Status</th>
+            </tr></thead>
+            <tbody>${tableRows}${emptyRow}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
 
 function renderDiscrepancyTab(data, lastUpdated) {
   destroyCharts();
@@ -1373,6 +1487,42 @@ function renderDashboard(data, lastUpdated) {
     </div>
 
     ${remarksHTML}
+
+    ${(() => {
+      const ups    = data.ups_claims || {};
+      const summ   = ups.summary || {};
+      const claims = ups.claims  || [];
+      if (!claims.length && !summ.total_awbs) return '';
+      const amtRcvd   = claims.filter(c => c.state === 'amount_received');
+      const filedPend = claims.filter(c => c.state === 'filed_pending');
+      const totAmt    = amtRcvd.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
+      const fmtInr    = n => '₹' + n.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+      return `
+      <div style="padding:0 20px 10px">
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+          <i class="fas fa-shipping-fast" style="color:#1a237e"></i> UPS Claims Tracker
+          <span style="font-weight:400;color:#bbb;font-size:10px">— ${summ.total_awbs||0} total lost AWBs</span>
+          <a onclick="switchTab('ups_claims')" style="margin-left:auto;font-size:10px;color:var(--primary);cursor:pointer;font-weight:600;text-decoration:none">View All →</a>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <div style="background:#fff5f5;border-radius:10px;padding:14px;border:1px solid #ffcdd2;border-left:4px solid #c62828">
+            <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔴 Claim Form Awaited</div>
+            <div style="font-size:28px;font-weight:800;color:#c62828;line-height:1">${summ.not_filed||0}</div>
+            <div style="font-size:11px;color:#888;margin-top:4px">AWBs — waiting on UPS to send form</div>
+          </div>
+          <div style="background:#fffbf0;border-radius:10px;padding:14px;border:1px solid #ffe0b2;border-left:4px solid #e65100">
+            <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🟡 Form Received — Pending Pay</div>
+            <div style="font-size:28px;font-weight:800;color:#e65100;line-height:1">${filedPend.length}</div>
+            <div style="font-size:11px;color:#888;margin-top:4px">Submitted to UPS · awaiting payment</div>
+          </div>
+          <div style="background:#f0fdf4;border-radius:10px;padding:14px;border:1px solid #c8e6c9;border-left:4px solid #2e7d32">
+            <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Amount Received</div>
+            <div style="font-size:28px;font-weight:800;color:#2e7d32;line-height:1">${amtRcvd.length} <span style="font-size:13px;font-weight:500;color:#888">AWBs</span></div>
+            <div style="font-size:14px;font-weight:700;color:#2e7d32;margin-top:4px">${fmtInr(totAmt)}</div>
+          </div>
+        </div>
+      </div>`;
+    })()}
 
     <!-- Footer -->
     <div class="footer">

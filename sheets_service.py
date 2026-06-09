@@ -374,6 +374,88 @@ def calculate_kpis(channel_data):
     }
 
 
+def get_ups_claims_data(creds, sheet_id):
+    """Read UPS Claim tab + AWB Master (UPS) tab and return structured claims data."""
+    if not sheet_id:
+        return {'summary': {}, 'claims': []}
+    service = build('sheets', 'v4', credentials=creds)
+
+    # Read AWB Master (UPS) - col A = AWB, col B = TRUE/FALSE, row 1 has counts in cols F-H
+    master_result = service.spreadsheets().values().get(
+        spreadsheetId=sheet_id,
+        range="'AWB Master (ups)'!A1:H1000"
+    ).execute()
+    master_rows = master_result.get('values', [])
+
+    total_awbs = 0
+    claim_filed = 0
+    not_filed = 0
+    if master_rows:
+        header = master_rows[0]
+        # Counts are in row 1 cols F(5), G(6), H(7)
+        if len(master_rows) > 1 and len(master_rows[1]) >= 8:
+            try: claim_filed = int(str(master_rows[1][5]).replace(',','').strip())
+            except: pass
+            try: not_filed = int(str(master_rows[1][6]).replace(',','').strip())
+            except: pass
+            try: total_awbs = int(str(master_rows[1][7]).replace(',','').strip())
+            except: pass
+
+    # Read UPS Claim tab
+    claim_result = service.spreadsheets().values().get(
+        spreadsheetId=sheet_id,
+        range="'UPS Claim'!A1:G500"
+    ).execute()
+    claim_rows = claim_result.get('values', [])
+
+    claims = []
+    if len(claim_rows) > 1:
+        for row in claim_rows[1:]:
+            if not row or not str(row[0]).strip():
+                continue
+            padded = row + [''] * max(0, 7 - len(row))
+            parent_awb    = str(padded[0]).strip()
+            lost_awb      = str(padded[1]).strip()
+            lost_qty      = str(padded[2]).strip()
+            claim_amount  = str(padded[3]).strip()
+            form_received = str(padded[4]).strip()
+            approved_date = str(padded[5]).strip()
+            settled_date  = str(padded[6]).strip()
+
+            # Determine state
+            if claim_amount:
+                state = 'amount_received'
+            elif form_received:
+                state = 'filed_pending'
+            else:
+                state = 'not_filed'
+
+            claims.append({
+                'parent_awb':    parent_awb,
+                'lost_awb':      lost_awb,
+                'lost_qty':      lost_qty,
+                'claim_amount':  claim_amount,
+                'form_received': form_received,
+                'approved_date': approved_date,
+                'settled_date':  settled_date,
+                'state':         state,
+            })
+
+    amount_received_count = sum(1 for c in claims if c['state'] == 'amount_received')
+    filed_pending_count   = sum(1 for c in claims if c['state'] == 'filed_pending')
+
+    return {
+        'summary': {
+            'total_awbs':           total_awbs,
+            'claim_filed':          claim_filed,
+            'not_filed':            not_filed,
+            'amount_received_count': amount_received_count,
+            'filed_pending_count':  filed_pending_count,
+        },
+        'claims': claims,
+    }
+
+
 def get_outward_loss_data(creds, sheet_id):
     if not sheet_id:
         return {'headers': [], 'rows': []}

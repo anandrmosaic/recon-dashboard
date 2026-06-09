@@ -18,9 +18,9 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_sheet_data, get_outward_loss_data
+from sheets_service import get_sheet_data, get_outward_loss_data, get_ups_claims_data
 from email_service import send_weekly_report
-from provision_engine import get_sheet_carriers, process_provision
+from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
 app = Flask(__name__)
 # Only auto-reload templates in local dev, not on Render (saves memory)
@@ -45,6 +45,11 @@ def refresh_data():
         except Exception as ol_err:
             print(f"[Data] Outward loss load failed (non-fatal): {ol_err}")
             data['outward_loss'] = {'headers': [], 'rows': []}
+        try:
+            data['ups_claims'] = get_ups_claims_data(creds, CONFIG['sheet_id'])
+        except Exception as uc_err:
+            print(f"[Data] UPS claims load failed (non-fatal): {uc_err}")
+            data['ups_claims'] = {'summary': {}, 'claims': []}
         _cache['data'] = None   # release old data before storing new (halves peak memory)
         gc.collect()
         _cache['data'] = data
@@ -152,6 +157,22 @@ def api_detect_carriers():
         import traceback
         print(f"[Provision] detect-carriers error: {traceback.format_exc()}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/provision/detect-carriers-from-finance', methods=['POST'])
+def api_detect_carriers_from_finance():
+    f = request.files.get('finance_file')
+    if not f:
+        return jsonify({'status': 'ok', 'carriers': []})
+    try:
+        carriers = get_carriers_for_finance_file(
+            get_sheets_credentials(CF, TF), CONFIG['sheet_id'], f.read()
+        )
+        return jsonify({'status': 'ok', 'carriers': carriers})
+    except Exception as e:
+        import traceback
+        print(f"[Provision] detect-carriers-from-finance error: {traceback.format_exc()}")
+        return jsonify({'status': 'ok', 'carriers': []})
 
 
 @app.route('/api/provision/generate', methods=['POST'])
