@@ -94,6 +94,49 @@ def get_sheet_carriers(creds, sheet_id, month, year):
     return sorted(carriers)
 
 
+def get_carriers_for_finance_file(creds, sheet_id, finance_bytes):
+    """Extract EX numbers from finance file, look them up in Google Sheet, return unique carriers."""
+    # Step 1: get EX numbers from finance file
+    finance = _read_finance_data(finance_bytes)
+    ex_numbers = set(finance.keys())
+    if not ex_numbers:
+        return []
+
+    # Step 2: read sheet and find carriers for those EX numbers
+    service = build('sheets', 'v4', credentials=creds)
+    result = service.spreadsheets().values().get(
+        spreadsheetId=sheet_id,
+        range="'Monthly Inward Logistics Report'!A1:BZ5000"
+    ).execute()
+    rows = result.get('values', [])
+
+    header_idx = None
+    col_map = {}
+    for i, row in enumerate(rows):
+        if len(row) > 2 and row[2] == 'Sale Order Number':
+            header_idx = i
+            for j, cell in enumerate(row):
+                if cell and _s(cell) not in col_map:
+                    col_map[_s(cell)] = j
+            break
+
+    if header_idx is None or 'Carrier' not in col_map:
+        return []
+
+    so_col = col_map.get('Sale Order Number', 2)
+    carrier_col = col_map['Carrier']
+    carriers = set()
+    for row in rows[header_idx + 1:]:
+        if not row or len(row) <= max(so_col, carrier_col):
+            continue
+        so = _s(row[so_col])
+        if so in ex_numbers:
+            c = _s(row[carrier_col])
+            if c:
+                carriers.add(c)
+    return sorted(carriers)
+
+
 def _fetch_sheet_data(creds, sheet_id, month, year):
     """Fetch Monthly Inward Logistics Report, filter by month/year in Python."""
     service = build('sheets', 'v4', credentials=creds)
