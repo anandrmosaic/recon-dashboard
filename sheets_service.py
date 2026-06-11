@@ -184,6 +184,8 @@ def parse_awb_data(values, remarks=None, data_since=None):
         channel         = str(row[channel_col]).strip() if len(row) > channel_col else ''
         transporter     = str(row[8]).strip()  if len(row) > 8  else ''
         platform_label  = str(row[5]).strip()  if len(row) > 5  else ''
+        product_name    = str(row[11]).strip() if len(row) > 11 else ''
+        invoice_no      = str(row[14]).strip() if len(row) > 14 else ''
 
         period_set.add((month, year))
 
@@ -253,6 +255,8 @@ def parse_awb_data(values, remarks=None, data_since=None):
                 'pending':              round(expected - actual, 2),
                 'reimbursement_status': reimb_status,
                 'remark':               str(row[32]).strip() if len(row) > 32 else '',
+                'product_name':         product_name,
+                'invoice_no':           invoice_no,
                 'case_raise_date':      case_raise_raw,
                 'case_close_date':      case_close_raw,
                 'days_open':            days_open,

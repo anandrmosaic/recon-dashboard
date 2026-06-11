@@ -879,6 +879,8 @@ function renderDiscrepancyTab(data, lastUpdated) {
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.platform_label || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.channel}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.transporter || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;max-width:160px">${d.product_name || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px">${d.invoice_no || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center">${formatNum(d.qty_sent)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center"><span class="badge-lost">${formatNum(d.lost_stock)}</span></td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center">${formatUSD(d.expected_reimburs)}</td>
@@ -901,6 +903,8 @@ function renderDiscrepancyTab(data, lastUpdated) {
   const summaryRow  = disc.length === 0 ? '' : `
     <tr style="background:#f0f4ff;font-weight:700;border-top:2px solid #c5cae9">
       <td style="padding:8px 10px;color:#1a237e;font-size:12px" colspan="2">TOTAL (${disc.length} rows)</td>
+      <td style="padding:8px 10px"></td>
+      <td style="padding:8px 10px"></td>
       <td style="padding:8px 10px"></td>
       <td style="padding:8px 10px"></td>
       <td style="padding:8px 10px"></td>
@@ -962,7 +966,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
         <table class="recon-table" id="discTable">
           <thead>
             <tr>
-              ${[['month','Month'],['awb','Shipment AWB'],['platform_label','IBR / Label'],['channel','Channel'],['transporter','Transporter']].map(([col,lbl]) =>
+              ${[['month','Month'],['awb','Shipment AWB'],['platform_label','IBR / Label'],['channel','Channel'],['transporter','Transporter'],['product_name','Product Name'],['invoice_no','Invoice No']].map(([col,lbl]) =>
                 `<th class="sortable-th" onclick="sortDisc('${col}')" style="padding:8px 10px">${lbl}<span class="sort-icon">${_discSortCol===col?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>`).join('')}
               <th style="padding:8px 10px;text-align:center">Qty Sent</th>
               <th class="sortable-th" onclick="sortDisc('lost_stock')" style="padding:8px 10px;text-align:center">Lost Units<span class="sort-icon">${_discSortCol==='lost_stock'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
