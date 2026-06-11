@@ -2014,10 +2014,12 @@ function exportDiscrepancy() {
 
   const rows = [
     ['Month', 'Shipment AWB', 'IBR / Label', 'Channel', 'Transporter',
+     'Product Name', 'Uniware Code', 'Invoice No',
      'Qty Sent', 'Lost Units', 'Expected ($)', 'Recovered ($)', 'Pending ($)',
      'Reimb. Status', 'Case Raise Date', 'Days Open', 'Aging Bucket', 'Remark'],
     ...disc.map(d => [
       d.month, d.awb, d.platform_label, d.channel, d.transporter,
+      d.product_name || '', d.uniware_code || '', d.invoice_no || '',
       d.qty_sent, d.lost_stock, d.expected_reimburs, d.actual_reimbursed, d.pending,
       d.reimbursement_status,
       d.case_raise_date || '', d.days_open != null ? d.days_open : '', d.aging_bucket || '',
@@ -2025,7 +2027,7 @@ function exportDiscrepancy() {
     ])
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [14, 18, 18, 10, 14, 10, 10, 13, 13, 12, 14, 14, 10, 14, 30].map(w => ({ wch: w }));
+  ws['!cols'] = [14, 18, 18, 10, 14, 24, 14, 14, 10, 10, 13, 13, 12, 14, 14, 10, 14, 30].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, 'Discrepancy Shipments');
   XLSX.writeFile(wb, `discrepancy-shipments-${date}.xlsx`);
 }
