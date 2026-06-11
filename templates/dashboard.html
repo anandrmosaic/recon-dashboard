@@ -63,36 +63,50 @@
 
     /* ── Logo ── */
     .rl-logo {
-      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      background: rgba(0,0,0,0.25);
       border-radius: var(--r-sm); padding: 7px 13px;
       display: flex; flex-direction: column; align-items: center;
-      line-height: 1; gap: 1px;
-      box-shadow: 0 2px 8px rgba(27,58,45,0.3);
+      line-height: 1; gap: 1px; border: 1px solid rgba(255,255,255,0.1);
     }
     .rl-root { color: #fff; font-weight: 800; font-size: 17px; letter-spacing: 1.5px; font-family: 'Plus Jakarta Sans', sans-serif; }
-    .rl-labs { color: rgba(255,255,255,0.6); font-size: 9px; letter-spacing: 4px; font-weight: 500; text-transform: uppercase; }
+    .rl-labs { color: rgba(255,255,255,0.45); font-size: 9px; letter-spacing: 4px; font-weight: 500; text-transform: uppercase; }
 
-    /* ── Header ── */
+    /* ── HERO Header (Option A) ── */
     .header {
-      background: var(--surface);
-      padding: 10px 24px;
+      background: linear-gradient(135deg, #0f2419 0%, #1b3a2d 35%, #1e4433 65%, #152e23 100%);
+      padding: 14px 24px;
       display: flex; align-items: center; justify-content: space-between;
-      border-bottom: 1px solid var(--border);
-      box-shadow: var(--shadow-xs);
+      border-bottom: none;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.05);
       position: sticky; top: 0; z-index: 100;
     }
-    .header-title { font-size: 14px; font-weight: 700; color: var(--primary); font-family: 'Plus Jakarta Sans', sans-serif; }
-    .header-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .header-title { font-size: 15px; font-weight: 700; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; }
+    .header-sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
     .header-right { display: flex; align-items: center; gap: 10px; }
-    .last-updated { color: var(--text-muted); font-size: 11px; }
+    .last-updated { color: rgba(255,255,255,0.45); font-size: 11px; }
     .btn-refresh {
-      background: var(--surface-2); border: 1.5px solid var(--border);
-      color: var(--primary); padding: 6px 16px; border-radius: var(--r-full);
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+      color: #fff; padding: 7px 16px; border-radius: var(--r-full);
       font-size: 11px; font-weight: 600; cursor: pointer;
       transition: all var(--t-base); font-family: inherit;
-      display: flex; align-items: center; gap: 5px;
+      display: flex; align-items: center; gap: 5px; backdrop-filter: blur(4px);
     }
-    .btn-refresh:hover { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: 0 2px 8px rgba(27,58,45,0.25); }
+    .btn-refresh:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.35); }
+
+    /* Hero Stats Strip inside header */
+    .hero-stats {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(0,0,0,0.2); border-radius: var(--r-md);
+      padding: 6px 4px; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .hero-stat {
+      text-align: center; padding: 4px 18px;
+      border-right: 1px solid rgba(255,255,255,0.1);
+    }
+    .hero-stat:last-child { border-right: none; }
+    .hero-stat-val { font-size: 19px; font-weight: 800; color: #fff; line-height: 1; font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: -0.5px; }
+    .hero-stat-lbl { font-size: 9px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 3px; font-weight: 600; }
+    .hero-stat-sub { font-size: 9px; margin-top: 1px; }
 
     /* ── Filter Bar ── */
     .filter-bar {
@@ -150,9 +164,10 @@
       border-bottom: 1px solid var(--border);
       padding: 0 24px;
       display: flex; gap: 2px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
     .tab-btn {
-      padding: 10px 18px; font-size: 12px; font-weight: 600;
+      padding: 11px 18px; font-size: 12px; font-weight: 600;
       cursor: pointer; border: none; background: none;
       color: var(--text-muted);
       border-bottom: 2.5px solid transparent;
@@ -162,45 +177,39 @@
       letter-spacing: 0.1px;
     }
     .tab-btn:hover { color: var(--primary); background: var(--primary-soft); border-radius: var(--r-sm) var(--r-sm) 0 0; }
-    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; background: var(--primary-soft); border-radius: var(--r-sm) var(--r-sm) 0 0; }
 
-    /* ── KPI Cards ── */
+    /* ── KPI Cards (Option B — Full Color Gradient) ── */
     .kpi-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; padding: 16px 24px 0; }
     .kpi-card {
-      background: var(--surface); border-radius: var(--r-lg);
-      padding: 16px; box-shadow: var(--shadow-sm);
-      border: 1px solid var(--border-light);
-      transition: transform var(--t-base), box-shadow var(--t-base);
+      border-radius: var(--r-lg); padding: 18px 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      border: none; transition: transform var(--t-base), box-shadow var(--t-base);
       position: relative; overflow: hidden;
     }
-    .kpi-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      border-radius: var(--r-lg) var(--r-lg) 0 0;
+    /* Shimmer overlay */
+    .kpi-card::after {
+      content: ''; position: absolute; top: -50%; right: -20%;
+      width: 120px; height: 200%; background: rgba(255,255,255,0.06);
+      border-radius: 50%; pointer-events: none;
     }
-    .kpi-card.blue::before { background: linear-gradient(90deg, var(--blue-val), #60a5fa); }
-    .kpi-card.red::before { background: linear-gradient(90deg, var(--red), #f87171); }
-    .kpi-card.orange::before { background: linear-gradient(90deg, #d97706, #fbbf24); }
-    .kpi-card.green::before { background: linear-gradient(90deg, var(--primary), #4ade80); }
-    .kpi-card.amber::before { background: linear-gradient(90deg, var(--amber), #d97706); }
-    .kpi-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+    .kpi-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+    .kpi-card.blue  { background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%); }
+    .kpi-card.red   { background: linear-gradient(135deg, #991b1b 0%, #dc2626 50%, #ef4444 100%); }
+    .kpi-card.orange{ background: linear-gradient(135deg, #92400e 0%, #d97706 50%, #f59e0b 100%); }
+    .kpi-card.green { background: linear-gradient(135deg, #0f2419 0%, #1b3a2d 50%, #2d5a3d 100%); }
+    .kpi-card.amber { background: linear-gradient(135deg, #7c2d12 0%, #c2410c 50%, #ea580c 100%); }
     .kpi-icon {
-      width: 36px; height: 36px; border-radius: var(--r-sm);
+      width: 38px; height: 38px; border-radius: var(--r-sm);
       display: flex; align-items: center; justify-content: center;
-      margin-bottom: 10px; font-size: 15px;
+      margin-bottom: 12px; font-size: 16px;
+      background: rgba(255,255,255,0.15) !important;
+      color: #fff !important;
+      backdrop-filter: blur(4px);
     }
-    .kpi-icon.blue { background: var(--blue-mid); color: var(--blue-val); }
-    .kpi-icon.red { background: var(--red-mid); color: var(--red); }
-    .kpi-icon.orange { background: var(--amber-mid); color: #d97706; }
-    .kpi-icon.green { background: var(--green-mid); color: var(--green-val); }
-    .kpi-icon.amber { background: var(--amber-soft); color: var(--amber); }
-    .kpi-value { font-size: 24px; font-weight: 800; line-height: 1; font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: -0.5px; }
-    .kpi-value.blue { color: var(--blue-val); }
-    .kpi-value.red { color: var(--red); }
-    .kpi-value.orange { color: #d97706; }
-    .kpi-value.green { color: var(--primary); }
-    .kpi-value.amber { color: var(--amber); }
-    .kpi-label { font-size: 11px; color: var(--text-muted); margin-top: 5px; font-weight: 600; }
-    .kpi-sub { font-size: 10px; color: var(--text-light); margin-top: 3px; }
+    .kpi-value { font-size: 26px; font-weight: 800; line-height: 1; font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: -0.5px; color: #fff !important; }
+    .kpi-label { font-size: 11px; color: rgba(255,255,255,0.75) !important; margin-top: 6px; font-weight: 600; letter-spacing: 0.2px; }
+    .kpi-sub { font-size: 10px; color: rgba(255,255,255,0.55) !important; margin-top: 4px; }
 
     /* ── Charts ── */
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 24px 0; }
@@ -446,6 +455,28 @@
       <div class="header-sub">India → USA Shipment Tracker</div>
     </div>
   </div>
+  <!-- Hero Stats Strip -->
+  <div class="hero-stats" id="heroStats" style="display:none">
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="hShipped">—</div>
+      <div class="hero-stat-lbl">Units Shipped</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="hLost" style="color:#fca5a5">—</div>
+      <div class="hero-stat-lbl">Units Lost</div>
+      <div class="hero-stat-sub" id="hLostRate" style="color:rgba(255,255,255,0.45)"></div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="hRecov" style="color:#86efac">—</div>
+      <div class="hero-stat-lbl">Recovered</div>
+      <div class="hero-stat-sub" id="hRecovRate" style="color:rgba(255,255,255,0.45)"></div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="hPending" style="color:#fde68a">—</div>
+      <div class="hero-stat-lbl">Pending</div>
+    </div>
+  </div>
+
   <div class="header-right">
     <span class="last-updated" id="lastUpdated">Loading...</span>
     <button class="btn-refresh" onclick="refreshData()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
@@ -1539,6 +1570,18 @@ function renderDashboard(data, lastUpdated) {
   } catch(e) {
     console.warn('Case Health section error:', e);
     caseHealthHTML = '';
+  }
+
+  // ── Update Hero Stats Banner ──
+  const heroEl = document.getElementById('heroStats');
+  if (heroEl) {
+    heroEl.style.display = 'flex';
+    document.getElementById('hShipped').textContent = formatNum(kpis.total_shipped);
+    document.getElementById('hLost').textContent    = formatNum(kpis.total_lost);
+    document.getElementById('hLostRate').textContent = kpis.loss_rate + '% loss rate';
+    document.getElementById('hRecov').textContent   = formatUSD(kpis.actual_recovered);
+    document.getElementById('hRecovRate').textContent = kpis.recovery_rate + '% recovered';
+    document.getElementById('hPending').textContent = formatUSD(kpis.pending_recovery);
   }
 
   const html = `
