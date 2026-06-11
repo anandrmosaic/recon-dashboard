@@ -914,9 +914,23 @@ function switchTab(tab) {
   applyAndRender();
 }
 
+function updateHeroStats(kpis) {
+  const heroEl = document.getElementById('heroStats');
+  if (!heroEl || !kpis) return;
+  heroEl.style.display = 'flex';
+  document.getElementById('hShipped').textContent    = formatNum(kpis.total_shipped);
+  document.getElementById('hLost').textContent       = formatNum(kpis.total_lost);
+  document.getElementById('hLostRate').textContent   = kpis.loss_rate + '% loss rate';
+  document.getElementById('hRecov').textContent      = formatUSD(kpis.actual_recovered);
+  document.getElementById('hRecovRate').textContent  = kpis.recovery_rate + '% recovered';
+  document.getElementById('hPending').textContent    = formatUSD(kpis.pending_recovery);
+}
+
 function applyAndRender() {
   if (!_rawData) return;
   const filtered = applyFilters(_rawData);
+  // Always update hero stats regardless of which tab is active
+  updateHeroStats(filtered.kpis);
   if (_activeTab === 'discrepancy') {
     renderDiscrepancyTab(filtered, _lastUpdated);
   } else if (_activeTab === 'ups_claims') {
@@ -1579,18 +1593,6 @@ function renderDashboard(data, lastUpdated) {
   } catch(e) {
     console.warn('Case Health section error:', e);
     caseHealthHTML = '';
-  }
-
-  // ── Update Hero Stats Banner ──
-  const heroEl = document.getElementById('heroStats');
-  if (heroEl) {
-    heroEl.style.display = 'flex';
-    document.getElementById('hShipped').textContent = formatNum(kpis.total_shipped);
-    document.getElementById('hLost').textContent    = formatNum(kpis.total_lost);
-    document.getElementById('hLostRate').textContent = kpis.loss_rate + '% loss rate';
-    document.getElementById('hRecov').textContent   = formatUSD(kpis.actual_recovered);
-    document.getElementById('hRecovRate').textContent = kpis.recovery_rate + '% recovered';
-    document.getElementById('hPending').textContent = formatUSD(kpis.pending_recovery);
   }
 
   const html = `
