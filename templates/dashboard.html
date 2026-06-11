@@ -616,13 +616,19 @@ function computeTrends(filteredData) {
   };
 }
 
-function trendBadge(curr, prev, lowerIsBetter) {
+function trendBadge(curr, prev, lowerIsBetter, onDark=true) {
   if (!prev || prev === 0) return '';
   const pct = ((curr - prev) / prev * 100).toFixed(1);
   const up = curr > prev;
   const isGood = lowerIsBetter ? !up : up;
-  const col = isGood ? 'var(--green-val)' : 'var(--red)';
-  return `<span style="font-size:10px;color:${col};font-weight:600;margin-left:4px">${up ? '↑' : '↓'} ${up ? '+' : ''}${pct}%</span>`;
+  // On dark/colored KPI cards always use white-tinted colours for legibility
+  const col = onDark
+    ? (isGood ? 'rgba(134,239,172,0.95)' : 'rgba(252,165,165,0.95)')
+    : (isGood ? 'var(--green-val)' : 'var(--red)');
+  const bg = onDark
+    ? (isGood ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.15)')
+    : 'transparent';
+  return `<span style="font-size:10px;color:${col};font-weight:700;margin-left:4px;background:${bg};padding:1px 5px;border-radius:4px">${up ? '↑' : '↓'} ${up ? '+' : ''}${pct}%</span>`;
 }
 
 function sortDisc(col) {
