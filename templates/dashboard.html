@@ -344,6 +344,7 @@
       border: 1px solid var(--border-light); overflow: hidden;
     }
     .disc-table-card > .table-title { padding: 14px 16px 0; }
+    .disc-table-scroll { overflow-x: auto; }
     .disc-search {
       padding: 7px 14px; border: 1.5px solid var(--border);
       border-radius: var(--r-full); font-size: 11px; outline: none;
@@ -1223,6 +1224,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
             </button>
           </div>
         </div>
+        <div class="disc-table-scroll">
         <table class="recon-table" id="discTable">
           <thead>
             <tr>
@@ -1240,6 +1242,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
           </thead>
           <tbody>${tableRows}${emptyRow}${summaryRow}</tbody>
         </table>
+        </div>
       </div>
     </div>
 
