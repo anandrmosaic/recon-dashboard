@@ -1055,9 +1055,16 @@ function renderDiscrepancyTab(data, lastUpdated) {
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
 
   const allDisc        = data.discrepancies || [];
-  const needsActionDisc = allDisc.filter(d => !d.is_closed && !d.case_raise_date);
-  const inProgressDisc  = allDisc.filter(d => !d.is_closed && d.case_raise_date);
-  const resolvedDisc    = allDisc.filter(d => d.is_closed);
+  // Classification logic — status keyword takes priority over case_raise_date presence
+  const _noDiscrep = d => { const s = (d.reimbursement_status||'').toLowerCase(); return s.includes('no') && s.includes('discrepan'); };
+  const _activeInProgress = d => {
+    if (d.is_closed || _noDiscrep(d)) return false;
+    const s = (d.reimbursement_status||'').toLowerCase();
+    return !!(d.case_raise_date || s.includes('progress') || s.includes('picked') || s.includes('pending') || s.includes('open'));
+  };
+  const resolvedDisc    = allDisc.filter(d => d.is_closed || _noDiscrep(d));
+  const inProgressDisc  = allDisc.filter(d => !d.is_closed && !_noDiscrep(d) && _activeInProgress(d));
+  const needsActionDisc = allDisc.filter(d => !d.is_closed && !_noDiscrep(d) && !_activeInProgress(d));
   const disc = _discView === 'resolved'    ? resolvedDisc
              : _discView === 'in_progress' ? inProgressDisc
              : needsActionDisc;
