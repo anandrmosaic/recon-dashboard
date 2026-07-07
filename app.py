@@ -123,42 +123,53 @@ def api_refresh():
 
 @app.route('/api/update-row', methods=['POST'])
 def api_update_row():
-    """Update specific cells in the AWB tracker sheet directly from the dashboard."""
+    """Batch-update multiple cells in one Sheets API call, then refresh once."""
     EDITABLE_COLS = {
-        'reimbursement_status': 30,  # col AE (0-based 30)
-        'actual_reimbursed':    29,  # col AD
-        'lost_stock':           27,  # col AB
-        'case_raise_date':      33,  # col AH
-        'case_close_date':      34,  # col AI
-        'remark':               32,  # col AG
+        'reimbursement_status': 30,
+        'actual_reimbursed':    29,
+        'lost_stock':           27,
+        'case_raise_date':      33,
+        'case_close_date':      34,
+        'remark':               32,
     }
+    def col_letter(idx):
+        return chr(ord('A') + idx) if idx < 26 else 'A' + chr(ord('A') + idx - 26)
+
     try:
-        body       = request.get_json(force=True)
-        row_index  = int(body.get('row_index', 0))   # 1-based sheet row
-        field      = body.get('field', '')
-        new_value  = str(body.get('value', '')).strip()
+        body      = request.get_json(force=True)
+        row_index = int(body.get('row_index', 0))
+        fields    = body.get('fields', {})   # {field_name: new_value, ...}
 
-        if not row_index or field not in EDITABLE_COLS:
-            return jsonify({'status': 'error', 'message': 'Invalid row_index or field'}), 400
+        if not row_index or not fields:
+            return jsonify({'status': 'error', 'message': 'Missing row_index or fields'}), 400
 
-        col_idx     = EDITABLE_COLS[field]
-        col_letter  = chr(ord('A') + col_idx) if col_idx < 26 else 'A' + chr(ord('A') + col_idx - 26)
-        cell_range  = f"'{CONFIG['sheet_tab']}'!{col_letter}{row_index}"
+        invalid = [f for f in fields if f not in EDITABLE_COLS]
+        if invalid:
+            return jsonify({'status': 'error', 'message': f'Unknown fields: {invalid}'}), 400
 
+        # Build one batchUpdate request for all changed cells
         from googleapiclient.discovery import build as gbuild
         creds   = get_sheets_credentials(CF, TF)
         service = gbuild('sheets', 'v4', credentials=creds)
-        service.spreadsheets().values().update(
+
+        value_ranges = []
+        for field, new_value in fields.items():
+            cl = col_letter(EDITABLE_COLS[field])
+            cell_range = f"'{CONFIG['sheet_tab']}'!{cl}{row_index}"
+            value_ranges.append({
+                'range': cell_range,
+                'values': [[str(new_value).strip()]]
+            })
+
+        service.spreadsheets().values().batchUpdate(
             spreadsheetId=CONFIG['sheet_id'],
-            range=cell_range,
-            valueInputOption='USER_ENTERED',
-            body={'values': [[new_value]]}
+            body={'valueInputOption': 'USER_ENTERED', 'data': value_ranges}
         ).execute()
 
-        # Refresh cache so dashboard reflects change immediately
+        # Single refresh after all writes
         refresh_data()
-        print(f"[Edit] Row {row_index} col {col_letter} ({field}) → '{new_value}'")
-        return jsonify({'status': 'ok', 'cell': cell_range, 'value': new_value})
+        print(f"[Edit] Row {row_index}: updated {list(fields.keys())}")
+        return jsonify({'status': 'ok', 'updated': list(fields.keys())})
 
     except Exception as e:
         print(f"[Edit] Error: {e}")

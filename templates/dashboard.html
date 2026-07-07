@@ -2307,16 +2307,22 @@ async function saveEditModal() {
   };
 
   try {
-    const updates = Object.entries(fields).filter(([_, v]) => v !== '' && v !== null && v !== undefined);
-    for (const [field, value] of updates) {
-      const res  = await fetch('/api/update-row', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ row_index: _editRowIndex, field, value })
-      });
-      const json = await res.json();
-      if (json.status !== 'ok') throw new Error(json.message || 'Update failed');
+    // Send all changed fields in one batch request → one Sheets write + one refresh
+    const changedFields = Object.fromEntries(
+      Object.entries(fields).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+    );
+    if (Object.keys(changedFields).length === 0) {
+      clearInterval(ticker);
+      closeEditModal();
+      return;
     }
+    const res  = await fetch('/api/update-row', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ row_index: _editRowIndex, fields: changedFields })
+    });
+    const json = await res.json();
+    if (json.status !== 'ok') throw new Error(json.message || 'Update failed');
     clearInterval(ticker);
     const totalSec = ((Date.now() - startMs) / 1000).toFixed(1);
     fill.style.width  = '100%';
