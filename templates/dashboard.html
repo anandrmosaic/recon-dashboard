@@ -2265,8 +2265,11 @@ function openEditModal(rowIndex, awb, status, actual, raiseDate, closeDate, rema
   document.getElementById('ef_case_close_date').value      = closeDate || '';
   document.getElementById('ef_remark').value               = remark || '';
   document.getElementById('editTimingBar').style.display   = 'none';
-  const modal = document.getElementById('editModal');
-  modal.style.display = 'flex';
+  // Always reset save button state when opening
+  const btn = document.getElementById('editSaveBtn');
+  btn.disabled  = false;
+  btn.innerHTML = '<i class="fas fa-save"></i> Save to Sheet';
+  document.getElementById('editModal').style.display = 'flex';
 }
 
 function closeEditModal() {
