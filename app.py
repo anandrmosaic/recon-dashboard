@@ -127,6 +127,7 @@ def api_update_row():
     EDITABLE_COLS = {
         'reimbursement_status': 30,  # col AE (0-based 30)
         'actual_reimbursed':    29,  # col AD
+        'lost_stock':           27,  # col AB
         'case_raise_date':      33,  # col AH
         'case_close_date':      34,  # col AI
         'remark':               32,  # col AG

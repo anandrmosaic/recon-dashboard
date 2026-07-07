@@ -1146,7 +1146,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
   };
 
   const tableRows = sortedDisc.map((d, idx) => `
-    <tr class="disc-row" data-ch="${d.channel}" data-awb="${d.awb.toLowerCase()}" data-month="${d.month.toLowerCase()}" data-row="${d.row_index||''}" data-status="${(d.reimbursement_status||'').replace(/"/g,'&quot;')}" data-actual="${d.actual_reimbursed||0}" data-raise="${d.case_raise_date||''}" data-close="${d.case_close_date||''}" data-remark="${(d.remark||'').replace(/"/g,'&quot;')}">
+    <tr class="disc-row" data-ch="${d.channel}" data-awb="${d.awb.toLowerCase()}" data-month="${d.month.toLowerCase()}" data-row="${d.row_index||''}" data-status="${(d.reimbursement_status||'').replace(/"/g,'&quot;')}" data-actual="${d.actual_reimbursed||0}" data-lost="${d.lost_stock||0}" data-raise="${d.case_raise_date||''}" data-close="${d.case_close_date||''}" data-remark="${(d.remark||'').replace(/"/g,'&quot;')}">
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666">${d.month}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;font-size:12px">${d.awb || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.platform_label || '—'}</td>
@@ -1164,7 +1164,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${agingBadge(d.aging_bucket, d.days_open, d.is_closed, d.days_to_close)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666;max-width:180px">${d.remark || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center">
-        <button onclick="openEditModal(${d.row_index||0},'${d.awb}',this.closest('tr').dataset.status,this.closest('tr').dataset.actual,this.closest('tr').dataset.raise,this.closest('tr').dataset.close,this.closest('tr').dataset.remark)"
+        <button onclick="openEditModal(${d.row_index||0},'${d.awb}',this.closest('tr').dataset.status,this.closest('tr').dataset.actual,this.closest('tr').dataset.raise,this.closest('tr').dataset.close,this.closest('tr').dataset.remark,this.closest('tr').dataset.lost)"
           title="Edit this row in Google Sheet"
           style="background:none;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;cursor:pointer;color:#64748b;font-size:12px;transition:all 0.15s"
           onmouseover="this.style.borderColor='#1b3a2d';this.style.color='#1b3a2d'"
@@ -2197,16 +2197,23 @@ setInterval(() => fetch('/api/refresh').then(() => {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Lost Stock (Units)</label>
+          <input id="ef_lost_stock" type="number" step="1" min="0" placeholder="0"
+            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Sheet formulas recalculate automatically</div>
+        </div>
+        <div>
           <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Actual Reimbursed ($)</label>
           <input id="ef_actual_reimbursed" type="number" step="0.01" min="0" placeholder="0.00"
             style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
         </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
           <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Case Raise Date</label>
           <input id="ef_case_raise_date" type="text" placeholder="dd/mm/yyyy"
             style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
         </div>
-      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
           <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Case Close Date</label>
@@ -2221,7 +2228,18 @@ setInterval(() => fetch('/api/refresh').then(() => {
       </div>
     </div>
 
-    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+    <!-- Timing indicator -->
+    <div id="editTimingBar" style="display:none;margin-top:14px;background:#f8fafc;border-radius:8px;padding:10px 14px;border:1px solid #e2e8f0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span id="editTimingLabel" style="font-size:11px;color:#64748b;font-weight:600">Writing to Google Sheet...</span>
+        <span id="editTimingClock" style="font-size:11px;font-weight:700;color:#1b3a2d">0.0s</span>
+      </div>
+      <div style="height:4px;background:#e2e8f0;border-radius:50px;overflow:hidden">
+        <div id="editTimingFill" style="height:100%;width:0%;background:linear-gradient(90deg,#1b3a2d,#4ade80);border-radius:50px;transition:width 0.3s ease"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end">
       <button onclick="closeEditModal()" style="padding:9px 20px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>
       <button onclick="saveEditModal()" id="editSaveBtn" style="padding:9px 20px;border:none;border-radius:8px;background:linear-gradient(135deg,#1b3a2d,#2d5a3d);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
         <i class="fas fa-save"></i> Save to Sheet
@@ -2233,14 +2251,16 @@ setInterval(() => fetch('/api/refresh').then(() => {
 <script>
 let _editRowIndex = null;
 
-function openEditModal(rowIndex, awb, status, actual, raiseDate, closeDate, remark) {
+function openEditModal(rowIndex, awb, status, actual, raiseDate, closeDate, remark, lostStock) {
   _editRowIndex = rowIndex;
   document.getElementById('editModalAWB').textContent = 'AWB: ' + awb;
   document.getElementById('ef_reimbursement_status').value = status || '';
+  document.getElementById('ef_lost_stock').value           = lostStock || '';
   document.getElementById('ef_actual_reimbursed').value    = actual || '';
   document.getElementById('ef_case_raise_date').value      = raiseDate || '';
   document.getElementById('ef_case_close_date').value      = closeDate || '';
   document.getElementById('ef_remark').value               = remark || '';
+  document.getElementById('editTimingBar').style.display   = 'none';
   const modal = document.getElementById('editModal');
   modal.style.display = 'flex';
 }
@@ -2252,12 +2272,30 @@ function closeEditModal() {
 
 async function saveEditModal() {
   if (!_editRowIndex) return;
-  const btn = document.getElementById('editSaveBtn');
-  btn.disabled = true;
+  const btn     = document.getElementById('editSaveBtn');
+  const bar     = document.getElementById('editTimingBar');
+  const label   = document.getElementById('editTimingLabel');
+  const clock   = document.getElementById('editTimingClock');
+  const fill    = document.getElementById('editTimingFill');
+
+  btn.disabled  = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+  bar.style.display = 'block';
+  fill.style.width  = '0%';
+  label.textContent = 'Writing to Google Sheet...';
+
+  const startMs = Date.now();
+  const ticker  = setInterval(() => {
+    const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+    clock.textContent = elapsed + 's';
+    // Animate bar up to 90% while waiting
+    const pct = Math.min(90, parseFloat(elapsed) * 12);
+    fill.style.width = pct + '%';
+  }, 100);
 
   const fields = {
     reimbursement_status: document.getElementById('ef_reimbursement_status').value,
+    lost_stock:           document.getElementById('ef_lost_stock').value,
     actual_reimbursed:    document.getElementById('ef_actual_reimbursed').value,
     case_raise_date:      document.getElementById('ef_case_raise_date').value,
     case_close_date:      document.getElementById('ef_case_close_date').value,
@@ -2265,9 +2303,9 @@ async function saveEditModal() {
   };
 
   try {
-    const updates = Object.entries(fields).filter(([_, v]) => v !== '' && v !== null);
+    const updates = Object.entries(fields).filter(([_, v]) => v !== '' && v !== null && v !== undefined);
     for (const [field, value] of updates) {
-      const res = await fetch('/api/update-row', {
+      const res  = await fetch('/api/update-row', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ row_index: _editRowIndex, field, value })
@@ -2275,13 +2313,23 @@ async function saveEditModal() {
       const json = await res.json();
       if (json.status !== 'ok') throw new Error(json.message || 'Update failed');
     }
-    closeEditModal();
-    showToast('Row updated successfully in Google Sheet!', 'success');
-    setTimeout(() => { loadData(); }, 1500);
+    clearInterval(ticker);
+    const totalSec = ((Date.now() - startMs) / 1000).toFixed(1);
+    fill.style.width  = '100%';
+    fill.style.background = 'linear-gradient(90deg,#166534,#4ade80)';
+    clock.textContent = totalSec + 's';
+    label.textContent = `✅ Saved in ${totalSec}s — dashboard refreshing...`;
+    setTimeout(() => {
+      closeEditModal();
+      showToast(`Saved to Google Sheet in ${totalSec}s`, 'success');
+      loadData();
+    }, 1200);
   } catch(e) {
+    clearInterval(ticker);
+    fill.style.background = '#dc2626';
+    label.textContent = '❌ ' + e.message;
     showToast('Error: ' + e.message, 'error');
-  } finally {
-    btn.disabled = false;
+    btn.disabled  = false;
     btn.innerHTML = '<i class="fas fa-save"></i> Save to Sheet';
   }
 }
