@@ -157,7 +157,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
     period_set = set()  # (month_str, year_int)
     discrepancies = []  # individual shipment rows where lost_stock > 0
 
-    for row in values[header_idx + 1:]:
+    for row_offset, row in enumerate(values[header_idx + 1:]):
         if not row or not str(row[0]).strip():
             continue
         month = str(row[0]).strip()
@@ -244,6 +244,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
             days_open, aging_bucket = _parse_aging(case_raise_raw)
             days_to_close, is_closed, is_rejected = _parse_resolution(case_raise_raw, case_close_raw, reimb_status)
             discrepancies.append({
+                'row_index':            header_idx + 2 + row_offset,  # 1-based sheet row
                 'month':                f"{month} {year}",
                 'awb':                  str(row[4]).strip()  if len(row) > 4  else '',
                 'platform_label':       str(row[5]).strip()  if len(row) > 5  else '',

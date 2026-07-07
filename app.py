@@ -121,6 +121,49 @@ def api_refresh():
     return jsonify({'status': 'ok', 'last_updated': _cache['last_updated']})
 
 
+@app.route('/api/update-row', methods=['POST'])
+def api_update_row():
+    """Update specific cells in the AWB tracker sheet directly from the dashboard."""
+    EDITABLE_COLS = {
+        'reimbursement_status': 30,  # col AE (0-based 30)
+        'actual_reimbursed':    29,  # col AD
+        'case_raise_date':      33,  # col AH
+        'case_close_date':      34,  # col AI
+        'remark':               32,  # col AG
+    }
+    try:
+        body       = request.get_json(force=True)
+        row_index  = int(body.get('row_index', 0))   # 1-based sheet row
+        field      = body.get('field', '')
+        new_value  = str(body.get('value', '')).strip()
+
+        if not row_index or field not in EDITABLE_COLS:
+            return jsonify({'status': 'error', 'message': 'Invalid row_index or field'}), 400
+
+        col_idx     = EDITABLE_COLS[field]
+        col_letter  = chr(ord('A') + col_idx) if col_idx < 26 else 'A' + chr(ord('A') + col_idx - 26)
+        cell_range  = f"'{CONFIG['sheet_tab']}'!{col_letter}{row_index}"
+
+        from googleapiclient.discovery import build as gbuild
+        creds   = get_sheets_credentials(CF, TF)
+        service = gbuild('sheets', 'v4', credentials=creds)
+        service.spreadsheets().values().update(
+            spreadsheetId=CONFIG['sheet_id'],
+            range=cell_range,
+            valueInputOption='USER_ENTERED',
+            body={'values': [[new_value]]}
+        ).execute()
+
+        # Refresh cache so dashboard reflects change immediately
+        refresh_data()
+        print(f"[Edit] Row {row_index} col {col_letter} ({field}) → '{new_value}'")
+        return jsonify({'status': 'ok', 'cell': cell_range, 'value': new_value})
+
+    except Exception as e:
+        print(f"[Edit] Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/email-preview')
 def email_preview():
     if not _cache['data']:

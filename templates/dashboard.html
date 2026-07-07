@@ -1146,7 +1146,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
   };
 
   const tableRows = sortedDisc.map((d, idx) => `
-    <tr class="disc-row" data-ch="${d.channel}" data-awb="${d.awb.toLowerCase()}" data-month="${d.month.toLowerCase()}">
+    <tr class="disc-row" data-ch="${d.channel}" data-awb="${d.awb.toLowerCase()}" data-month="${d.month.toLowerCase()}" data-row="${d.row_index||''}" data-status="${(d.reimbursement_status||'').replace(/"/g,'&quot;')}" data-actual="${d.actual_reimbursed||0}" data-raise="${d.case_raise_date||''}" data-close="${d.case_close_date||''}" data-remark="${(d.remark||'').replace(/"/g,'&quot;')}">
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666">${d.month}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;font-size:12px">${d.awb || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.platform_label || '—'}</td>
@@ -1163,6 +1163,15 @@ function renderDiscrepancyTab(data, lastUpdated) {
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${statusBadge(d.reimbursement_status)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${agingBadge(d.aging_bucket, d.days_open, d.is_closed, d.days_to_close)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666;max-width:180px">${d.remark || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center">
+        <button onclick="openEditModal(${d.row_index||0},'${d.awb}',this.closest('tr').dataset.status,this.closest('tr').dataset.actual,this.closest('tr').dataset.raise,this.closest('tr').dataset.close,this.closest('tr').dataset.remark)"
+          title="Edit this row in Google Sheet"
+          style="background:none;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;cursor:pointer;color:#64748b;font-size:12px;transition:all 0.15s"
+          onmouseover="this.style.borderColor='#1b3a2d';this.style.color='#1b3a2d'"
+          onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#64748b'">
+          ✏️
+        </button>
+      </td>
     </tr>`).join('');
 
   const emptyRow = disc.length === 0
@@ -1252,6 +1261,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
               <th class="sortable-th" onclick="sortDisc('reimbursement_status')" style="padding:8px 10px">Reimb. Status<span class="sort-icon">${_discSortCol==='reimbursement_status'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
               <th class="sortable-th" onclick="sortDisc('days_open')" style="padding:8px 10px">Aging<span class="sort-icon">${_discSortCol==='days_open'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
               <th style="padding:8px 10px">Remark</th>
+              <th style="padding:8px 10px;text-align:center">Edit</th>
             </tr>
           </thead>
           <tbody>${tableRows}${emptyRow}${summaryRow}</tbody>
@@ -2158,6 +2168,128 @@ setInterval(() => fetch('/api/refresh').then(() => {
     if (j.data) { _rawData = j.data; _lastUpdated = j.last_updated; applyAndRender(); }
   });
 }), 20 * 60 * 1000);
+</script>
+<!-- ── Edit Row Modal ────────────────────────────────────────────────── -->
+<div id="editModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:24px;width:480px;max-width:95vw;box-shadow:0 20px 40px rgba(0,0,0,0.2)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#0f172a;font-family:'Plus Jakarta Sans',sans-serif">Edit Shipment Row</div>
+        <div id="editModalAWB" style="font-size:11px;color:#64748b;margin-top:2px"></div>
+      </div>
+      <button onclick="closeEditModal()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:18px;padding:4px">✕</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Reimbursement Status</label>
+        <select id="ef_reimbursement_status" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;background:#fff">
+          <option value="">— Select —</option>
+          <option value="In-progress">In-progress</option>
+          <option value="Reimbursed">Reimbursed</option>
+          <option value="Rejected">Rejected</option>
+          <option value="No- Discrepency">No- Discrepency</option>
+          <option value="Inventory Relocated">Inventory Relocated</option>
+          <option value="Excess receive">Excess receive</option>
+          <option value="To - picked">To - picked</option>
+          <option value="Resolved">Resolved</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Actual Reimbursed ($)</label>
+          <input id="ef_actual_reimbursed" type="number" step="0.01" min="0" placeholder="0.00"
+            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Case Raise Date</label>
+          <input id="ef_case_raise_date" type="text" placeholder="dd/mm/yyyy"
+            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Case Close Date</label>
+          <input id="ef_case_close_date" type="text" placeholder="dd/mm/yyyy"
+            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Remark</label>
+          <input id="ef_remark" type="text" placeholder="Add remark..."
+            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      <button onclick="closeEditModal()" style="padding:9px 20px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>
+      <button onclick="saveEditModal()" id="editSaveBtn" style="padding:9px 20px;border:none;border-radius:8px;background:linear-gradient(135deg,#1b3a2d,#2d5a3d);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
+        <i class="fas fa-save"></i> Save to Sheet
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _editRowIndex = null;
+
+function openEditModal(rowIndex, awb, status, actual, raiseDate, closeDate, remark) {
+  _editRowIndex = rowIndex;
+  document.getElementById('editModalAWB').textContent = 'AWB: ' + awb;
+  document.getElementById('ef_reimbursement_status').value = status || '';
+  document.getElementById('ef_actual_reimbursed').value    = actual || '';
+  document.getElementById('ef_case_raise_date').value      = raiseDate || '';
+  document.getElementById('ef_case_close_date').value      = closeDate || '';
+  document.getElementById('ef_remark').value               = remark || '';
+  const modal = document.getElementById('editModal');
+  modal.style.display = 'flex';
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').style.display = 'none';
+  _editRowIndex = null;
+}
+
+async function saveEditModal() {
+  if (!_editRowIndex) return;
+  const btn = document.getElementById('editSaveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+  const fields = {
+    reimbursement_status: document.getElementById('ef_reimbursement_status').value,
+    actual_reimbursed:    document.getElementById('ef_actual_reimbursed').value,
+    case_raise_date:      document.getElementById('ef_case_raise_date').value,
+    case_close_date:      document.getElementById('ef_case_close_date').value,
+    remark:               document.getElementById('ef_remark').value,
+  };
+
+  try {
+    const updates = Object.entries(fields).filter(([_, v]) => v !== '' && v !== null);
+    for (const [field, value] of updates) {
+      const res = await fetch('/api/update-row', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ row_index: _editRowIndex, field, value })
+      });
+      const json = await res.json();
+      if (json.status !== 'ok') throw new Error(json.message || 'Update failed');
+    }
+    closeEditModal();
+    showToast('Row updated successfully in Google Sheet!', 'success');
+    setTimeout(() => { loadData(); }, 1500);
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save"></i> Save to Sheet';
+  }
+}
+
+// Close modal on backdrop click
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEditModal();
+});
 </script>
 </body>
 </html>
