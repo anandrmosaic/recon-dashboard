@@ -5,7 +5,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES_SHEETS = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+SCOPES_SHEETS = ['https://www.googleapis.com/auth/spreadsheets']
 SCOPES_GMAIL  = ['https://www.googleapis.com/auth/gmail.send']
 SCOPES_ALL    = SCOPES_SHEETS + SCOPES_GMAIL
 
@@ -16,7 +16,7 @@ def get_sheets_credentials(credentials_file=None, token_file=None):
     if sa_key:
         info = json.loads(sa_key)
         return service_account.Credentials.from_service_account_info(
-            info, scopes=SCOPES_SHEETS
+            info, scopes=['https://www.googleapis.com/auth/spreadsheets']
         )
     # Local dev fallback: use OAuth token file
     return _oauth_creds(credentials_file, token_file)
