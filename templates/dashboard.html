@@ -2180,11 +2180,12 @@ setInterval(() => fetch('/api/refresh').then(() => {
       <button onclick="closeEditModal()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:18px;padding:4px">✕</button>
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:14px">
+
       <div>
-        <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Reimbursement Status</label>
-        <select id="ef_reimbursement_status" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;background:#fff">
-          <option value="">— Select —</option>
+        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px">Reimbursement Status</label>
+        <select id="ef_reimbursement_status" style="width:100%;margin-top:5px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;background:#fff;color:#0f172a">
+          <option value="">— Select status —</option>
           <option value="In-progress">In-progress</option>
           <option value="Reimbursed">Reimbursed</option>
           <option value="Rejected">Rejected</option>
@@ -2195,37 +2196,40 @@ setInterval(() => fetch('/api/refresh').then(() => {
           <option value="Resolved">Resolved</option>
         </select>
       </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Lost Stock (Units)</label>
+          <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px">Lost Stock (Units)</label>
           <input id="ef_lost_stock" type="number" step="1" min="0" placeholder="0"
-            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
-          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Sheet formulas recalculate automatically</div>
+            style="width:100%;margin-top:5px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Formulas recalc automatically</div>
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Actual Reimbursed ($)</label>
+          <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px">Actual Reimbursed ($)</label>
           <input id="ef_actual_reimbursed" type="number" step="0.01" min="0" placeholder="0.00"
-            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+            style="width:100%;margin-top:5px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
         </div>
       </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Case Raise Date</label>
+          <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px">Case Raise Date</label>
           <input id="ef_case_raise_date" type="text" placeholder="dd/mm/yyyy"
-            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+            style="width:100%;margin-top:5px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
         </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Case Close Date</label>
+          <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px">Case Close Date</label>
           <input id="ef_case_close_date" type="text" placeholder="dd/mm/yyyy"
-            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.6px">Remark</label>
-          <input id="ef_remark" type="text" placeholder="Add remark..."
-            style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+            style="width:100%;margin-top:5px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
         </div>
       </div>
+
+      <div>
+        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px">Remark</label>
+        <input id="ef_remark" type="text" placeholder="Add remark..."
+          style="width:100%;margin-top:5px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
+      </div>
+
     </div>
 
     <!-- Timing indicator -->
