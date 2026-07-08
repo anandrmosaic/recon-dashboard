@@ -1164,7 +1164,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${agingBadge(d.aging_bucket, d.days_open, d.is_closed, d.days_to_close)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666;max-width:180px">${d.remark || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:center">
-        <button onclick="openEditModal(${d.row_index||0},'${d.awb}',this.closest('tr').dataset.status,this.closest('tr').dataset.actual,this.closest('tr').dataset.raise,this.closest('tr').dataset.close,this.closest('tr').dataset.remark,this.closest('tr').dataset.lost)"
+        <button onclick="openEditModal('${d.awb}',this.closest('tr').dataset.status,this.closest('tr').dataset.actual,this.closest('tr').dataset.raise,this.closest('tr').dataset.close,this.closest('tr').dataset.remark,this.closest('tr').dataset.lost)"
           title="Edit this row in Google Sheet"
           style="background:none;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;cursor:pointer;color:#64748b;font-size:12px;transition:all 0.15s"
           onmouseover="this.style.borderColor='#1b3a2d';this.style.color='#1b3a2d'"
@@ -2254,9 +2254,10 @@ setInterval(() => fetch('/api/refresh').then(() => {
 
 <script>
 let _editRowIndex = null;
+let _editAWB = null;
 
-function openEditModal(rowIndex, awb, status, actual, raiseDate, closeDate, remark, lostStock) {
-  _editRowIndex = rowIndex;
+function openEditModal(awb, status, actual, raiseDate, closeDate, remark, lostStock) {
+  _editAWB = awb;
   document.getElementById('editModalAWB').textContent = 'AWB: ' + awb;
   document.getElementById('ef_reimbursement_status').value = status || '';
   document.getElementById('ef_lost_stock').value           = lostStock || '';
@@ -2275,10 +2276,11 @@ function openEditModal(rowIndex, awb, status, actual, raiseDate, closeDate, rema
 function closeEditModal() {
   document.getElementById('editModal').style.display = 'none';
   _editRowIndex = null;
+  _editAWB = null;
 }
 
 async function saveEditModal() {
-  if (!_editRowIndex) return;
+  if (!_editAWB) return;
   const btn     = document.getElementById('editSaveBtn');
   const bar     = document.getElementById('editTimingBar');
   const label   = document.getElementById('editTimingLabel');
@@ -2322,7 +2324,7 @@ async function saveEditModal() {
     const res  = await fetch('/api/update-row', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ row_index: _editRowIndex, fields: changedFields })
+      body: JSON.stringify({ awb: _editAWB, fields: changedFields })
     });
     const json = await res.json();
     if (json.status !== 'ok') throw new Error(json.message || 'Update failed');

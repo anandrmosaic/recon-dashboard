@@ -123,7 +123,7 @@ def api_refresh():
 
 @app.route('/api/update-row', methods=['POST'])
 def api_update_row():
-    """Batch-update multiple cells in one Sheets API call, then refresh once."""
+    """Find row by AWB in sheet, then batch-update changed fields."""
     EDITABLE_COLS = {
         'reimbursement_status': 30,
         'actual_reimbursed':    29,
@@ -136,28 +136,43 @@ def api_update_row():
         return chr(ord('A') + idx) if idx < 26 else 'A' + chr(ord('A') + idx - 26)
 
     try:
-        body      = request.get_json(force=True)
-        row_index = int(body.get('row_index', 0))
-        fields    = body.get('fields', {})   # {field_name: new_value, ...}
+        body   = request.get_json(force=True)
+        awb    = str(body.get('awb', '')).strip()
+        fields = body.get('fields', {})
 
-        if not row_index or not fields:
-            return jsonify({'status': 'error', 'message': 'Missing row_index or fields'}), 400
+        if not awb or not fields:
+            return jsonify({'status': 'error', 'message': 'Missing awb or fields'}), 400
 
         invalid = [f for f in fields if f not in EDITABLE_COLS]
         if invalid:
             return jsonify({'status': 'error', 'message': f'Unknown fields: {invalid}'}), 400
 
-        # Build one batchUpdate request for all changed cells
         from googleapiclient.discovery import build as gbuild
         creds   = get_sheets_credentials(CF, TF)
         service = gbuild('sheets', 'v4', credentials=creds)
 
+        # Read AWB column (col E = index 4) to find the row
+        awb_col_result = service.spreadsheets().values().get(
+            spreadsheetId=CONFIG['sheet_id'],
+            range=f"'{CONFIG['sheet_tab']}'!E1:E8000"
+        ).execute()
+        awb_col = awb_col_result.get('values', [])
+
+        row_index = None
+        for i, cell in enumerate(awb_col):
+            if cell and str(cell[0]).strip() == awb:
+                row_index = i + 1  # 1-based
+                break
+
+        if not row_index:
+            return jsonify({'status': 'error', 'message': f'AWB {awb} not found in sheet'}), 404
+
+        # Batch update all changed cells
         value_ranges = []
         for field, new_value in fields.items():
             cl = col_letter(EDITABLE_COLS[field])
-            cell_range = f"'{CONFIG['sheet_tab']}'!{cl}{row_index}"
             value_ranges.append({
-                'range': cell_range,
+                'range': f"'{CONFIG['sheet_tab']}'!{cl}{row_index}",
                 'values': [[str(new_value).strip()]]
             })
 
@@ -166,10 +181,9 @@ def api_update_row():
             body={'valueInputOption': 'USER_ENTERED', 'data': value_ranges}
         ).execute()
 
-        # Single refresh after all writes
         refresh_data()
-        print(f"[Edit] Row {row_index}: updated {list(fields.keys())}")
-        return jsonify({'status': 'ok', 'updated': list(fields.keys())})
+        print(f"[Edit] AWB {awb} (row {row_index}): updated {list(fields.keys())}")
+        return jsonify({'status': 'ok', 'row': row_index, 'updated': list(fields.keys())})
 
     except Exception as e:
         print(f"[Edit] Error: {e}")
