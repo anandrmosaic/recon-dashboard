@@ -122,17 +122,30 @@ def parse_awb_data(values, remarks=None, data_since=None):
                 return i
         return fallback
 
-    # Channel = exact "Channel" header (not "Channel Shipment Status" etc.)
-    channel_col      = col_exact('channel', fallback=34)
-    # Case Raise Date = first header containing "case raise"
-    case_raise_col   = col_contains('case raise', fallback=None)
-    case_close_col   = col_contains('case close', fallback=None)
-    # Current Status (ship partner portal) — used to exclude Abandon / RTO from shipment count
-    ship_status_col  = col_contains('ship partner portal', fallback=None)
+    # ── All columns detected by header name — immune to column insertions ──
+    channel_col      = col_exact('channel',                    fallback=36)
+    case_raise_col   = col_contains('case raise',              fallback=None)
+    case_close_col   = col_contains('case close',              fallback=None)
+    ship_status_col  = col_contains('ship partner portal',     fallback=None)
     if ship_status_col is None:
-        ship_status_col = col_contains('current status', fallback=None)
-    # Pickup Date — used for week-on-week comparison
-    pickup_date_col  = col_contains('pick up', fallback=None)
+        ship_status_col = col_contains('current status',       fallback=None)
+    pickup_date_col  = col_contains('pick up',                 fallback=None)
+    awb_col          = col_contains('shipment awb',            fallback=5)
+    platform_col     = col_contains('platform label',          fallback=6)
+    transporter_col  = col_exact('transporter',                fallback=9)
+    product_col      = col_exact('product name',               fallback=12)
+    uniware_col      = col_contains('uniware',                 fallback=13)
+    invoice_no_col   = col_contains('invoice no',              fallback=15)
+    qty_sent_col     = col_contains('qty sent',                fallback=16)
+    lost_stock_col   = col_contains('lost stock',              fallback=28)
+    expected_col     = col_contains('expected reimbursement',  fallback=29)
+    actual_col       = col_contains('actual reimbursement',    fallback=30)
+    reimb_status_col = col_exact('reimbursement status',       fallback=31)
+    remark_col       = col_exact('remark',                     fallback=33)
+
+    print(f"[Sheets] Cols — ch:{channel_col} awb:{awb_col} qty:{qty_sent_col} lost:{lost_stock_col} "
+          f"exp:{expected_col} act:{actual_col} status:{reimb_status_col} remark:{remark_col} "
+          f"raise:{case_raise_col} close:{case_close_col}")
 
     EXCLUDE_STATUSES = {'abandon', 'rto'}
 
@@ -177,16 +190,16 @@ def parse_awb_data(values, remarks=None, data_since=None):
             if (year < since_year) or (year == since_year and month_idx < since_month):
                 continue
 
-        qty_sent        = safe_float(row[15] if len(row) > 15 else 0)
-        lost_stock      = safe_float(row[27] if len(row) > 27 else 0)
-        expected        = safe_float(row[28] if len(row) > 28 else 0)
-        actual          = safe_float(row[29] if len(row) > 29 else 0)
-        channel         = str(row[channel_col]).strip() if len(row) > channel_col else ''
-        transporter     = str(row[8]).strip()  if len(row) > 8  else ''
-        platform_label  = str(row[5]).strip()  if len(row) > 5  else ''
-        product_name    = str(row[11]).strip() if len(row) > 11 else ''
-        uniware_code    = str(row[12]).strip() if len(row) > 12 else ''
-        invoice_no      = str(row[14]).strip() if len(row) > 14 else ''
+        qty_sent        = safe_float(row[qty_sent_col]   if len(row) > qty_sent_col   else 0)
+        lost_stock      = safe_float(row[lost_stock_col] if len(row) > lost_stock_col else 0)
+        expected        = safe_float(row[expected_col]   if len(row) > expected_col   else 0)
+        actual          = safe_float(row[actual_col]     if len(row) > actual_col     else 0)
+        channel         = str(row[channel_col]).strip()      if len(row) > channel_col      else ''
+        transporter     = str(row[transporter_col]).strip()  if len(row) > transporter_col  else ''
+        platform_label  = str(row[platform_col]).strip()     if len(row) > platform_col     else ''
+        product_name    = str(row[product_col]).strip()      if len(row) > product_col      else ''
+        uniware_code    = str(row[uniware_col]).strip()       if len(row) > uniware_col      else ''
+        invoice_no      = str(row[invoice_no_col]).strip()   if len(row) > invoice_no_col   else ''
 
         period_set.add((month, year))
 
@@ -240,14 +253,14 @@ def parse_awb_data(values, remarks=None, data_since=None):
                 if case_close_col is not None and len(row) > case_close_col
                 else ''
             )
-            reimb_status = str(row[30]).strip() if len(row) > 30 else ''
+            reimb_status = str(row[reimb_status_col]).strip() if len(row) > reimb_status_col else ''
             days_open, aging_bucket = _parse_aging(case_raise_raw)
             days_to_close, is_closed, is_rejected = _parse_resolution(case_raise_raw, case_close_raw, reimb_status)
             discrepancies.append({
                 'row_index':            header_idx + 2 + row_offset,  # 1-based sheet row
                 'month':                f"{month} {year}",
-                'awb':                  str(row[4]).strip()  if len(row) > 4  else '',
-                'platform_label':       str(row[5]).strip()  if len(row) > 5  else '',
+                'awb':                  str(row[awb_col]).strip()      if len(row) > awb_col      else '',
+                'platform_label':       str(row[platform_col]).strip() if len(row) > platform_col else '',
                 'transporter':          transporter,
                 'channel':              channel,
                 'qty_sent':             int(qty_sent),
@@ -256,7 +269,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
                 'actual_reimbursed':    round(actual, 2),
                 'pending':              round(expected - actual, 2),
                 'reimbursement_status': reimb_status,
-                'remark':               str(row[32]).strip() if len(row) > 32 else '',
+                'remark':               str(row[remark_col]).strip() if len(row) > remark_col else '',
                 'product_name':         product_name,
                 'uniware_code':         uniware_code,
                 'invoice_no':           invoice_no,

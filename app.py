@@ -124,16 +124,39 @@ def api_refresh():
 @app.route('/api/update-row', methods=['POST'])
 def api_update_row():
     """Find row by AWB in sheet, then batch-update changed fields."""
-    EDITABLE_COLS = {
-        'reimbursement_status': 30,
-        'actual_reimbursed':    29,
-        'lost_stock':           27,
-        'case_raise_date':      33,
-        'case_close_date':      34,
-        'remark':               32,
+    # Map field names to header search terms — dynamic, immune to column insertions
+    EDITABLE_HEADERS = {
+        'reimbursement_status': ('exact',    'Reimbursement Status'),
+        'actual_reimbursed':    ('contains', 'Actual Reimbursement'),
+        'lost_stock':           ('contains', 'Lost stock'),
+        'case_raise_date':      ('contains', 'Case Raise'),
+        'case_close_date':      ('contains', 'Case Close'),
+        'remark':               ('exact',    'Remark'),
     }
     def col_letter(idx):
         return chr(ord('A') + idx) if idx < 26 else 'A' + chr(ord('A') + idx - 26)
+
+    def find_col_idx(service, header_map):
+        """Read header row from sheet and build field→col_index mapping."""
+        result = service.spreadsheets().values().get(
+            spreadsheetId=CONFIG['sheet_id'],
+            range=f"'{CONFIG['sheet_tab']}'!A1:AQ10"
+        ).execute()
+        rows = result.get('values', [])
+        header_row = next((r for r in rows if r and str(r[0]).strip().lower() == 'month'), None)
+        if not header_row:
+            return {}
+        hdrs = [str(c).strip().lower() for c in header_row]
+        mapping = {}
+        for field, (mode, term) in header_map.items():
+            term_l = term.lower()
+            if mode == 'exact':
+                idx = next((i for i, h in enumerate(hdrs) if h == term_l), None)
+            else:
+                idx = next((i for i, h in enumerate(hdrs) if term_l in h), None)
+            if idx is not None:
+                mapping[field] = idx
+        return mapping
 
     try:
         body   = request.get_json(force=True)
@@ -143,7 +166,7 @@ def api_update_row():
         if not awb or not fields:
             return jsonify({'status': 'error', 'message': 'Missing awb or fields'}), 400
 
-        invalid = [f for f in fields if f not in EDITABLE_COLS]
+        invalid = [f for f in fields if f not in EDITABLE_HEADERS]
         if invalid:
             return jsonify({'status': 'error', 'message': f'Unknown fields: {invalid}'}), 400
 
@@ -151,26 +174,43 @@ def api_update_row():
         creds   = get_sheets_credentials(CF, TF)
         service = gbuild('sheets', 'v4', credentials=creds)
 
-        # Read AWB column (col E = index 4) to find the row
+        # Dynamically find column indices from header row
+        col_map = find_col_idx(service, EDITABLE_HEADERS)
+
+        # Find AWB row by searching the AWB column dynamically
+        # First find which column is AWB
+        hdr_result = service.spreadsheets().values().get(
+            spreadsheetId=CONFIG['sheet_id'],
+            range=f"'{CONFIG['sheet_tab']}'!A1:AQ10"
+        ).execute()
+        hdr_rows = hdr_result.get('values', [])
+        hdr = next((r for r in hdr_rows if r and str(r[0]).strip().lower() == 'month'), [])
+        hdrs_lower = [str(c).strip().lower() for c in hdr]
+        awb_col_idx = next((i for i, h in enumerate(hdrs_lower) if 'shipment awb' in h), 5)
+        awb_col_letter = col_letter(awb_col_idx)
+
         awb_col_result = service.spreadsheets().values().get(
             spreadsheetId=CONFIG['sheet_id'],
-            range=f"'{CONFIG['sheet_tab']}'!E1:E8000"
+            range=f"'{CONFIG['sheet_tab']}'!{awb_col_letter}1:{awb_col_letter}8000"
         ).execute()
-        awb_col = awb_col_result.get('values', [])
+        awb_col_vals = awb_col_result.get('values', [])
 
         row_index = None
-        for i, cell in enumerate(awb_col):
+        for i, cell in enumerate(awb_col_vals):
             if cell and str(cell[0]).strip() == awb:
-                row_index = i + 1  # 1-based
+                row_index = i + 1
                 break
 
         if not row_index:
             return jsonify({'status': 'error', 'message': f'AWB {awb} not found in sheet'}), 404
 
-        # Batch update all changed cells
+        # Batch update all changed cells using dynamic column positions
         value_ranges = []
         for field, new_value in fields.items():
-            cl = col_letter(EDITABLE_COLS[field])
+            idx = col_map.get(field)
+            if idx is None:
+                continue
+            cl = col_letter(idx)
             value_ranges.append({
                 'range': f"'{CONFIG['sheet_tab']}'!{cl}{row_index}",
                 'values': [[str(new_value).strip()]]
