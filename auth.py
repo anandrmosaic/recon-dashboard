@@ -7,7 +7,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES_SHEETS = ['https://www.googleapis.com/auth/spreadsheets']
 SCOPES_GMAIL  = ['https://www.googleapis.com/auth/gmail.send']
-SCOPES_ALL    = SCOPES_SHEETS + SCOPES_GMAIL
+SCOPES_DRIVE  = ['https://www.googleapis.com/auth/drive.file']
+SCOPES_ALL    = SCOPES_SHEETS + SCOPES_GMAIL + SCOPES_DRIVE
 
 
 def get_sheets_credentials(credentials_file=None, token_file=None):
