@@ -36,21 +36,88 @@ CF = CONFIG.get('credentials_file')
 TF = CONFIG.get('token_file')
 
 
+def merge_reconciliation(main_data, recon_data):
+    """Volume (shipped/lost/counts) stays from MAIN; recovery + discrepancies
+    + case health come from the RECON sheet (where the team reconciles)."""
+    from sheets_service import calculate_kpis
+    cd       = main_data.get('channel_data', {})
+    months   = cd.get('months', [])
+    channels = cd.get('channels', {})
+
+    # Build recon recovery lookup: (channel, month) -> {expected, actual}
+    recon_cd     = recon_data.get('channel_data', {})
+    recon_months = recon_cd.get('months', [])
+    recon_recov  = {}
+    for ch, rows in recon_cd.get('channels', {}).items():
+        for i, m in enumerate(recon_months):
+            if i < len(rows):
+                recon_recov[(ch, m)] = {
+                    'expected_reimburs': rows[i].get('expected_reimburs', 0),
+                    'actual_reimbursed': rows[i].get('actual_reimbursed', 0),
+                }
+
+    # Overlay recon recovery onto main channel_data (keep main's volume fields)
+    for ch, rows in channels.items():
+        for i, m in enumerate(months):
+            rec = recon_recov.get((ch, m), {'expected_reimburs': 0, 'actual_reimbursed': 0})
+            if i < len(rows):
+                rows[i]['expected_reimburs'] = rec['expected_reimburs']
+                rows[i]['actual_reimbursed'] = rec['actual_reimbursed']
+
+    # Recompute grand_total + totals from merged channel_data
+    grand_total = []
+    for i in range(len(months)):
+        row = {'qty_sent': 0.0, 'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0}
+        for rows in channels.values():
+            r = rows[i] if i < len(rows) else {}
+            for k in row:
+                row[k] += r.get(k, 0)
+        grand_total.append(row)
+    cd['grand_total'] = grand_total
+    cd['totals'] = {k: sum(r[k] for r in grand_total)
+                    for k in ['qty_sent', 'lost_stock', 'expected_reimburs', 'actual_reimbursed']}
+
+    main_data['kpis'] = calculate_kpis(cd)
+    # Discrepancies + case health come from the recon sheet (team's reconciliation)
+    main_data['discrepancies'] = recon_data.get('discrepancies', [])
+    return main_data
+
+
 def refresh_data():
     try:
-        creds = get_sheets_credentials(CF, TF)
-        data = get_sheet_data(creds, CONFIG['sheet_id'], CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
+        creds    = get_sheets_credentials(CF, TF)
+        MAIN_ID  = CONFIG['sheet_id']
+        RECON_ID = CONFIG.get('recon_sheet_id')
+
+        # Volume data from MAIN sheet (all shipments)
+        data = get_sheet_data(creds, MAIN_ID, CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
+
+        # Overlay reconciliation from RECON sheet (recovery + discrepancies + case health)
+        if RECON_ID:
+            try:
+                recon = get_sheet_data(creds, RECON_ID, CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
+                data = merge_reconciliation(data, recon)
+                print("[Data] Reconciliation merged from recon sheet")
+            except Exception as re:
+                print(f"[Data] Recon merge skipped (using main data): {re}")
+
+        # UPS claims + outward loss from RECON sheet (fallback to main)
+        UPS_SRC = RECON_ID or MAIN_ID
+        try:
+            data['ups_claims'] = get_ups_claims_data(creds, UPS_SRC)
+        except Exception as uc_err:
+            print(f"[Data] UPS claims from recon failed, trying main: {uc_err}")
+            try:
+                data['ups_claims'] = get_ups_claims_data(creds, MAIN_ID)
+            except Exception:
+                data['ups_claims'] = {'summary': {}, 'claims': []}
         try:
             data['outward_loss'] = get_outward_loss_data(creds, CONFIG.get('outward_loss_sheet_id', ''))
         except Exception as ol_err:
             print(f"[Data] Outward loss load failed (non-fatal): {ol_err}")
             data['outward_loss'] = {'headers': [], 'rows': []}
-        try:
-            data['ups_claims'] = get_ups_claims_data(creds, CONFIG['sheet_id'])
-        except Exception as uc_err:
-            print(f"[Data] UPS claims load failed (non-fatal): {uc_err}")
-            data['ups_claims'] = {'summary': {}, 'claims': []}
-        _cache['data'] = None   # release old data before storing new (halves peak memory)
+
+        _cache['data'] = None
         gc.collect()
         _cache['data'] = data
         _cache['last_updated'] = datetime.now().strftime('%d %b %Y, %I:%M %p IST')
