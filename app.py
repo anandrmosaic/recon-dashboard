@@ -56,13 +56,9 @@ def merge_reconciliation(main_data, recon_data):
                     'actual_reimbursed': rows[i].get('actual_reimbursed', 0),
                 }
 
-    # Overlay recon recovery onto main channel_data (keep main's volume fields)
-    for ch, rows in channels.items():
-        for i, m in enumerate(months):
-            rec = recon_recov.get((ch, m), {'expected_reimburs': 0, 'actual_reimbursed': 0})
-            if i < len(rows):
-                rows[i]['expected_reimburs'] = rec['expected_reimburs']
-                rows[i]['actual_reimbursed'] = rec['actual_reimbursed']
+    # Recovery (expected/actual) stays from MAIN sheet — it has the full history
+    # including resolved cases where sum_diff is now 0 (not in recon sheet)
+    # Only discrepancy rows (case health/aging/open cases) come from recon
 
     # Recompute grand_total + totals from merged channel_data
     grand_total = []
