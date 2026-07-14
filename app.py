@@ -44,22 +44,6 @@ def merge_reconciliation(main_data, recon_data):
     months   = cd.get('months', [])
     channels = cd.get('channels', {})
 
-    # Build recon recovery lookup: (channel, month) -> {expected, actual}
-    recon_cd     = recon_data.get('channel_data', {})
-    recon_months = recon_cd.get('months', [])
-    recon_recov  = {}
-    for ch, rows in recon_cd.get('channels', {}).items():
-        for i, m in enumerate(recon_months):
-            if i < len(rows):
-                recon_recov[(ch, m)] = {
-                    'expected_reimburs': rows[i].get('expected_reimburs', 0),
-                    'actual_reimbursed': rows[i].get('actual_reimbursed', 0),
-                }
-
-    # Recovery (expected/actual) stays from MAIN sheet — it has the full history
-    # including resolved cases where sum_diff is now 0 (not in recon sheet)
-    # Only discrepancy rows (case health/aging/open cases) come from recon
-
     # Recompute grand_total + totals from merged channel_data
     grand_total = []
     for i in range(len(months)):
@@ -74,8 +58,23 @@ def merge_reconciliation(main_data, recon_data):
                     for k in ['qty_sent', 'lost_stock', 'expected_reimburs', 'actual_reimbursed']}
 
     main_data['kpis'] = calculate_kpis(cd)
-    # Discrepancies + case health come from the recon sheet (team's reconciliation)
-    main_data['discrepancies'] = recon_data.get('discrepancies', [])
+
+    # Discrepancies come from recon sheet
+    recon_discrepancies = recon_data.get('discrepancies', [])
+
+    # Enrich with transporter + product from main sheet (recon tab has no Transporter column)
+    main_awb_map = {
+        d['awb']: d
+        for d in main_data.get('discrepancies', [])
+        if d.get('awb')
+    }
+    for d in recon_discrepancies:
+        if not d.get('transporter') and d.get('awb') in main_awb_map:
+            d['transporter'] = main_awb_map[d['awb']].get('transporter', '')
+        if not d.get('product_name') and d.get('awb') in main_awb_map:
+            d['product_name'] = main_awb_map[d['awb']].get('product_name', '')
+
+    main_data['discrepancies'] = recon_discrepancies
     return main_data
 
 
