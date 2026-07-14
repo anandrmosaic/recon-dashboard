@@ -132,7 +132,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
     pickup_date_col  = col_contains('pick up',                 fallback=None)
     awb_col          = col_contains('shipment awb',            fallback=5)
     platform_col     = col_contains('platform label',          fallback=6)
-    transporter_col  = col_exact('transporter',                fallback=9)
+    transporter_col  = col_exact('transporter',                fallback=999)
     product_col      = col_exact('product name',               fallback=12)
     uniware_col      = col_contains('uniware',                 fallback=13)
     invoice_no_col   = col_contains('invoice no',              fallback=15)
