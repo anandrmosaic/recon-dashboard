@@ -91,7 +91,8 @@ def refresh_data():
         # Overlay reconciliation from RECON sheet (recovery + discrepancies + case health)
         if RECON_ID:
             try:
-                recon = get_sheet_data(creds, RECON_ID, CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
+                recon_tracker = CONFIG.get('recon_tracker_tab', CONFIG['sheet_tab'])
+                recon = get_sheet_data(creds, RECON_ID, recon_tracker, CONFIG.get('recon_tab'), CONFIG.get('data_since'))
                 data = merge_reconciliation(data, recon)
                 print("[Data] Reconciliation merged from recon sheet")
             except Exception as re:
