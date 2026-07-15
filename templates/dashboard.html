@@ -1319,13 +1319,29 @@ function renderDashboard(data, lastUpdated) {
     Sky2C: '#6b7280', Other: '#9e9890'
   };
 
-  // ── Channel Summary table rows
+  // ── Channel Summary table rows — with per-channel lost bifurcation
+  const chLostByMonth = (chName, i) => {
+    const key = Object.keys(cd.channels || {}).find(k => k.toLowerCase().includes(chName.toLowerCase()));
+    const row = key ? ((cd.channels[key] || [])[i] || {}) : {};
+    return row.lost_stock || 0;
+  };
+  const chLostTotal = (chName) => {
+    const key = Object.keys(cd.channels || {}).find(k => k.toLowerCase().includes(chName.toLowerCase()));
+    if (!key) return 0;
+    return (cd.channels[key] || []).reduce((s, r) => s + (r.lost_stock || 0), 0);
+  };
   const channelMonthRows = months.map((m, i) => {
     const g = (cd.grand_total || [])[i] || {};
     const pend = (g.expected_reimburs || 0) - (g.actual_reimbursed || 0);
+    const lAmz = chLostByMonth('amazon', i);
+    const lTT  = chLostByMonth('tiktok', i);
+    const lSB  = chLostByMonth('shipbob', i);
     return `<tr>
       <td>${m}</td>
       <td>${formatNum(g.qty_sent)}</td>
+      <td><span class="badge-lost">${lAmz > 0 ? formatNum(lAmz) : '<span style="color:#aaa">—</span>'}</span></td>
+      <td><span class="badge-lost">${lTT  > 0 ? formatNum(lTT)  : '<span style="color:#aaa">—</span>'}</span></td>
+      <td><span class="badge-lost">${lSB  > 0 ? formatNum(lSB)  : '<span style="color:#aaa">—</span>'}</span></td>
       <td><span class="badge-lost">${formatNum(g.lost_stock)}</span></td>
       <td>${formatUSD(g.expected_reimburs)}</td>
       <td><span class="badge-recovered">${formatUSD(g.actual_reimbursed)}</span></td>
@@ -1753,12 +1769,22 @@ function renderDashboard(data, lastUpdated) {
       <div class="table-card">
         <div class="table-title"><i class="fas fa-table" style="color:var(--navy)"></i> Channel Summary</div>
         <table class="recon-table">
-          <thead><tr><th>Month</th><th>Shipped</th><th>Lost</th><th>Expected</th><th>Recovered</th><th>Pending</th></tr></thead>
+          <thead><tr>
+            <th>Month</th><th>Shipped</th>
+            <th style="color:#ef4444">Lost (AMZ)</th>
+            <th style="color:#ef4444">Lost (TT)</th>
+            <th style="color:#ef4444">Lost (SB)</th>
+            <th>Total Lost</th>
+            <th>Expected</th><th>Recovered</th><th>Pending</th>
+          </tr></thead>
           <tbody>
             ${channelMonthRows}
-            <tr>
+            <tr style="font-weight:600">
               <td>Grand Total</td>
               <td>${formatNum((cd.totals||{}).qty_sent)}</td>
+              <td><span class="badge-lost">${formatNum(chLostTotal('amazon'))}</span></td>
+              <td><span class="badge-lost">${formatNum(chLostTotal('tiktok'))}</span></td>
+              <td><span class="badge-lost">${formatNum(chLostTotal('shipbob'))}</span></td>
               <td><span class="badge-lost">${formatNum((cd.totals||{}).lost_stock)}</span></td>
               <td>${formatUSD((cd.totals||{}).expected_reimburs)}</td>
               <td><span class="badge-recovered">${formatUSD((cd.totals||{}).actual_reimbursed)}</span></td>
