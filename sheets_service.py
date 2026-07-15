@@ -499,15 +499,17 @@ def get_recon_recovery_totals(creds, sheet_id, tab_name):
 
     headers = [str(h).strip().lower() for h in header_row]
 
-    # Find Expected and Actual Reimbursement columns
-    expected_idx = next((i for i, h in enumerate(headers) if 'expected reimburs' in h), None)
-    actual_idx   = next((i for i, h in enumerate(headers) if 'actual reimburs' in h), None)
+    # Find Expected, Actual Reimbursement and Lost Stock columns
+    expected_idx  = next((i for i, h in enumerate(headers) if 'expected reimburs' in h), None)
+    actual_idx    = next((i for i, h in enumerate(headers) if 'actual reimburs'   in h), None)
+    lost_idx      = next((i for i, h in enumerate(headers) if 'lost stock'        in h), None)
 
     if expected_idx is None or actual_idx is None:
         return {}
 
     expected_total = 0.0
     actual_total   = 0.0
+    lost_total     = 0.0
     header_found   = False
 
     for row in values:
@@ -520,21 +522,23 @@ def get_recon_recovery_totals(creds, sheet_id, tab_name):
         try:
             if len(row) > expected_idx:
                 v = str(row[expected_idx]).replace(',', '').strip()
-                if v:
-                    expected_total += float(v)
-        except:
-            pass
+                if v: expected_total += float(v)
+        except: pass
         try:
             if len(row) > actual_idx:
                 v = str(row[actual_idx]).replace(',', '').strip()
-                if v:
-                    actual_total += float(v)
-        except:
-            pass
+                if v: actual_total += float(v)
+        except: pass
+        try:
+            if lost_idx is not None and len(row) > lost_idx:
+                v = str(row[lost_idx]).replace(',', '').strip()
+                if v: lost_total += float(v)
+        except: pass
 
     return {
         'expected_reimburs':  round(expected_total, 2),
         'actual_reimbursed':  round(actual_total,   2),
+        'lost_stock':         round(lost_total,     2),
     }
 
 

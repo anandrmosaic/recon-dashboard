@@ -57,13 +57,15 @@ def merge_reconciliation(main_data, recon_data, recon_recovery=None):
     cd['totals'] = {k: sum(r[k] for r in grand_total)
                     for k in ['qty_sent', 'lost_stock', 'expected_reimburs', 'actual_reimbursed']}
 
-    # Override recovery totals directly from recon sheet column sums
+    # Override recovery + lost stock totals directly from recon sheet column sums
     if recon_recovery:
         if recon_recovery.get('actual_reimbursed'):
             cd['totals']['actual_reimbursed'] = recon_recovery['actual_reimbursed']
         if recon_recovery.get('expected_reimburs'):
             cd['totals']['expected_reimburs']  = recon_recovery['expected_reimburs']
-        print(f"[Data] Recovery from recon sheet — actual: {recon_recovery.get('actual_reimbursed')} expected: {recon_recovery.get('expected_reimburs')}")
+        if recon_recovery.get('lost_stock'):
+            cd['totals']['lost_stock']         = recon_recovery['lost_stock']
+        print(f"[Data] Recon sheet totals — lost: {recon_recovery.get('lost_stock')} actual: {recon_recovery.get('actual_reimbursed')} expected: {recon_recovery.get('expected_reimburs')}")
 
     main_data['kpis'] = calculate_kpis(cd)
 
