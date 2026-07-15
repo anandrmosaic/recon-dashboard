@@ -256,8 +256,12 @@ def parse_awb_data(values, remarks=None, data_since=None):
             reimb_status = str(row[reimb_status_col]).strip() if len(row) > reimb_status_col else ''
             days_open, aging_bucket = _parse_aging(case_raise_raw)
             days_to_close, is_closed, is_rejected = _parse_resolution(case_raise_raw, case_close_raw, reimb_status)
+            # Split recovery: carrier vs channel
+            is_carrier = 'carrier' in reimb_status.lower()
+            carrier_recovered = round(actual, 2) if is_carrier else 0.0
+            channel_recovered = 0.0 if is_carrier else round(actual, 2)
             discrepancies.append({
-                'row_index':            header_idx + 2 + row_offset,  # 1-based sheet row
+                'row_index':            header_idx + 2 + row_offset,
                 'month':                f"{month} {year}",
                 'awb':                  str(row[awb_col]).strip()      if len(row) > awb_col      else '',
                 'platform_label':       str(row[platform_col]).strip() if len(row) > platform_col else '',
@@ -267,6 +271,8 @@ def parse_awb_data(values, remarks=None, data_since=None):
                 'lost_stock':           int(lost_stock),
                 'expected_reimburs':    round(expected, 2),
                 'actual_reimbursed':    round(actual, 2),
+                'carrier_recovered':    carrier_recovered,
+                'channel_recovered':    channel_recovered,
                 'pending':              round(expected - actual, 2),
                 'reimbursement_status': reimb_status,
                 'remark':               str(row[remark_col]).strip() if len(row) > remark_col else '',

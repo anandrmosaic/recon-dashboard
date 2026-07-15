@@ -1349,14 +1349,15 @@ function renderDashboard(data, lastUpdated) {
     </tr>`;
   }).join('');
 
-  // ── Transporter $ aggregation from discrepancies
+  // ── Transporter $ aggregation — split carrier vs channel recovery
   const trMoney = {};
   (data.discrepancies || []).forEach(d => {
     if (!d.transporter) return;
-    if (!trMoney[d.transporter]) trMoney[d.transporter] = { expected: 0, recovered: 0, pending: 0 };
-    trMoney[d.transporter].expected  += d.expected_reimburs || 0;
-    trMoney[d.transporter].recovered += d.actual_reimbursed || 0;
-    trMoney[d.transporter].pending   += d.pending || 0;
+    if (!trMoney[d.transporter]) trMoney[d.transporter] = { expected: 0, carrier: 0, channel: 0, pending: 0 };
+    trMoney[d.transporter].expected += d.expected_reimburs  || 0;
+    trMoney[d.transporter].carrier  += d.carrier_recovered  || 0;
+    trMoney[d.transporter].channel  += d.channel_recovered  || 0;
+    trMoney[d.transporter].pending  += d.pending            || 0;
   });
 
   // ── Transporter table rows
@@ -1365,14 +1366,23 @@ function renderDashboard(data, lastUpdated) {
     const lost    = rows.reduce((s, r) => s + (r.lost_stock || 0), 0);
     const pct = shipped > 0 ? ((lost / shipped) * 100).toFixed(2) : '0.00';
     if (shipped === 0 && lost === 0) return '';
-    const m = trMoney[name] || { expected: 0, recovered: 0, pending: 0 };
+    const m = trMoney[name] || { expected: 0, carrier: 0, channel: 0, pending: 0 };
+    const totalRecovered = m.carrier + m.channel;
+    const carrierCell = m.carrier > 0
+      ? `<span style="color:#0ea5e9;font-weight:600">${formatUSD(m.carrier)}</span>`
+      : `<span style="color:#aaa">—</span>`;
+    const channelCell = m.channel > 0
+      ? `<span class="badge-recovered">${formatUSD(m.channel)}</span>`
+      : `<span style="color:#aaa">—</span>`;
     return `<tr>
       <td>${name}</td>
       <td>${formatNum(shipped)}</td>
       <td><span class="badge-lost">${formatNum(lost)}</span></td>
       <td style="color:${lost > 0 ? 'var(--red)' : 'var(--green-val)'}">${pct}%</td>
       <td>${formatUSD(m.expected)}</td>
-      <td><span class="badge-recovered">${formatUSD(m.recovered)}</span></td>
+      <td>${carrierCell}</td>
+      <td>${channelCell}</td>
+      <td><span class="badge-recovered">${formatUSD(totalRecovered)}</span></td>
       <td><span class="badge-pending">${formatUSD(m.pending)}</span></td>
     </tr>`;
   }).join('');
@@ -1797,7 +1807,17 @@ function renderDashboard(data, lastUpdated) {
       <div class="table-card">
         <div class="table-title"><i class="fas fa-truck" style="color:var(--navy)"></i> Transporter Summary</div>
         <table class="recon-table">
-          <thead><tr><th>Transporter</th><th>Total Shipped</th><th>Total Lost</th><th>Loss %</th><th>Expected ($)</th><th>Recovered ($)</th><th>Pending ($)</th></tr></thead>
+          <thead><tr>
+            <th>Transporter</th>
+            <th>Total Shipped</th>
+            <th>Total Lost</th>
+            <th>Loss %</th>
+            <th>Expected ($)</th>
+            <th style="color:#0ea5e9">Carrier Recovery</th>
+            <th>Channel Recovery</th>
+            <th>Total Recovered</th>
+            <th>Pending ($)</th>
+          </tr></thead>
           <tbody>${transporterRows}</tbody>
         </table>
       </div>` : ''}
