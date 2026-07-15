@@ -476,6 +476,68 @@ def get_ups_claims_data(creds, sheet_id):
     }
 
 
+def get_recon_recovery_totals(creds, sheet_id, tab_name):
+    """Directly sum Expected + Actual Reimbursement columns from recon sheet.
+    Bypasses parse_awb_data to get exact totals matching what user sees in sheet."""
+    service = build('sheets', 'v4', credentials=creds)
+    result  = service.spreadsheets().values().get(
+        spreadsheetId=sheet_id,
+        range=f"'{tab_name}'!A1:AZ5000"
+    ).execute()
+    values = result.get('values', [])
+    if not values:
+        return {}
+
+    # Find header row
+    header_row = None
+    for row in values:
+        if row and str(row[0]).strip().lower() == 'month':
+            header_row = row
+            break
+    if not header_row:
+        return {}
+
+    headers = [str(h).strip().lower() for h in header_row]
+
+    # Find Expected and Actual Reimbursement columns
+    expected_idx = next((i for i, h in enumerate(headers) if 'expected reimburs' in h), None)
+    actual_idx   = next((i for i, h in enumerate(headers) if 'actual reimburs' in h), None)
+
+    if expected_idx is None or actual_idx is None:
+        return {}
+
+    expected_total = 0.0
+    actual_total   = 0.0
+    header_found   = False
+
+    for row in values:
+        if not header_found:
+            if row and str(row[0]).strip().lower() == 'month':
+                header_found = True
+            continue
+        if not row or not str(row[0]).strip():
+            continue
+        try:
+            if len(row) > expected_idx:
+                v = str(row[expected_idx]).replace(',', '').strip()
+                if v:
+                    expected_total += float(v)
+        except:
+            pass
+        try:
+            if len(row) > actual_idx:
+                v = str(row[actual_idx]).replace(',', '').strip()
+                if v:
+                    actual_total += float(v)
+        except:
+            pass
+
+    return {
+        'expected_reimburs':  round(expected_total, 2),
+        'actual_reimbursed':  round(actual_total,   2),
+    }
+
+
 def get_outward_loss_data(creds, sheet_id):
     if not sheet_id:
         return {'headers': [], 'rows': []}

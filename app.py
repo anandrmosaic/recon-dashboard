@@ -18,7 +18,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_sheet_data, get_outward_loss_data, get_ups_claims_data
+from sheets_service import get_sheet_data, get_outward_loss_data, get_ups_claims_data, get_recon_recovery_totals
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -36,7 +36,7 @@ CF = CONFIG.get('credentials_file')
 TF = CONFIG.get('token_file')
 
 
-def merge_reconciliation(main_data, recon_data):
+def merge_reconciliation(main_data, recon_data, recon_recovery=None):
     """Volume (shipped/lost/counts) stays from MAIN; recovery + discrepancies
     + case health come from the RECON sheet (where the team reconciles)."""
     from sheets_service import calculate_kpis
@@ -44,7 +44,7 @@ def merge_reconciliation(main_data, recon_data):
     months   = cd.get('months', [])
     channels = cd.get('channels', {})
 
-    # Recompute grand_total + totals from merged channel_data
+    # Recompute grand_total + totals from main sheet channel_data
     grand_total = []
     for i in range(len(months)):
         row = {'qty_sent': 0.0, 'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0}
@@ -57,11 +57,13 @@ def merge_reconciliation(main_data, recon_data):
     cd['totals'] = {k: sum(r[k] for r in grand_total)
                     for k in ['qty_sent', 'lost_stock', 'expected_reimburs', 'actual_reimbursed']}
 
-    # Override recovery totals from RECON sheet (user's curated numbers)
-    recon_totals = recon_data.get('channel_data', {}).get('totals', {})
-    if recon_totals.get('actual_reimbursed') or recon_totals.get('expected_reimburs'):
-        cd['totals']['actual_reimbursed'] = recon_totals.get('actual_reimbursed', 0)
-        cd['totals']['expected_reimburs']  = recon_totals.get('expected_reimburs',  0)
+    # Override recovery totals directly from recon sheet column sums
+    if recon_recovery:
+        if recon_recovery.get('actual_reimbursed'):
+            cd['totals']['actual_reimbursed'] = recon_recovery['actual_reimbursed']
+        if recon_recovery.get('expected_reimburs'):
+            cd['totals']['expected_reimburs']  = recon_recovery['expected_reimburs']
+        print(f"[Data] Recovery from recon sheet — actual: {recon_recovery.get('actual_reimbursed')} expected: {recon_recovery.get('expected_reimburs')}")
 
     main_data['kpis'] = calculate_kpis(cd)
 
@@ -98,7 +100,9 @@ def refresh_data():
             try:
                 recon_tracker = CONFIG.get('recon_tracker_tab', CONFIG['sheet_tab'])
                 recon = get_sheet_data(creds, RECON_ID, recon_tracker, CONFIG.get('recon_tab'), CONFIG.get('data_since'))
-                data = merge_reconciliation(data, recon)
+                # Get recovery totals directly from recon sheet columns (bypass parse_awb_data aggregation)
+                recon_recovery = get_recon_recovery_totals(creds, RECON_ID, recon_tracker)
+                data = merge_reconciliation(data, recon, recon_recovery)
                 print("[Data] Reconciliation merged from recon sheet")
             except Exception as re:
                 print(f"[Data] Recon merge skipped (using main data): {re}")
