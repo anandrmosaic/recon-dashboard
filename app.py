@@ -57,6 +57,12 @@ def merge_reconciliation(main_data, recon_data):
     cd['totals'] = {k: sum(r[k] for r in grand_total)
                     for k in ['qty_sent', 'lost_stock', 'expected_reimburs', 'actual_reimbursed']}
 
+    # Override recovery totals from RECON sheet (user's curated numbers)
+    recon_totals = recon_data.get('channel_data', {}).get('totals', {})
+    if recon_totals.get('actual_reimbursed') or recon_totals.get('expected_reimburs'):
+        cd['totals']['actual_reimbursed'] = recon_totals.get('actual_reimbursed', 0)
+        cd['totals']['expected_reimburs']  = recon_totals.get('expected_reimburs',  0)
+
     main_data['kpis'] = calculate_kpis(cd)
 
     # Discrepancies come from recon sheet
