@@ -577,7 +577,50 @@ let _filterState = { year: 'all', selectedMonths: [], availableMonths: [], chann
 let _activeTab = 'dashboard';
 let _discSortCol = null;
 let _discSortDir = 1;
-let _discView = 'active'; // 'active' | 'resolved'
+let _discView    = 'active';
+let _discFilters = { month:'', channel:'', transporter:'', reimb_status:'', ship_status:'' };
+let _discTabData = null;
+let _discTabUpdated = null;
+let _colFilterPanel = null;
+
+function setColFilter(col, val) {
+  _discFilters[col] = val;
+  const sel = document.getElementById('discFilter_' + col);
+  if (sel) sel.value = val;
+  if (_discTabData) renderDiscrepancyTab(_discTabData, _discTabUpdated);
+}
+function clearAllFilters() {
+  Object.keys(_discFilters).forEach(k => _discFilters[k] = '');
+  if (_discTabData) renderDiscrepancyTab(_discTabData, _discTabUpdated);
+}
+function showColFilter(col, vals, anchor) {
+  if (_colFilterPanel) { _colFilterPanel.remove(); _colFilterPanel = null; }
+  if (!vals || !vals.length) return;
+  const rect = anchor.getBoundingClientRect();
+  const p = document.createElement('div');
+  p.style.cssText = `position:fixed;top:${rect.bottom+2}px;left:${Math.min(rect.left,window.innerWidth-200)}px;
+    background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);
+    z-index:9999;min-width:170px;max-height:280px;overflow-y:auto;padding:4px 0`;
+  const mk = (label, val) => {
+    const d = document.createElement('div');
+    const active = _discFilters[col] === val;
+    d.innerHTML = (active ? '✓ ' : '&nbsp;&nbsp;') + (label || '(blank)');
+    d.style.cssText = `padding:8px 14px;cursor:pointer;font-size:12px;
+      font-weight:${active?700:400};color:${active?'#1a237e':'#333'};
+      background:${active?'#e8eaf6':'transparent'}`;
+    d.onmouseover = () => { if (!active) d.style.background='#f5f5f5'; };
+    d.onmouseout  = () => { if (!active) d.style.background='transparent'; };
+    d.onclick = () => { setColFilter(col, val); p.remove(); _colFilterPanel = null; };
+    p.appendChild(d);
+  };
+  mk('All', '');
+  vals.forEach(v => mk(v, v));
+  document.body.appendChild(p);
+  _colFilterPanel = p;
+  setTimeout(() => document.addEventListener('click', function h(e) {
+    if (!p.contains(e.target)) { p.remove(); _colFilterPanel = null; document.removeEventListener('click',h); }
+  }, true), 50);
+}
 
 const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTH_SHORT = {January:'Jan',February:'Feb',March:'Mar',April:'Apr',May:'May',June:'Jun',July:'Jul',August:'Aug',September:'Sep',October:'Oct',November:'Nov',December:'Dec'};
@@ -1051,6 +1094,8 @@ function renderUPSClaimsTab(data, lastUpdated) {
 }
 
 function renderDiscrepancyTab(data, lastUpdated) {
+  _discTabData    = data;
+  _discTabUpdated = lastUpdated;
   destroyCharts();
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
 
@@ -1058,9 +1103,17 @@ function renderDiscrepancyTab(data, lastUpdated) {
   const needsActionDisc = allDisc.filter(d => !d.is_closed && !d.case_raise_date);
   const inProgressDisc  = allDisc.filter(d => !d.is_closed && d.case_raise_date);
   const resolvedDisc    = allDisc.filter(d => d.is_closed);
-  const disc = _discView === 'resolved'    ? resolvedDisc
-             : _discView === 'in_progress' ? inProgressDisc
-             : needsActionDisc;
+  const baseDisc = _discView === 'resolved'    ? resolvedDisc
+                 : _discView === 'in_progress' ? inProgressDisc
+                 : needsActionDisc;
+  // Apply column filters (Options A+C)
+  const disc = baseDisc.filter(d =>
+    (!_discFilters.month        || d.month === _discFilters.month) &&
+    (!_discFilters.channel      || d.channel === _discFilters.channel) &&
+    (!_discFilters.transporter  || (d.transporter||'') === _discFilters.transporter) &&
+    (!_discFilters.reimb_status || d.reimbursement_status === _discFilters.reimb_status) &&
+    (!_discFilters.ship_status  || (d.ship_partner_status||'') === _discFilters.ship_status)
+  );
 
   // Update badge count on tab — show only needs-action count
   const badge = document.getElementById('discBadge');
@@ -1111,6 +1164,59 @@ function renderDiscrepancyTab(data, lastUpdated) {
       </div>
     </div>`;
 
+  // Unique values for column filter dropdowns
+  const uniq = (arr, key) => [...new Set(arr.map(d => d[key]||'').filter(Boolean))].sort();
+  const uMonths    = uniq(baseDisc, 'month');
+  const uChannels  = uniq(baseDisc, 'channel');
+  const uTransport = uniq(baseDisc, 'transporter');
+  const uStatuses  = uniq(baseDisc, 'reimbursement_status');
+  const uShipSt    = uniq(baseDisc, 'ship_partner_status');
+
+  // Ship partner status badge
+  const shipStatusBadge = s => {
+    if (!s) return '<span style="color:#aaa">—</span>';
+    const sl = s.toLowerCase();
+    const [bg, col] = sl.includes('receiv') ? ['#fff7ed','#c2410c']
+                    : sl.includes('deliver') ? ['#f0fdf4','#16a34a']
+                    : sl.includes('transit') ? ['#eff6ff','#2563eb']
+                    : sl.includes('close')   ? ['#f0fdf4','#16a34a']
+                    : ['#f5f5f5','#555'];
+    return `<span style="background:${bg};color:${col};border:1px solid ${col}30;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;white-space:nowrap">${s}</span>`;
+  };
+
+  const hasFilters = Object.values(_discFilters).some(v => v);
+  const mkOpts = (vals, key) => vals.map(v =>
+    `<option value="${v}" ${_discFilters[key]===v?'selected':''}>${v}</option>`).join('');
+  const selStyle = `border:1px solid #ddd;border-radius:6px;padding:4px 8px;font-size:11px;
+    background:#fff;cursor:pointer;min-width:100px`;
+
+  const filterBar = `
+    <div style="padding:8px 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+      background:#f8fafc;border-top:1px solid #e8ecf0;border-bottom:1px solid #e8ecf0">
+      <span style="font-size:11px;font-weight:700;color:#666;white-space:nowrap">
+        <i class="fas fa-filter" style="color:#1a237e"></i> FILTERS:
+      </span>
+      <select id="discFilter_month" style="${selStyle}" onchange="setColFilter('month',this.value)">
+        <option value="">All Months</option>${mkOpts(uMonths,'month')}
+      </select>
+      <select id="discFilter_channel" style="${selStyle}" onchange="setColFilter('channel',this.value)">
+        <option value="">All Channels</option>${mkOpts(uChannels,'channel')}
+      </select>
+      <select id="discFilter_transporter" style="${selStyle}" onchange="setColFilter('transporter',this.value)">
+        <option value="">All Transporters</option>${mkOpts(uTransport,'transporter')}
+      </select>
+      <select id="discFilter_reimb_status" style="${selStyle}" onchange="setColFilter('reimb_status',this.value)">
+        <option value="">All Statuses</option>${mkOpts(uStatuses,'reimb_status')}
+      </select>
+      <select id="discFilter_ship_status" style="${selStyle}" onchange="setColFilter('ship_status',this.value)">
+        <option value="">All Shipment Status</option>${mkOpts(uShipSt,'ship_status')}
+      </select>
+      ${hasFilters ? `<button onclick="clearAllFilters()" style="padding:4px 12px;border-radius:6px;
+        border:1px solid #ef4444;background:#fef2f2;color:#ef4444;font-size:11px;font-weight:600;cursor:pointer">
+        ✕ Clear All</button>
+        <span style="font-size:11px;color:#1a237e;font-weight:600">${disc.length}/${baseDisc.length} rows</span>` : ''}
+    </div>`;
+
   // Sort disc table if a sort col is active (must be before tableRows)
   const sortedDisc = _discSortCol ? [...disc].sort((a, b) => {
     let av = a[_discSortCol] ?? '', bv = b[_discSortCol] ?? '';
@@ -1148,6 +1254,8 @@ function renderDiscrepancyTab(data, lastUpdated) {
   const tableRows = sortedDisc.map((d, idx) => `
     <tr class="disc-row" data-ch="${d.channel}" data-awb="${d.awb.toLowerCase()}" data-month="${d.month.toLowerCase()}" data-row="${d.row_index||''}" data-status="${(d.reimbursement_status||'').replace(/"/g,'&quot;')}" data-actual="${d.actual_reimbursed||0}" data-lost="${d.lost_stock||0}" data-raise="${d.case_raise_date||''}" data-close="${d.case_close_date||''}" data-remark="${(d.remark||'').replace(/"/g,'&quot;')}">
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#666">${d.month}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#0369a1;font-weight:500">${d.actual_delivery_date || '<span style="color:#aaa">—</span>'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${shipStatusBadge(d.ship_partner_status)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;font-size:12px">${d.awb || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.platform_label || '—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #f0f0f0">${d.channel}</td>
@@ -1175,7 +1283,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
     </tr>`).join('');
 
   const emptyRow = disc.length === 0
-    ? `<tr><td colspan="13" style="text-align:center;padding:40px;color:#aaa">${_discView === 'resolved' ? 'No resolved shipments yet.' : _discView === 'in_progress' ? 'No cases in progress.' : 'No unactioned discrepancies — all cases have been raised! ✅'}</td></tr>`
+    ? `<tr><td colspan="19" style="text-align:center;padding:40px;color:#aaa">${_discView === 'resolved' ? 'No resolved shipments yet.' : _discView === 'in_progress' ? 'No cases in progress.' : hasFilters ? 'No rows match the current filters.' : 'No unactioned discrepancies — all cases have been raised! ✅'}</td></tr>`
     : '';
 
   const totQty      = disc.reduce((s,d) => s + (d.qty_sent||0), 0);
@@ -1186,6 +1294,8 @@ function renderDiscrepancyTab(data, lastUpdated) {
   const summaryRow  = disc.length === 0 ? '' : `
     <tr style="background:#f0f4ff;font-weight:700;border-top:2px solid #c5cae9">
       <td style="padding:8px 10px;color:#1a237e;font-size:12px" colspan="2">TOTAL (${disc.length} rows)</td>
+      <td style="padding:8px 10px"></td>
+      <td style="padding:8px 10px"></td>
       <td style="padding:8px 10px"></td>
       <td style="padding:8px 10px"></td>
       <td style="padding:8px 10px"></td>
@@ -1235,6 +1345,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
     </div>
 
     ${viewToggle}
+    ${filterBar}
 
     <div class="disc-table-wrap">
       <div class="disc-table-card">
@@ -1251,8 +1362,25 @@ function renderDiscrepancyTab(data, lastUpdated) {
         <table class="recon-table" id="discTable">
           <thead>
             <tr>
-              ${[['month','Month'],['awb','Shipment AWB'],['platform_label','IBR / Label'],['channel','Channel'],['transporter','Transporter'],['product_name','Product Name'],['uniware_code','Uniware Code'],['invoice_no','Invoice No']].map(([col,lbl]) =>
-                `<th class="sortable-th" onclick="sortDisc('${col}')" style="padding:8px 10px">${lbl}<span class="sort-icon">${_discSortCol===col?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>`).join('')}
+              ${[
+                ['month','Month','month',uMonths],
+                ['actual_delivery_date','Delivery Date',null,[]],
+                ['ship_partner_status','Shipment Status','ship_status',uShipSt],
+                ['awb','Shipment AWB',null,[]],
+                ['platform_label','IBR / Label',null,[]],
+                ['channel','Channel','channel',uChannels],
+                ['transporter','Transporter','transporter',uTransport],
+                ['product_name','Product Name',null,[]],
+                ['uniware_code','Uniware Code',null,[]],
+                ['invoice_no','Invoice No',null,[]],
+              ].map(([col,lbl,fKey,fVals]) => {
+                const isFiltered = fKey && _discFilters[fKey];
+                const filterIcon = fKey ? `<span onclick="event.stopPropagation();showColFilter('${fKey}',${JSON.stringify(fVals)},this)"
+                  style="margin-left:4px;cursor:pointer;color:${isFiltered?'#1a237e':'#aaa'};font-size:10px"
+                  title="Filter ${lbl}">▾</span>` : '';
+                return `<th class="sortable-th" onclick="sortDisc('${col}')" style="padding:8px 10px;background:${isFiltered?'#e8eaf6':''}">
+                  ${lbl}<span class="sort-icon">${_discSortCol===col?(_discSortDir===1?'▲':'▼'):'⇅'}</span>${filterIcon}</th>`;
+              }).join('')}
               <th style="padding:8px 10px;text-align:center">Qty Sent</th>
               <th class="sortable-th" onclick="sortDisc('lost_stock')" style="padding:8px 10px;text-align:center">Lost Units<span class="sort-icon">${_discSortCol==='lost_stock'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>
               <th class="sortable-th" onclick="sortDisc('expected_reimburs')" style="padding:8px 10px;text-align:center">Expected ($)<span class="sort-icon">${_discSortCol==='expected_reimburs'?(_discSortDir===1?'▲':'▼'):'⇅'}</span></th>

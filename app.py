@@ -223,11 +223,14 @@ def api_update_row():
     def col_letter(idx):
         return chr(ord('A') + idx) if idx < 26 else 'A' + chr(ord('A') + idx - 26)
 
+    RECON_ID  = CONFIG['recon_sheet_id']
+    RECON_TAB = CONFIG.get('recon_tracker_tab', 'Shipment Recon')
+
     def find_col_idx(service, header_map):
-        """Read header row from sheet and build field→col_index mapping."""
+        """Read header row from RECON sheet and build field→col_index mapping."""
         result = service.spreadsheets().values().get(
-            spreadsheetId=CONFIG['sheet_id'],
-            range=f"'{CONFIG['sheet_tab']}'!A1:AQ10"
+            spreadsheetId=RECON_ID,
+            range=f"'{RECON_TAB}'!A1:AZ10"
         ).execute()
         rows = result.get('values', [])
         header_row = next((r for r in rows if r and str(r[0]).strip().lower() == 'month'), None)
@@ -264,21 +267,20 @@ def api_update_row():
         # Dynamically find column indices from header row
         col_map = find_col_idx(service, EDITABLE_HEADERS)
 
-        # Find AWB row by searching the AWB column dynamically
-        # First find which column is AWB
+        # Find AWB column in recon sheet
         hdr_result = service.spreadsheets().values().get(
-            spreadsheetId=CONFIG['sheet_id'],
-            range=f"'{CONFIG['sheet_tab']}'!A1:AQ10"
+            spreadsheetId=RECON_ID,
+            range=f"'{RECON_TAB}'!A1:AZ10"
         ).execute()
         hdr_rows = hdr_result.get('values', [])
         hdr = next((r for r in hdr_rows if r and str(r[0]).strip().lower() == 'month'), [])
         hdrs_lower = [str(c).strip().lower() for c in hdr]
-        awb_col_idx = next((i for i, h in enumerate(hdrs_lower) if 'shipment awb' in h), 5)
+        awb_col_idx = next((i for i, h in enumerate(hdrs_lower) if 'shipment awb' in h), 4)
         awb_col_letter = col_letter(awb_col_idx)
 
         awb_col_result = service.spreadsheets().values().get(
-            spreadsheetId=CONFIG['sheet_id'],
-            range=f"'{CONFIG['sheet_tab']}'!{awb_col_letter}1:{awb_col_letter}8000"
+            spreadsheetId=RECON_ID,
+            range=f"'{RECON_TAB}'!{awb_col_letter}1:{awb_col_letter}5000"
         ).execute()
         awb_col_vals = awb_col_result.get('values', [])
 
@@ -289,9 +291,9 @@ def api_update_row():
                 break
 
         if not row_index:
-            return jsonify({'status': 'error', 'message': f'AWB {awb} not found in sheet'}), 404
+            return jsonify({'status': 'error', 'message': f'AWB {awb} not found in recon sheet'}), 404
 
-        # Batch update all changed cells using dynamic column positions
+        # Batch update changed cells in RECON sheet
         value_ranges = []
         for field, new_value in fields.items():
             idx = col_map.get(field)
@@ -299,12 +301,12 @@ def api_update_row():
                 continue
             cl = col_letter(idx)
             value_ranges.append({
-                'range': f"'{CONFIG['sheet_tab']}'!{cl}{row_index}",
+                'range': f"'{RECON_TAB}'!{cl}{row_index}",
                 'values': [[str(new_value).strip()]]
             })
 
         service.spreadsheets().values().batchUpdate(
-            spreadsheetId=CONFIG['sheet_id'],
+            spreadsheetId=RECON_ID,
             body={'valueInputOption': 'USER_ENTERED', 'data': value_ranges}
         ).execute()
 

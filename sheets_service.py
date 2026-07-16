@@ -126,10 +126,11 @@ def parse_awb_data(values, remarks=None, data_since=None):
     channel_col      = col_exact('channel',                    fallback=36)
     case_raise_col   = col_contains('case raise',              fallback=None)
     case_close_col   = col_contains('case close',              fallback=None)
-    ship_status_col  = col_contains('ship partner portal',     fallback=None)
+    ship_status_col      = col_contains('ship partner portal',  fallback=None)
     if ship_status_col is None:
-        ship_status_col = col_contains('current status',       fallback=None)
-    pickup_date_col  = col_contains('pick up',                 fallback=None)
+        ship_status_col  = col_contains('current status',      fallback=None)
+    actual_delivery_col  = col_contains('actual delivery',     fallback=None)
+    pickup_date_col      = col_contains('pick up',             fallback=None)
     awb_col          = col_contains('shipment awb',            fallback=5)
     platform_col     = col_contains('platform label',          fallback=6)
     transporter_col  = col_exact('transporter',                fallback=999)
@@ -296,6 +297,8 @@ def parse_awb_data(values, remarks=None, data_since=None):
                 'days_to_close':        days_to_close,
                 'is_closed':            is_closed,
                 'is_rejected':          is_rejected,
+                'actual_delivery_date': str(row[actual_delivery_col]).strip() if actual_delivery_col is not None and len(row) > actual_delivery_col else '',
+                'ship_partner_status':  str(row[ship_status_col]).strip()     if ship_status_col     is not None and len(row) > ship_status_col     else '',
             })
             if transporter:
                 t['lost_stock'] += lost_stock
