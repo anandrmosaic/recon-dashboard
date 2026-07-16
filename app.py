@@ -73,13 +73,26 @@ def merge_reconciliation(main_data, recon_data, recon_recovery=None):
     recon_discrepancies = recon_data.get('discrepancies', [])
 
     # Enrich transporter + product from main sheet
-    # Use full AWB→transporter map (all rows) — not just discrepancy rows
-    # This covers "Needs Action" rows that have no lost_stock/case_raise in main sheet
     main_awb_trans = main_data.get('awb_transporter', {})
     main_awb_map   = {d['awb']: d for d in main_data.get('discrepancies', []) if d.get('awb')}
+
+    def _lookup_transporter(awb_raw):
+        """Normalize AWB and try multiple forms to find transporter."""
+        if not awb_raw:
+            return ''
+        normalized = awb_raw.replace('\n', ' ').lower().strip()
+        # Try full normalized string
+        if normalized in main_awb_trans:
+            return main_awb_trans[normalized]
+        # Try each part individually (multi-part AWBs like "098-xxx KOCU-xxx")
+        for part in normalized.split():
+            if part in main_awb_trans:
+                return main_awb_trans[part]
+        return ''
+
     for d in recon_discrepancies:
         if not d.get('transporter'):
-            d['transporter'] = main_awb_trans.get(d.get('awb', ''), '')
+            d['transporter'] = _lookup_transporter(d.get('awb', ''))
         if not d.get('product_name') and d.get('awb') in main_awb_map:
             d['product_name'] = main_awb_map[d['awb']].get('product_name', '')
 

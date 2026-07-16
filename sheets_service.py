@@ -198,10 +198,15 @@ def parse_awb_data(values, remarks=None, data_since=None):
         channel         = str(row[channel_col]).strip()      if len(row) > channel_col      else ''
         transporter     = str(row[transporter_col]).strip()  if len(row) > transporter_col  else ''
         platform_label  = str(row[platform_col]).strip()     if len(row) > platform_col     else ''
-        # Build full AWB→transporter map from every row
-        _awb = str(row[awb_col]).strip() if len(row) > awb_col else ''
-        if _awb and transporter:
-            awb_transporter[_awb] = transporter
+        # Build full AWB→transporter map — normalize newlines/spaces for reliable matching
+        _awb_raw = str(row[awb_col]).strip() if len(row) > awb_col else ''
+        if _awb_raw and transporter:
+            # Store normalized key (newlines → space, lowercase, stripped)
+            for _part in _awb_raw.replace('\n', ' ').split():
+                if _part:
+                    awb_transporter[_part.lower()] = transporter
+            # Also store the full normalized string
+            awb_transporter[_awb_raw.replace('\n', ' ').lower().strip()] = transporter
         product_name    = str(row[product_col]).strip()      if len(row) > product_col      else ''
         uniware_code    = str(row[uniware_col]).strip()       if len(row) > uniware_col      else ''
         invoice_no      = str(row[invoice_no_col]).strip()   if len(row) > invoice_no_col   else ''
