@@ -72,15 +72,14 @@ def merge_reconciliation(main_data, recon_data, recon_recovery=None):
     # Discrepancies come from recon sheet
     recon_discrepancies = recon_data.get('discrepancies', [])
 
-    # Enrich with transporter + product from main sheet (recon tab has no Transporter column)
-    main_awb_map = {
-        d['awb']: d
-        for d in main_data.get('discrepancies', [])
-        if d.get('awb')
-    }
+    # Enrich transporter + product from main sheet
+    # Use full AWB→transporter map (all rows) — not just discrepancy rows
+    # This covers "Needs Action" rows that have no lost_stock/case_raise in main sheet
+    main_awb_trans = main_data.get('awb_transporter', {})
+    main_awb_map   = {d['awb']: d for d in main_data.get('discrepancies', []) if d.get('awb')}
     for d in recon_discrepancies:
-        if not d.get('transporter') and d.get('awb') in main_awb_map:
-            d['transporter'] = main_awb_map[d['awb']].get('transporter', '')
+        if not d.get('transporter'):
+            d['transporter'] = main_awb_trans.get(d.get('awb', ''), '')
         if not d.get('product_name') and d.get('awb') in main_awb_map:
             d['product_name'] = main_awb_map[d['awb']].get('product_name', '')
 

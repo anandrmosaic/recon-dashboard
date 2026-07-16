@@ -169,6 +169,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
 
     period_set = set()  # (month_str, year_int)
     discrepancies = []  # individual shipment rows where lost_stock > 0
+    awb_transporter = {}  # full AWB → transporter map for ALL rows
 
     for row_offset, row in enumerate(values[header_idx + 1:]):
         if not row or not str(row[0]).strip():
@@ -197,6 +198,10 @@ def parse_awb_data(values, remarks=None, data_since=None):
         channel         = str(row[channel_col]).strip()      if len(row) > channel_col      else ''
         transporter     = str(row[transporter_col]).strip()  if len(row) > transporter_col  else ''
         platform_label  = str(row[platform_col]).strip()     if len(row) > platform_col     else ''
+        # Build full AWB→transporter map from every row
+        _awb = str(row[awb_col]).strip() if len(row) > awb_col else ''
+        if _awb and transporter:
+            awb_transporter[_awb] = transporter
         product_name    = str(row[product_col]).strip()      if len(row) > product_col      else ''
         uniware_code    = str(row[uniware_col]).strip()       if len(row) > uniware_col      else ''
         invoice_no      = str(row[invoice_no_col]).strip()   if len(row) > invoice_no_col   else ''
@@ -355,6 +360,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
         'kpis':             calculate_kpis(channel_data),
         'discrepancies':    discrepancies,
         'weekly':           weekly,
+        'awb_transporter':  awb_transporter,
     }
 
 
