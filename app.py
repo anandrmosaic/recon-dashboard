@@ -208,6 +208,30 @@ def api_refresh():
     return jsonify({'status': 'ok', 'last_updated': _cache['last_updated']})
 
 
+@app.route('/api/debug-recon')
+def api_debug_recon():
+    """Debug: test recon sheet recovery totals directly."""
+    try:
+        creds        = get_sheets_credentials(CF, TF)
+        RECON_ID     = CONFIG.get('recon_sheet_id')
+        recon_tab    = CONFIG.get('recon_tracker_tab', 'Inward Shipment Recon')
+        recovery     = get_recon_recovery_totals(creds, RECON_ID, recon_tab)
+        # Also test get_sheet_data
+        try:
+            recon_data = get_sheet_data(creds, RECON_ID, recon_tab, None, CONFIG.get('data_since'))
+            recon_cd_totals = recon_data.get('channel_data', {}).get('totals', {})
+        except Exception as e2:
+            recon_cd_totals = {'error': str(e2)}
+        return jsonify({
+            'recon_tab':       recon_tab,
+            'recovery_direct': recovery,
+            'recon_cd_totals': recon_cd_totals,
+            'cache_actual':    (_cache.get('data') or {}).get('channel_data', {}).get('totals', {}).get('actual_reimbursed'),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
 @app.route('/api/update-row', methods=['POST'])
 def api_update_row():
     """Find row by AWB in sheet, then batch-update changed fields."""
