@@ -903,7 +903,7 @@ function applyFilters(data) {
 
   // Use backend-overridden totals (from recon sheet) when no filter is active
   const _bt = data.channel_data.totals || {};
-  const _noFilter = filteredMonths.length >= allMonths.length
+  const _noFilter = filteredMonths.length >= (data.channel_data.months || []).length
     && _filterState.channels.length >= Object.keys(allChannels).length;
   const _act  = _noFilter && _bt.actual_reimbursed  ? _bt.actual_reimbursed  : totals.actual_reimbursed;
   const _exp  = _noFilter && _bt.expected_reimburs  ? _bt.expected_reimburs  : totals.expected_reimburs;
