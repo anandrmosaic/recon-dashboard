@@ -357,6 +357,9 @@ def api_send_test_email():
     try:
         send_scheduled_email()
         return jsonify({'status': 'ok', 'message': f"Email sent to {CONFIG['email_recipients']}"})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/api/send-test-email-me')
 def api_send_test_email_me():
@@ -374,8 +377,6 @@ def api_send_test_email_me():
             CONFIG['dashboard_url']
         )
         return jsonify({'status': 'ok', 'message': 'Email sent to anand.r@mosaicwellness.in only'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
