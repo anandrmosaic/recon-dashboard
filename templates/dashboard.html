@@ -1459,6 +1459,19 @@ function renderDashboard(data, lastUpdated) {
     Sky2C: '#6b7280', Other: '#9e9890'
   };
 
+  // Recon discrepancies available in this scope for Channel Summary
+  const _filtDisc    = data.discrepancies || [];
+  const _discByMonth = {};
+  _filtDisc.forEach(d => {
+    if (!_discByMonth[d.month]) _discByMonth[d.month] = { lost:0, exp:0, act:0 };
+    _discByMonth[d.month].lost += d.lost_stock        || 0;
+    _discByMonth[d.month].exp  += d.expected_reimburs || 0;
+    _discByMonth[d.month].act  += d.actual_reimbursed || 0;
+  });
+  const _discActual   = _filtDisc.reduce((s,d) => s + (d.actual_reimbursed||0), 0);
+  const _discExpected = _filtDisc.reduce((s,d) => s + (d.expected_reimburs||0), 0);
+  const _discLost     = _filtDisc.reduce((s,d) => s + (d.lost_stock||0), 0);
+
   // ── Channel Summary table rows — with per-channel lost bifurcation
   const chLostByMonth = (chName, i) => {
     const key = Object.keys(cd.channels || {}).find(k => k.toLowerCase().includes(chName.toLowerCase()));
@@ -1470,19 +1483,9 @@ function renderDashboard(data, lastUpdated) {
     if (!key) return 0;
     return (cd.channels[key] || []).reduce((s, r) => s + (r.lost_stock || 0), 0);
   };
-  // Build per-month recovery totals from recon discrepancies (accurate source)
-  // Falls back to main sheet grand_total for months with no recon data (e.g. 2025)
-  const discByMonth = {};
-  filteredDiscrepancies.forEach(d => {
-    if (!discByMonth[d.month]) discByMonth[d.month] = { lost:0, exp:0, act:0 };
-    discByMonth[d.month].lost += d.lost_stock        || 0;
-    discByMonth[d.month].exp  += d.expected_reimburs || 0;
-    discByMonth[d.month].act  += d.actual_reimbursed || 0;
-  });
-
   const channelMonthRows = months.map((m, i) => {
     const g    = (cd.grand_total || [])[i] || {};
-    const dm   = discByMonth[m]; // recon data for this month
+    const dm   = _discByMonth[m]; // recon data for this month
     const mLost = dm ? dm.lost : (g.lost_stock        || 0);
     const mExp  = dm ? dm.exp  : (g.expected_reimburs || 0);
     const mAct  = dm ? dm.act  : (g.actual_reimbursed || 0);
@@ -1949,9 +1952,9 @@ function renderDashboard(data, lastUpdated) {
               <td><span class="badge-lost">${formatNum(chLostTotal('amazon'))}</span></td>
               <td><span class="badge-lost">${formatNum(chLostTotal('tiktok'))}</span></td>
               <td><span class="badge-lost">${formatNum(chLostTotal('shipbob'))}</span></td>
-              <td><span class="badge-lost">${formatNum(discLost)}</span></td>
-              <td>${formatUSD(discExpected)}</td>
-              <td><span class="badge-recovered">${formatUSD(discActual)}</span></td>
+              <td><span class="badge-lost">${formatNum(_discLost)}</span></td>
+              <td>${formatUSD(_discExpected)}</td>
+              <td><span class="badge-recovered">${formatUSD(_discActual)}</span></td>
               <td><span class="badge-pending">${formatUSD(kpis.pending_recovery)}</span></td>
             </tr>
           </tbody>
