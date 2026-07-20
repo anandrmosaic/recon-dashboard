@@ -901,11 +901,19 @@ function applyFilters(data) {
     actual_reimbursed: acc.actual_reimbursed + r.actual_reimbursed
   }), { qty_sent: 0, lost_stock: 0, expected_reimburs: 0, actual_reimbursed: 0 });
 
-  const pending = totals.expected_reimburs - totals.actual_reimbursed;
+  // Use backend-overridden totals (from recon sheet) when no filter is active
+  const _bt = data.channel_data.totals || {};
+  const _noFilter = filteredMonths.length >= allMonths.length
+    && _filterState.channels.length >= Object.keys(allChannels).length;
+  const _act  = _noFilter && _bt.actual_reimbursed  ? _bt.actual_reimbursed  : totals.actual_reimbursed;
+  const _exp  = _noFilter && _bt.expected_reimburs  ? _bt.expected_reimburs  : totals.expected_reimburs;
+  const _lost = _noFilter && _bt.lost_stock         ? _bt.lost_stock         : totals.lost_stock;
+
+  const pending = _exp - _act;
   const loss_rate = totals.qty_sent > 0
-    ? ((totals.lost_stock / totals.qty_sent) * 100).toFixed(2) : '0.00';
-  const recovery_rate = totals.expected_reimburs > 0
-    ? ((totals.actual_reimbursed / totals.expected_reimburs) * 100).toFixed(2) : '0.00';
+    ? ((_lost / totals.qty_sent) * 100).toFixed(2) : '0.00';
+  const recovery_rate = _exp > 0
+    ? ((_act / _exp) * 100).toFixed(2) : '0.00';
 
   // Transporters sliced by month (no channel filter — carrier data is independent)
   const filteredTransporters = {};
@@ -922,12 +930,12 @@ function applyFilters(data) {
   return {
     ...data,
     kpis: {
-      total_shipped: totals.qty_sent,
-      total_lost: totals.lost_stock,
+      total_shipped:     totals.qty_sent,
+      total_lost:        _lost,
       loss_rate,
-      expected_recovery: totals.expected_reimburs,
-      actual_recovered: totals.actual_reimbursed,
-      pending_recovery: pending,
+      expected_recovery: _exp,
+      actual_recovered:  _act,
+      pending_recovery:  pending,
       recovery_rate
     },
     channel_data: {
