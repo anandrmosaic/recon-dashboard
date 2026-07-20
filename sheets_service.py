@@ -258,7 +258,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
 
         # Include any row where a case was raised (has raise date) or has lost stock —
         # covers Excess Receive / Inventory Relocated rows that have lost_stock=0
-        if (lost_stock > 0 or case_raise_raw) and channel:
+        if (lost_stock > 0 or case_raise_raw or actual > 0) and channel:
             case_close_raw = (
                 str(row[case_close_col]).strip()
                 if case_close_col is not None and len(row) > case_close_col

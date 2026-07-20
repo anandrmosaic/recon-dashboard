@@ -914,10 +914,12 @@ function applyFilters(data) {
     _filterState.selectedMonths.includes(d.month)
   );
 
-  // Recovery KPIs from recon sheet — changes with every filter selection
-  const discActual   = filteredDiscrepancies.reduce((s,d) => s + (d.actual_reimbursed||0), 0);
-  const discExpected = filteredDiscrepancies.reduce((s,d) => s + (d.expected_reimburs||0), 0);
-  const discLost     = filteredDiscrepancies.reduce((s,d) => s + (d.lost_stock||0), 0);
+  // Recovery KPIs: use recon sheet discrepancies when available, fall back to main sheet
+  // (recon sheet only has 2026 data — 2025 falls back to main sheet automatically)
+  const hasReconData = filteredDiscrepancies.length > 0;
+  const discActual   = hasReconData ? filteredDiscrepancies.reduce((s,d) => s + (d.actual_reimbursed||0), 0) : totals.actual_reimbursed;
+  const discExpected = hasReconData ? filteredDiscrepancies.reduce((s,d) => s + (d.expected_reimburs||0), 0) : totals.expected_reimburs;
+  const discLost     = hasReconData ? filteredDiscrepancies.reduce((s,d) => s + (d.lost_stock||0), 0)        : totals.lost_stock;
 
   const pending       = discExpected - discActual;
   const loss_rate     = totals.qty_sent > 0 ? ((discLost / totals.qty_sent) * 100).toFixed(2) : '0.00';
