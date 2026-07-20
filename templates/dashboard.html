@@ -900,27 +900,28 @@ function applyFilters(data) {
     return row;
   });
 
-  // Totals
+  // Volume totals from main sheet (qty sent, shipment count)
   const totals = filteredGrandTotal.reduce((acc, r) => ({
-    qty_sent: acc.qty_sent + r.qty_sent,
-    lost_stock: acc.lost_stock + r.lost_stock,
+    qty_sent:          acc.qty_sent          + r.qty_sent,
+    lost_stock:        acc.lost_stock        + r.lost_stock,
     expected_reimburs: acc.expected_reimburs + r.expected_reimburs,
     actual_reimbursed: acc.actual_reimbursed + r.actual_reimbursed
   }), { qty_sent: 0, lost_stock: 0, expected_reimburs: 0, actual_reimbursed: 0 });
 
-  // Use backend-overridden totals (from recon sheet) when all channels are selected
-  // Recon sheet covers 2026 data — override applies for any year view as long as no channel filter
-  const _bt = data.channel_data.totals || {};
-  const _allChSelected = _filterState.channels.length >= Object.keys(allChannels).length;
-  const _act  = _allChSelected && _bt.actual_reimbursed  ? _bt.actual_reimbursed  : totals.actual_reimbursed;
-  const _exp  = _allChSelected && _bt.expected_reimburs  ? _bt.expected_reimburs  : totals.expected_reimburs;
-  const _lost = _allChSelected && _bt.lost_stock         ? _bt.lost_stock         : totals.lost_stock;
+  // Filter discrepancies from RECON sheet by selected channels + months
+  const filteredDiscrepancies = (data.discrepancies || []).filter(d =>
+    _filterState.channels.includes(d.channel) &&
+    _filterState.selectedMonths.includes(d.month)
+  );
 
-  const pending = _exp - _act;
-  const loss_rate = totals.qty_sent > 0
-    ? ((_lost / totals.qty_sent) * 100).toFixed(2) : '0.00';
-  const recovery_rate = _exp > 0
-    ? ((_act / _exp) * 100).toFixed(2) : '0.00';
+  // Recovery KPIs from recon sheet — changes with every filter selection
+  const discActual   = filteredDiscrepancies.reduce((s,d) => s + (d.actual_reimbursed||0), 0);
+  const discExpected = filteredDiscrepancies.reduce((s,d) => s + (d.expected_reimburs||0), 0);
+  const discLost     = filteredDiscrepancies.reduce((s,d) => s + (d.lost_stock||0), 0);
+
+  const pending       = discExpected - discActual;
+  const loss_rate     = totals.qty_sent > 0 ? ((discLost / totals.qty_sent) * 100).toFixed(2) : '0.00';
+  const recovery_rate = discExpected > 0    ? ((discActual / discExpected) * 100).toFixed(2)  : '0.00';
 
   // Transporters sliced by month (no channel filter — carrier data is independent)
   const filteredTransporters = {};
@@ -928,20 +929,14 @@ function applyFilters(data) {
     filteredTransporters[name] = monthIdxs.map(i => rows[i] || {});
   });
 
-  // Filter discrepancy shipments by selected channels + months
-  const filteredDiscrepancies = (data.discrepancies || []).filter(d =>
-    _filterState.channels.includes(d.channel) &&
-    _filterState.selectedMonths.includes(d.month)
-  );
-
   return {
     ...data,
     kpis: {
       total_shipped:     totals.qty_sent,
-      total_lost:        _lost,
+      total_lost:        discLost,
       loss_rate,
-      expected_recovery: _exp,
-      actual_recovered:  _act,
+      expected_recovery: discExpected,
+      actual_recovered:  discActual,
       pending_recovery:  pending,
       recovery_rate
     },
