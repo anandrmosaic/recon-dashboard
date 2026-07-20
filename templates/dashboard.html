@@ -751,6 +751,13 @@ function selectYear(year) {
   const allMonths  = _rawData?.channel_data?.months || [];
   const yearMonths = year === 'all' ? allMonths : allMonths.filter(m => m.includes(year));
   rebuildMonthDropdown(yearMonths);
+  // When selecting 'All', always show all months (don't preserve previous year's months)
+  if (year === 'all') {
+    _filterState.selectedMonths = [...yearMonths];
+    document.querySelectorAll('#monthCheckboxes input[type=checkbox]').forEach(cb => cb.checked = true);
+    const allCb = document.getElementById('monthCheckAll');
+    if (allCb) allCb.checked = true;
+  }
   updateMonthLabel();
   applyAndRender();
 }
@@ -901,13 +908,13 @@ function applyFilters(data) {
     actual_reimbursed: acc.actual_reimbursed + r.actual_reimbursed
   }), { qty_sent: 0, lost_stock: 0, expected_reimburs: 0, actual_reimbursed: 0 });
 
-  // Use backend-overridden totals (from recon sheet) when no filter is active
+  // Use backend-overridden totals (from recon sheet) when all channels are selected
+  // Recon sheet covers 2026 data — override applies for any year view as long as no channel filter
   const _bt = data.channel_data.totals || {};
-  const _noFilter = filteredMonths.length >= (data.channel_data.months || []).length
-    && _filterState.channels.length >= Object.keys(allChannels).length;
-  const _act  = _noFilter && _bt.actual_reimbursed  ? _bt.actual_reimbursed  : totals.actual_reimbursed;
-  const _exp  = _noFilter && _bt.expected_reimburs  ? _bt.expected_reimburs  : totals.expected_reimburs;
-  const _lost = _noFilter && _bt.lost_stock         ? _bt.lost_stock         : totals.lost_stock;
+  const _allChSelected = _filterState.channels.length >= Object.keys(allChannels).length;
+  const _act  = _allChSelected && _bt.actual_reimbursed  ? _bt.actual_reimbursed  : totals.actual_reimbursed;
+  const _exp  = _allChSelected && _bt.expected_reimburs  ? _bt.expected_reimburs  : totals.expected_reimburs;
+  const _lost = _allChSelected && _bt.lost_stock         ? _bt.lost_stock         : totals.lost_stock;
 
   const pending = _exp - _act;
   const loss_rate = totals.qty_sent > 0
