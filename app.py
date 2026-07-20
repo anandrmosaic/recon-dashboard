@@ -357,6 +357,25 @@ def api_send_test_email():
     try:
         send_scheduled_email()
         return jsonify({'status': 'ok', 'message': f"Email sent to {CONFIG['email_recipients']}"})
+
+@app.route('/api/send-test-email-me')
+def api_send_test_email_me():
+    """Send test email to Anand only."""
+    try:
+        if not _cache['data']:
+            refresh_data()
+        creds = get_gmail_credentials(CF, TF)
+        from email_service import send_weekly_report
+        send_weekly_report(
+            creds,
+            _cache['data'],
+            ['anand.r@mosaicwellness.in'],
+            CONFIG['email_from'],
+            CONFIG['dashboard_url']
+        )
+        return jsonify({'status': 'ok', 'message': 'Email sent to anand.r@mosaicwellness.in only'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

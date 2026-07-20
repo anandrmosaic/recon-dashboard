@@ -164,6 +164,14 @@ def build_enhanced_email_html(data, dashboard_url):
         for row in cd['grand_total']:
             for k in totals_2026:
                 totals_2026[k] += row.get(k, 0)
+        # Override recovery with recon sheet values (source of truth)
+        recon_totals = data.get('channel_data', {}).get('totals', {})
+        if recon_totals.get('actual_reimbursed'):
+            totals_2026['actual_reimbursed'] = recon_totals['actual_reimbursed']
+        if recon_totals.get('expected_reimburs'):
+            totals_2026['expected_reimburs']  = recon_totals['expected_reimburs']
+        if recon_totals.get('lost_stock'):
+            totals_2026['lost_stock']         = recon_totals['lost_stock']
         cd['totals'] = totals_2026
     else:
         cd = cd_full
