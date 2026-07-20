@@ -914,12 +914,22 @@ function applyFilters(data) {
     _filterState.selectedMonths.includes(d.month)
   );
 
-  // Recovery KPIs: use recon sheet discrepancies when available, fall back to main sheet
-  // (recon sheet only has 2026 data — 2025 falls back to main sheet automatically)
-  const hasReconData = filteredDiscrepancies.length > 0;
-  const discActual   = hasReconData ? filteredDiscrepancies.reduce((s,d) => s + (d.actual_reimbursed||0), 0) : totals.actual_reimbursed;
-  const discExpected = hasReconData ? filteredDiscrepancies.reduce((s,d) => s + (d.expected_reimburs||0), 0) : totals.expected_reimburs;
-  const discLost     = hasReconData ? filteredDiscrepancies.reduce((s,d) => s + (d.lost_stock||0), 0)        : totals.lost_stock;
+  // Recovery KPIs:
+  // 2026 months → recon sheet discrepancies (accurate)
+  // 2025 months → main sheet grand_total (recon has no 2025 data)
+  // All years   → sum both
+  let _mainAct25 = 0, _mainExp25 = 0, _mainLost25 = 0;
+  filteredMonths.forEach((m, mi) => {
+    if (m.includes('2025')) {
+      const g = filteredGrandTotal[mi] || {};
+      _mainAct25  += g.actual_reimbursed || 0;
+      _mainExp25  += g.expected_reimburs || 0;
+      _mainLost25 += g.lost_stock        || 0;
+    }
+  });
+  const discActual   = filteredDiscrepancies.reduce((s,d) => s + (d.actual_reimbursed||0), 0) + _mainAct25;
+  const discExpected = filteredDiscrepancies.reduce((s,d) => s + (d.expected_reimburs||0), 0) + _mainExp25;
+  const discLost     = filteredDiscrepancies.reduce((s,d) => s + (d.lost_stock||0), 0)        + _mainLost25;
 
   const pending       = discExpected - discActual;
   const loss_rate     = totals.qty_sent > 0 ? ((discLost / totals.qty_sent) * 100).toFixed(2) : '0.00';
@@ -1459,7 +1469,7 @@ function renderDashboard(data, lastUpdated) {
     Sky2C: '#6b7280', Other: '#9e9890'
   };
 
-  // Recon discrepancies available in this scope for Channel Summary
+  // Recon discrepancies for Channel Summary (rendering scope)
   const _filtDisc    = data.discrepancies || [];
   const _discByMonth = {};
   _filtDisc.forEach(d => {
@@ -1468,9 +1478,19 @@ function renderDashboard(data, lastUpdated) {
     _discByMonth[d.month].exp  += d.expected_reimburs || 0;
     _discByMonth[d.month].act  += d.actual_reimbursed || 0;
   });
-  const _discActual   = _filtDisc.reduce((s,d) => s + (d.actual_reimbursed||0), 0);
-  const _discExpected = _filtDisc.reduce((s,d) => s + (d.expected_reimburs||0), 0);
-  const _discLost     = _filtDisc.reduce((s,d) => s + (d.lost_stock||0), 0);
+  // Add 2025 months from main sheet into _discByMonth
+  months.forEach((m, mi) => {
+    if (m.includes('2025')) {
+      const g = (cd.grand_total || [])[mi] || {};
+      if (!_discByMonth[m]) _discByMonth[m] = { lost:0, exp:0, act:0 };
+      _discByMonth[m].lost += g.lost_stock        || 0;
+      _discByMonth[m].exp  += g.expected_reimburs || 0;
+      _discByMonth[m].act  += g.actual_reimbursed || 0;
+    }
+  });
+  const _discActual   = Object.values(_discByMonth).reduce((s,v) => s + v.act, 0);
+  const _discExpected = Object.values(_discByMonth).reduce((s,v) => s + v.exp, 0);
+  const _discLost     = Object.values(_discByMonth).reduce((s,v) => s + v.lost, 0);
 
   // ── Channel Summary table rows — with per-channel lost bifurcation
   const chLostByMonth = (chName, i) => {
