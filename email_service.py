@@ -158,13 +158,44 @@ def build_enhanced_email_html(data, dashboard_url):
             ch: [rows[i] for i in idx_2026]
             for ch, rows in cd_full.get('channels', {}).items()
         }
-        cd['totals'] = cd_full.get('totals', {})
-        # Recalculate totals for 2026 only
+        # Build recon disc lookup by month and by (month, channel)
+        disc_by_month = {}
+        disc_by_mc    = {}
+        for d in (data.get('discrepancies') or []):
+            m  = d.get('month', '')
+            ch = d.get('channel', '')
+            if not m: continue
+            if m not in disc_by_month:
+                disc_by_month[m] = {'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0}
+            disc_by_month[m]['lost_stock']        += d.get('lost_stock', 0) or 0
+            disc_by_month[m]['expected_reimburs'] += d.get('expected_reimburs', 0) or 0
+            disc_by_month[m]['actual_reimbursed'] += d.get('actual_reimbursed', 0) or 0
+            if ch:
+                k2 = (m, ch)
+                if k2 not in disc_by_mc:
+                    disc_by_mc[k2] = {'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0}
+                disc_by_mc[k2]['lost_stock']        += d.get('lost_stock', 0) or 0
+                disc_by_mc[k2]['expected_reimburs'] += d.get('expected_reimburs', 0) or 0
+                disc_by_mc[k2]['actual_reimbursed'] += d.get('actual_reimbursed', 0) or 0
+
+        # Override grand_total per month with recon data
+        for i, month in enumerate(cd['months']):
+            if month in disc_by_month and i < len(cd['grand_total']):
+                cd['grand_total'][i] = {**cd['grand_total'][i], **disc_by_month[month]}
+
+        # Override per-channel monthly data with recon data
+        for ch, rows in cd['channels'].items():
+            for i, month in enumerate(cd['months']):
+                k2 = (month, ch)
+                if k2 in disc_by_mc and i < len(rows):
+                    rows[i] = {**rows[i], **disc_by_mc[k2]}
+
+        # Recompute totals from updated grand_total
         totals_2026 = {'qty_sent': 0.0, 'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0}
         for row in cd['grand_total']:
             for k in totals_2026:
                 totals_2026[k] += row.get(k, 0)
-        # Override recovery with recon sheet values (source of truth)
+        # Override totals with recon sheet direct sums
         recon_totals = data.get('channel_data', {}).get('totals', {})
         if recon_totals.get('actual_reimbursed'):
             totals_2026['actual_reimbursed'] = recon_totals['actual_reimbursed']
