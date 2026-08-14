@@ -562,6 +562,167 @@ def get_recon_recovery_totals(creds, sheet_id, tab_name):
     }
 
 
+def get_india_us_data(creds, sheet_id):
+    """Read Inward India to US tab — classify rows by Bucket + Sub Remarks."""
+    service = build('sheets', 'v4', credentials=creds)
+    result  = service.spreadsheets().values().get(
+        spreadsheetId=sheet_id,
+        range="'Inward India to US'!A1:AZ500"
+    ).execute()
+    values = result.get('values', [])
+    if len(values) < 3:
+        return {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
+
+    # Row 2 (index 1) = headers; data starts row 3 (index 2)
+    raw_hdrs = values[1]
+    headers  = [str(h).strip().lower() for h in raw_hdrs]
+
+    def fc(kw):
+        for i, h in enumerate(headers):
+            if kw in h: return i
+        return -1
+
+    month_col       = fc('month')
+    bucket_col      = fc('bucket')
+    sub_col         = fc('sub remark')
+    awb_col         = fc('shipment awb')
+    label_col       = fc('platform label')
+    old_ibr_col     = fc('old ibr')           # parent IBR link for split shipments
+    child_col       = fc('child product')
+    qty_col         = fc('final sent qty')
+    grn_col         = fc('final grn')
+    diff_col        = fc('final diff')
+    exp_col         = fc('expected reimburs')
+    act_col         = fc('actual reimburs')
+    status_col      = fc('reimbursement status')
+    raise_col       = fc('case raise date')
+    close_col       = fc('case close date')
+    lost_col        = fc('lost stock')
+    channel_col     = fc('channel')
+    transporter_col = fc('transporter')
+
+    print(f"[IndiaUS] Cols — month:{month_col} bucket:{bucket_col} sub:{sub_col} "
+          f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col}")
+
+    kpis = {
+        'closed':              {'count': 0, 'qty': 0, 'expected': 0.0, 'actual': 0.0, 'sub': {}},
+        'intransit':           {'count': 0, 'qty': 0},
+        'short_grn_pending':   {'count': 0, 'qty': 0, 'expected': 0.0},
+        'short_grn_progress':  {'count': 0, 'qty': 0, 'expected': 0.0, 'actual': 0.0},
+    }
+    monthly = defaultdict(lambda: {
+        'closed': 0, 'intransit': 0, 'short_grn_pending': 0, 'short_grn_progress': 0,
+        'expected': 0.0, 'actual': 0.0, 'qty': 0
+    })
+    rows = []
+
+    def g(row, idx):
+        return row[idx] if idx >= 0 and len(row) > idx else ''
+
+    for i, row in enumerate(values[2:]):
+        if not row: continue
+        month = str(g(row, month_col)).strip()
+        if month not in MONTH_ORDER: continue
+
+        bucket  = str(g(row, bucket_col)).strip()
+        sub     = str(g(row, sub_col)).strip()
+        exp     = safe_float(g(row, exp_col))
+        act     = safe_float(g(row, act_col))
+        qty     = safe_float(g(row, qty_col))
+        bl      = bucket.lower()
+        sl      = sub.lower()
+
+        # ── Classify ──────────────────────────────────────────────────────────
+        if bl == 'closed':
+            kpis['closed']['count']    += 1
+            kpis['closed']['qty']      += qty
+            kpis['closed']['expected'] += exp
+            kpis['closed']['actual']   += act
+            kpis['closed']['sub'][sub]  = kpis['closed']['sub'].get(sub, 0) + 1
+            monthly[month]['closed']   += 1
+            bucket_key = 'closed'
+
+        elif bl == 'intransit':
+            kpis['intransit']['count'] += 1
+            kpis['intransit']['qty']   += qty
+            monthly[month]['intransit'] += 1
+            bucket_key = 'intransit'
+
+        elif bl == 'short grn':
+            if 'claim raised but not received' in sl:
+                kpis['short_grn_progress']['count']    += 1
+                kpis['short_grn_progress']['qty']      += qty
+                kpis['short_grn_progress']['expected'] += exp
+                kpis['short_grn_progress']['actual']   += act
+                monthly[month]['short_grn_progress']   += 1
+                bucket_key = 'short_grn_progress'
+            elif 'pending qty inwarded against new ibr' in sl:
+                # Waiting for child IBRs to cover the shortfall — distinct from plain pending
+                kpis['short_grn_pending']['count']    += 1
+                kpis['short_grn_pending']['qty']      += qty
+                kpis['short_grn_pending']['expected'] += exp
+                monthly[month]['short_grn_pending']   += 1
+                bucket_key = 'short_grn_awaiting_ibr'  # tagged separately for UI
+            else:  # Pending to claim
+                kpis['short_grn_pending']['count']    += 1
+                kpis['short_grn_pending']['qty']      += qty
+                kpis['short_grn_pending']['expected'] += exp
+                monthly[month]['short_grn_pending']   += 1
+                bucket_key = 'short_grn_pending'
+        else:
+            bucket_key = 'other'
+
+        monthly[month]['expected'] += exp
+        monthly[month]['actual']   += act
+        monthly[month]['qty']      += qty
+
+        old_ibr = str(g(row, old_ibr_col)).strip()
+        rows.append({
+            'row_index':    i + 3,
+            'month':        month,
+            'awb':          str(g(row, awb_col)).strip(),
+            'label':        str(g(row, label_col)).strip(),
+            'old_ibr':      old_ibr,                           # parent IBR (child rows only)
+            'product':      str(g(row, child_col)).strip()[:50],
+            'qty':          int(qty),
+            'grn':          int(safe_float(g(row, grn_col))),
+            'diff':         int(safe_float(g(row, diff_col))),
+            'channel':      str(g(row, channel_col)).strip(),
+            'transporter':  str(g(row, transporter_col)).strip(),
+            'status':       str(g(row, status_col)).strip(),
+            'case_raise_date': str(g(row, raise_col)).strip(),
+            'case_close_date': str(g(row, close_col)).strip(),
+            'lost_stock':   int(safe_float(g(row, lost_col))),
+            'expected':     round(exp, 2),
+            'actual':       round(act, 2),
+            'pending':      round(max(0, exp - act), 2),
+            'bucket':       bucket,
+            'sub_remark':   sub,
+            'bucket_key':   bucket_key,
+        })
+
+    months_present = sorted(
+        {r['month'] for r in rows if r['month'] in MONTH_ORDER},
+        key=lambda x: MONTH_ORDER.index(x)
+    )
+
+    # Round kpi floats
+    for k in ['closed', 'short_grn_pending', 'short_grn_progress']:
+        for f in ['expected', 'actual']:
+            if f in kpis[k]:
+                kpis[k][f] = round(kpis[k][f], 2)
+
+    print(f"[IndiaUS] Closed:{kpis['closed']['count']} Intransit:{kpis['intransit']['count']} "
+          f"Pending:{kpis['short_grn_pending']['count']} InProgress:{kpis['short_grn_progress']['count']}")
+
+    return {
+        'kpis':    kpis,
+        'rows':    rows,
+        'monthly': {m: dict(v) for m, v in monthly.items()},
+        'months':  months_present,
+    }
+
+
 def get_outward_loss_data(creds, sheet_id):
     if not sheet_id:
         return {'headers': [], 'rows': []}

@@ -559,6 +559,10 @@
     <i class="fas fa-shipping-fast"></i> UPS Claims
     <span id="upsBadge" style="background:#e65100;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
+  <button class="tab-btn" data-tab="india_us" onclick="switchTab('india_us')">
+    <i class="fas fa-plane-departure"></i> India → US
+    <span id="iusBadge" style="background:#1565c0;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
+  </button>
 </div>
 
 <!-- Main Content -->
@@ -1000,12 +1004,262 @@ function applyAndRender() {
     renderDiscrepancyTab(filtered, _lastUpdated);
   } else if (_activeTab === 'ups_claims') {
     renderUPSClaimsTab(filtered, _lastUpdated);
+  } else if (_activeTab === 'india_us') {
+    renderIndiaUSTab(_rawData, _lastUpdated);
   } else {
     renderDashboard(filtered, _lastUpdated);
   }
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
+
+// ── India → US Tab ─────────────────────────────────────────────────────────
+let _iusFilter = { month: '', bucket: '', channel: '' };
+
+function renderIndiaUSTab(data, lastUpdated) {
+  destroyCharts();
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  const ius     = (data.india_us) || {};
+  const kpis    = ius.kpis    || {};
+  const rows    = ius.rows    || [];
+  const monthly = ius.monthly || {};
+  const months  = ius.months  || [];
+
+  const closed   = kpis.closed             || {};
+  const transit  = kpis.intransit          || {};
+  const pending  = kpis.short_grn_pending  || {};
+  const progress = kpis.short_grn_progress || {};
+
+  // Update badge
+  const actionNeeded = (pending.count || 0) + (progress.count || 0);
+  const badge = document.getElementById('iusBadge');
+  if (badge) { badge.textContent = actionNeeded; badge.style.display = actionNeeded > 0 ? 'inline' : 'none'; }
+
+  // Sub-bucket breakdown for closed
+  const closedSub = closed.sub || {};
+  const subRows = Object.entries(closedSub).sort((a,b) => b[1]-a[1])
+    .map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:11px">
+      <span style="color:#444">${k}</span><span style="font-weight:600">${v}</span></div>`).join('');
+
+  // Monthly table
+  const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const sortedMonths = months.slice().sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+  const monthlyRows = sortedMonths.map(m => {
+    const mv = monthly[m] || {};
+    return `<tr>
+      <td style="font-weight:600">${m}</td>
+      <td style="color:#2e7d32;text-align:center">${mv.closed||0}</td>
+      <td style="color:#0277bd;text-align:center">${mv.intransit||0}</td>
+      <td style="color:#c62828;text-align:center">${mv.short_grn_pending||0}</td>
+      <td style="color:#e65100;text-align:center">${mv.short_grn_progress||0}</td>
+      <td style="text-align:right">${formatUSD(mv.expected||0)}</td>
+      <td style="text-align:right;color:#2e7d32">${formatUSD(mv.actual||0)}</td>
+    </tr>`;
+  }).join('');
+
+  // Filter unique values for dropdowns
+  const uMonths   = [...new Set(rows.map(r => r.month))].filter(Boolean).sort((a,b) => MONTH_ORDER.indexOf(a)-MONTH_ORDER.indexOf(b));
+  const uChannels = [...new Set(rows.map(r => r.channel))].filter(Boolean).sort();
+  const uBuckets  = [...new Set(rows.map(r => r.bucket))].filter(Boolean).sort();
+
+  const ddOpts = (arr, key) => `<option value="">All</option>` +
+    arr.map(v => `<option value="${v}" ${_iusFilter[key]===v?'selected':''}>${v}</option>`).join('');
+
+  // Filter rows
+  const filtered = rows.filter(r =>
+    (!_iusFilter.month   || r.month   === _iusFilter.month) &&
+    (!_iusFilter.bucket  || r.bucket  === _iusFilter.bucket) &&
+    (!_iusFilter.channel || r.channel === _iusFilter.channel)
+  );
+
+  // Detail table rows
+  const BUCKET_COLORS = {
+    'Closed':    '#2e7d32',
+    'Intransit': '#0277bd',
+    'Short GRN': '#c62828',
+  };
+  const SUB_COLORS = {
+    'Fully Received':                              '#4caf50',
+    'Claim raised and Received':                   '#1b5e20',
+    'Excess Received':                             '#81c784',
+    'Damage received':                             '#78909c',
+    'New IBR/WRO-Received against old IBR/WRO':   '#26a69a',
+    'Pending qty inwarded against new IBR/WRO':    '#ffa726',
+    'Intransit':                                   '#1565c0',
+    'Pending to claim':                            '#c62828',
+    'Claim raised but not received':               '#e65100',
+  };
+
+  // Build parent→children map for IBR split shipments
+  const childrenOf = {};  // parent label → [child labels]
+  rows.forEach(r => {
+    if (r.old_ibr) {
+      if (!childrenOf[r.old_ibr]) childrenOf[r.old_ibr] = [];
+      childrenOf[r.old_ibr].push(r.label);
+    }
+  });
+
+  const detailRows = filtered.map(r => {
+    const bc = BUCKET_COLORS[r.bucket] || '#666';
+    const sc = SUB_COLORS[r.sub_remark] || '#555';
+    // Parent IBR split indicator
+    const children = childrenOf[r.label] || [];
+    const parentTag = children.length > 0
+      ? `<div style="font-size:9px;color:#26a69a;margin-top:2px">↳ ${children.length} child IBR${children.length>1?'s':''}</div>`
+      : '';
+    const childTag = r.old_ibr
+      ? `<div style="font-size:9px;color:#ffa726;margin-top:2px">← Parent: ${r.old_ibr.slice(-8)}</div>`
+      : '';
+    // Qty display: child rows have qty=0, show GRN instead
+    const qtyDisplay = r.qty > 0 ? r.qty : (r.grn > 0 ? `+${r.grn} GRN` : '—');
+    // Diff display
+    const diffDisplay = r.diff !== 0
+      ? `<span style="color:${r.diff>0?'#c62828':'#2e7d32'};font-size:10px">${r.diff>0?'−'+r.diff:'+'+Math.abs(r.diff)}</span>`
+      : '';
+    // Awaiting IBR tag
+    const awaitingTag = r.bucket_key === 'short_grn_awaiting_ibr'
+      ? `<span style="background:#fff3e0;color:#e65100;padding:1px 5px;border-radius:4px;font-size:9px;margin-left:4px">Awaiting IBR</span>`
+      : '';
+    return `<tr>
+      <td style="font-weight:600">${r.month}</td>
+      <td><span style="background:${bc};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;white-space:nowrap">${r.bucket}</span></td>
+      <td><span style="background:${sc}22;color:${sc};padding:2px 7px;border-radius:8px;font-size:10px">${r.sub_remark}</span>${awaitingTag}</td>
+      <td style="font-size:11px;color:#555">${r.awb||'—'}</td>
+      <td style="font-size:10px">${r.label||'—'}${parentTag}${childTag}</td>
+      <td style="font-size:11px;text-align:left">${r.product||'—'}</td>
+      <td style="text-align:center">${qtyDisplay} ${diffDisplay}</td>
+      <td style="text-align:center">${r.channel||'—'}</td>
+      <td style="font-size:11px;color:#888">${r.case_raise_date||'—'}</td>
+      <td style="text-align:right">${r.expected?formatUSD(r.expected):'—'}</td>
+      <td style="text-align:right;color:#2e7d32">${r.actual?formatUSD(r.actual):'—'}</td>
+      <td style="text-align:right;color:#c62828">${r.pending?formatUSD(r.pending):'—'}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="12" style="text-align:center;padding:30px;color:#888">No rows</td></tr>`;
+
+  document.getElementById('mainContent').innerHTML = `
+  <div style="padding:20px">
+
+    <!-- KPI Cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #2e7d32;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Closed</div>
+        <div style="font-size:32px;font-weight:700;color:#2e7d32">${closed.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">shipments fully actioned</div>
+        <div style="margin-top:10px;border-top:1px solid #f0f0f0;padding-top:10px">${subRows}</div>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #0277bd;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🚚 Intransit</div>
+        <div style="font-size:32px;font-weight:700;color:#0277bd">${transit.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">shipments en route</div>
+        <div style="font-size:11px;color:#888;margin-top:8px">${(transit.qty||0).toLocaleString()} units in transit</div>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #c62828;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔴 Pending to Claim</div>
+        <div style="font-size:32px;font-weight:700;color:#c62828">${pending.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">no case raised yet</div>
+        <div style="font-size:12px;font-weight:600;color:#c62828;margin-top:8px">${formatUSD(pending.expected||0)} at risk</div>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🟡 Claim in Progress</div>
+        <div style="font-size:32px;font-weight:700;color:#e65100">${progress.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">cases raised, awaiting settlement</div>
+        <div style="font-size:12px;font-weight:600;color:#e65100;margin-top:8px">${formatUSD(progress.expected||0)} expected · ${formatUSD(progress.actual||0)} received</div>
+      </div>
+    </div>
+
+    <!-- Monthly Breakdown + Filters row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+
+      <!-- Monthly table -->
+      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Monthly Breakdown</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#f5f5f5">
+            <th style="text-align:left;padding:6px 8px">Month</th>
+            <th style="text-align:center;padding:6px 8px;color:#2e7d32">Closed</th>
+            <th style="text-align:center;padding:6px 8px;color:#0277bd">Intransit</th>
+            <th style="text-align:center;padding:6px 8px;color:#c62828">Pending</th>
+            <th style="text-align:center;padding:6px 8px;color:#e65100">In Prog.</th>
+            <th style="text-align:right;padding:6px 8px">Expected</th>
+            <th style="text-align:right;padding:6px 8px;color:#2e7d32">Recovered</th>
+          </tr></thead>
+          <tbody>${monthlyRows||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#888">No data</td></tr>'}</tbody>
+        </table>
+      </div>
+
+      <!-- Summary stats -->
+      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Overall Summary</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="background:#f9fbe7;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:22px;font-weight:700;color:#558b2f">${((closed.count||0)/((rows.length||1))*100).toFixed(1)}%</div>
+            <div style="font-size:11px;color:#666">Close Rate</div>
+          </div>
+          <div style="background:#fce4ec;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:22px;font-weight:700;color:#c62828">${((pending.count||0)+(progress.count||0))}</div>
+            <div style="font-size:11px;color:#666">Action Required</div>
+          </div>
+          <div style="background:#e8f5e9;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;color:#2e7d32">${formatUSD(closed.actual||0)}</div>
+            <div style="font-size:11px;color:#666">Total Recovered</div>
+          </div>
+          <div style="background:#fff3e0;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;color:#e65100">${formatUSD((pending.expected||0)+(progress.expected||0))}</div>
+            <div style="font-size:11px;color:#666">Total at Risk</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:#888;border-top:1px solid #f0f0f0;padding-top:10px">
+          Total rows: ${rows.length} &nbsp;|&nbsp; Filtered: ${filtered.length}
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail Table -->
+    <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="font-weight:700;font-size:13px;color:#1b3a2d">Shipment Detail</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select onchange="_iusFilter.month=this.value;renderIndiaUSTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+            ${ddOpts(uMonths,'month')}
+          </select>
+          <select onchange="_iusFilter.bucket=this.value;renderIndiaUSTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+            ${ddOpts(uBuckets,'bucket')}
+          </select>
+          <select onchange="_iusFilter.channel=this.value;renderIndiaUSTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+            ${ddOpts(uChannels,'channel')}
+          </select>
+          <button onclick="_iusFilter={month:'',bucket:'',channel:''};renderIndiaUSTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#f5f5f5">
+            Clear
+          </button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#1b3a2d;color:#fff">
+            <th style="padding:8px 10px;text-align:left">Month</th>
+            <th style="padding:8px 10px;text-align:left">Bucket</th>
+            <th style="padding:8px 10px;text-align:left">Sub Remark</th>
+            <th style="padding:8px 10px;text-align:left">AWB</th>
+            <th style="padding:8px 10px;text-align:left">Label</th>
+            <th style="padding:8px 10px;text-align:left">Product</th>
+            <th style="padding:8px 10px;text-align:center">Qty</th>
+            <th style="padding:8px 10px;text-align:center">Channel</th>
+            <th style="padding:8px 10px;text-align:left">Case Raise</th>
+            <th style="padding:8px 10px;text-align:right">Expected</th>
+            <th style="padding:8px 10px;text-align:right">Recovered</th>
+            <th style="padding:8px 10px;text-align:right">Pending</th>
+          </tr></thead>
+          <tbody>${detailRows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
 
 function renderUPSClaimsTab(data, lastUpdated) {
   destroyCharts();
@@ -2340,6 +2594,11 @@ async function loadData() {
       const total = (_rawData.discrepancies || []).length;
       const badge = document.getElementById('discBadge');
       if (badge) { badge.textContent = total; badge.style.display = total > 0 ? 'inline' : 'none'; }
+      // India US action needed badge
+      const iusKpis = (_rawData.india_us || {}).kpis || {};
+      const iusAction = ((iusKpis.short_grn_pending||{}).count||0) + ((iusKpis.short_grn_progress||{}).count||0);
+      const iusBadge = document.getElementById('iusBadge');
+      if (iusBadge) { iusBadge.textContent = iusAction; iusBadge.style.display = iusAction > 0 ? 'inline' : 'none'; }
       applyAndRender();
     } else {
       document.getElementById('mainContent').innerHTML =

@@ -18,7 +18,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_sheet_data, get_outward_loss_data, get_ups_claims_data, get_recon_recovery_totals
+from sheets_service import get_sheet_data, get_outward_loss_data, get_ups_claims_data, get_recon_recovery_totals, get_india_us_data
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -136,6 +136,15 @@ def refresh_data():
         except Exception as ol_err:
             print(f"[Data] Outward loss load failed (non-fatal): {ol_err}")
             data['outward_loss'] = {'headers': [], 'rows': []}
+
+        # India to US tab — bucket-based view
+        if RECON_ID:
+            try:
+                data['india_us'] = get_india_us_data(creds, RECON_ID)
+                print(f"[Data] India→US loaded: {len(data['india_us'].get('rows', []))} rows")
+            except Exception as iu_err:
+                print(f"[Data] India→US load failed (non-fatal): {iu_err}")
+                data['india_us'] = {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
 
         _cache['data'] = None
         gc.collect()
