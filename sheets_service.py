@@ -567,7 +567,7 @@ def get_us2us_data(creds, sheet_id):
     service = build('sheets', 'v4', credentials=creds)
     result  = service.spreadsheets().values().get(
         spreadsheetId=sheet_id,
-        range="'Internal US 2 US'!A1:AZ200"
+        range="'Internal US 2 US'!A1:AZ1000"
     ).execute()
     values = result.get('values', [])
     if len(values) < 4:
@@ -611,6 +611,11 @@ def get_us2us_data(creds, sheet_id):
         'pending':      {'count': 0, 'qty': 0, 'expected': 0.0},
         'intransit':    {'count': 0, 'qty': 0},
     }
+    # Unique From-Label sets per bucket (col G) — same label can span multiple SKU rows
+    _seen_us = {
+        'closed': set(), 'in_progress': set(), 'pending': set(), 'intransit': set(),
+    }
+    _monthly_seen_us = defaultdict(lambda: defaultdict(set))  # month -> bucket_key -> labels
     monthly = defaultdict(lambda: {
         'closed': 0, 'in_progress': 0, 'pending': 0, 'intransit': 0,
         'expected': 0.0, 'recovered': 0.0, 'qty': 0
@@ -634,32 +639,34 @@ def get_us2us_data(creds, sheet_id):
         qty       = safe_float(g(row, qty_col))
         diff      = safe_float(g(row, diff_col))
 
+        from_label = str(g(row, from_lbl_col)).strip()
+
         # ── Classify ──────────────────────────────────────────────────────────
         if 'closed' in bl or 'resolved' in bl or 'received' in bl:
-            kpis['closed']['count']     += 1
+            _seen_us['closed'].add(from_label)
+            _monthly_seen_us[month]['closed'].add(from_label)
             kpis['closed']['qty']       += qty
             kpis['closed']['expected']  += exp
             kpis['closed']['recovered'] += act
             kpis['closed']['sub'][subbucket] = kpis['closed']['sub'].get(subbucket, 0) + 1
-            monthly[month]['closed']    += 1
             bucket_key = 'closed'
         elif 'transit' in bl or 'transit' in sl:
-            kpis['intransit']['count'] += 1
+            _seen_us['intransit'].add(from_label)
+            _monthly_seen_us[month]['intransit'].add(from_label)
             kpis['intransit']['qty']   += qty
-            monthly[month]['intransit'] += 1
             bucket_key = 'intransit'
         elif 'progress' in bl or 'progress' in sl or 'raised' in sl:
-            kpis['in_progress']['count']     += 1
+            _seen_us['in_progress'].add(from_label)
+            _monthly_seen_us[month]['in_progress'].add(from_label)
             kpis['in_progress']['qty']       += qty
             kpis['in_progress']['expected']  += exp
             kpis['in_progress']['recovered'] += act
-            monthly[month]['in_progress']    += 1
             bucket_key = 'in_progress'
         elif diff != 0 or exp > 0:
-            kpis['pending']['count']    += 1
+            _seen_us['pending'].add(from_label)
+            _monthly_seen_us[month]['pending'].add(from_label)
             kpis['pending']['qty']      += qty
             kpis['pending']['expected'] += exp
-            monthly[month]['pending']   += 1
             bucket_key = 'pending'
         else:
             bucket_key = 'other'
@@ -673,7 +680,7 @@ def get_us2us_data(creds, sheet_id):
             'month':        month,
             'from_channel': str(g(row, from_ch_col)).strip(),
             'to_channel':   str(g(row, to_ch_col)).strip(),
-            'from_label':   str(g(row, from_lbl_col)).strip(),
+            'from_label':   from_label,
             'to_label':     str(g(row, to_lbl_col)).strip(),
             'sku':          str(g(row, sku_col)).strip()[:40],
             'qty':          int(qty),
@@ -696,6 +703,16 @@ def get_us2us_data(creds, sheet_id):
         {r['month'] for r in rows if r['month'] in MONTH_ORDER},
         key=lambda x: MONTH_ORDER.index(x)
     )
+
+    # Set unique From-Label counts per bucket (deduplicates same label across multiple SKU rows)
+    for bk in ['closed', 'intransit', 'in_progress', 'pending']:
+        kpis[bk]['count'] = len(_seen_us[bk])
+
+    # Back-fill monthly counts with unique label counts
+    for m, bk_map in _monthly_seen_us.items():
+        for bk, labels in bk_map.items():
+            monthly[m][bk] = len(labels)
+
     for k in ['closed', 'in_progress', 'pending']:
         for f in ['expected', 'recovered']:
             if f in kpis[k]:
@@ -717,7 +734,7 @@ def get_india_us_data(creds, sheet_id):
     service = build('sheets', 'v4', credentials=creds)
     result  = service.spreadsheets().values().get(
         spreadsheetId=sheet_id,
-        range="'Inward India to US'!A1:AZ500"
+        range="'Inward India to US'!A1:AZ2000"
     ).execute()
     values = result.get('values', [])
     if len(values) < 3:
@@ -760,6 +777,13 @@ def get_india_us_data(creds, sheet_id):
         'short_grn_pending':   {'count': 0, 'qty': 0, 'expected': 0.0},
         'short_grn_progress':  {'count': 0, 'qty': 0, 'expected': 0.0, 'actual': 0.0},
     }
+    # Unique label sets per bucket (col G = Platform Label) — combos share same label across rows
+    _seen = {
+        'closed': set(), 'intransit': set(),
+        'short_grn_pending': set(), 'short_grn_progress': set(),
+    }
+    # Per-month unique label sets for monthly count columns
+    _monthly_seen = defaultdict(lambda: defaultdict(set))  # month -> bucket_key -> labels
     monthly = defaultdict(lambda: {
         'closed': 0, 'intransit': 0, 'short_grn_pending': 0, 'short_grn_progress': 0,
         'expected': 0.0, 'actual': 0.0, 'qty': 0
@@ -782,42 +806,44 @@ def get_india_us_data(creds, sheet_id):
         bl      = bucket.lower()
         sl      = sub.lower()
 
+        label = str(g(row, label_col)).strip()
+
         # ── Classify ──────────────────────────────────────────────────────────
         if bl == 'closed':
-            kpis['closed']['count']    += 1
+            _seen['closed'].add(label)
+            _monthly_seen[month]['closed'].add(label)
             kpis['closed']['qty']      += qty
             kpis['closed']['expected'] += exp
             kpis['closed']['actual']   += act
             kpis['closed']['sub'][sub]  = kpis['closed']['sub'].get(sub, 0) + 1
-            monthly[month]['closed']   += 1
             bucket_key = 'closed'
 
         elif bl == 'intransit':
-            kpis['intransit']['count'] += 1
+            _seen['intransit'].add(label)
+            _monthly_seen[month]['intransit'].add(label)
             kpis['intransit']['qty']   += qty
-            monthly[month]['intransit'] += 1
             bucket_key = 'intransit'
 
         elif bl == 'short grn':
             if 'claim raised but not received' in sl:
-                kpis['short_grn_progress']['count']    += 1
+                _seen['short_grn_progress'].add(label)
+                _monthly_seen[month]['short_grn_progress'].add(label)
                 kpis['short_grn_progress']['qty']      += qty
                 kpis['short_grn_progress']['expected'] += exp
                 kpis['short_grn_progress']['actual']   += act
-                monthly[month]['short_grn_progress']   += 1
                 bucket_key = 'short_grn_progress'
             elif 'pending qty inwarded against new ibr' in sl:
                 # Waiting for child IBRs to cover the shortfall — distinct from plain pending
-                kpis['short_grn_pending']['count']    += 1
+                _seen['short_grn_pending'].add(label)
+                _monthly_seen[month]['short_grn_pending'].add(label)
                 kpis['short_grn_pending']['qty']      += qty
                 kpis['short_grn_pending']['expected'] += exp
-                monthly[month]['short_grn_pending']   += 1
                 bucket_key = 'short_grn_awaiting_ibr'  # tagged separately for UI
             else:  # Pending to claim
-                kpis['short_grn_pending']['count']    += 1
+                _seen['short_grn_pending'].add(label)
+                _monthly_seen[month]['short_grn_pending'].add(label)
                 kpis['short_grn_pending']['qty']      += qty
                 kpis['short_grn_pending']['expected'] += exp
-                monthly[month]['short_grn_pending']   += 1
                 bucket_key = 'short_grn_pending'
         else:
             bucket_key = 'other'
@@ -831,7 +857,7 @@ def get_india_us_data(creds, sheet_id):
             'row_index':    i + 3,
             'month':        month,
             'awb':          str(g(row, awb_col)).strip(),
-            'label':        str(g(row, label_col)).strip(),
+            'label':        label,
             'old_ibr':      old_ibr,                           # parent IBR (child rows only)
             'product':      str(g(row, child_col)).strip()[:50],
             'qty':          int(qty),
@@ -855,6 +881,15 @@ def get_india_us_data(creds, sheet_id):
         {r['month'] for r in rows if r['month'] in MONTH_ORDER},
         key=lambda x: MONTH_ORDER.index(x)
     )
+
+    # Set unique shipment counts from label sets (combos share same IBR across rows)
+    for bk in ['closed', 'intransit', 'short_grn_pending', 'short_grn_progress']:
+        kpis[bk]['count'] = len(_seen[bk])
+
+    # Back-fill monthly counts with unique label counts (not row counts)
+    for m, bk_map in _monthly_seen.items():
+        for bk, labels in bk_map.items():
+            monthly[m][bk] = len(labels)
 
     # Round kpi floats
     for k in ['closed', 'short_grn_pending', 'short_grn_progress']:

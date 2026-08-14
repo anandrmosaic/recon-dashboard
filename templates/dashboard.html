@@ -492,6 +492,7 @@
 let _rawData = null;
 let _lastUpdated = null;
 let _activeTab = 'india_us';
+let chartInstances = {};
 
 function setColFilter(col, val) {
   _discFilters[col] = val;
@@ -2719,7 +2720,8 @@ async function loadData() {
     }
   } catch(e) {
     document.getElementById('mainContent').innerHTML =
-      '<div class="loading"><p style="color:#c62828">Error: ' + e.message + '</p></div>';
+      '<div class="loading"><p style="color:#c62828">Error: ' + e.message + '</p>' +
+      '<pre style="font-size:10px;text-align:left;margin-top:10px;color:#555;white-space:pre-wrap">' + (e.stack||'no stack') + '</pre></div>';
   }
 }
 
