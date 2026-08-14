@@ -18,7 +18,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_sheet_data, get_outward_loss_data, get_ups_claims_data, get_recon_recovery_totals, get_india_us_data
+from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -36,115 +36,35 @@ CF = CONFIG.get('credentials_file')
 TF = CONFIG.get('token_file')
 
 
-def merge_reconciliation(main_data, recon_data, recon_recovery=None):
-    """Volume (shipped/lost/counts) stays from MAIN; recovery + discrepancies
-    + case health come from the RECON sheet (where the team reconciles)."""
-    from sheets_service import calculate_kpis
-    cd       = main_data.get('channel_data', {})
-    months   = cd.get('months', [])
-    channels = cd.get('channels', {})
-
-    # Recompute grand_total + totals from main sheet channel_data
-    grand_total = []
-    for i in range(len(months)):
-        row = {'qty_sent': 0.0, 'lost_stock': 0.0, 'expected_reimburs': 0.0, 'actual_reimbursed': 0.0}
-        for rows in channels.values():
-            r = rows[i] if i < len(rows) else {}
-            for k in row:
-                row[k] += r.get(k, 0)
-        grand_total.append(row)
-    cd['grand_total'] = grand_total
-    cd['totals'] = {k: sum(r[k] for r in grand_total)
-                    for k in ['qty_sent', 'lost_stock', 'expected_reimburs', 'actual_reimbursed']}
-
-    # Override recovery + lost stock totals directly from recon sheet column sums
-    if recon_recovery:
-        if recon_recovery.get('actual_reimbursed'):
-            cd['totals']['actual_reimbursed'] = recon_recovery['actual_reimbursed']
-        if recon_recovery.get('expected_reimburs'):
-            cd['totals']['expected_reimburs']  = recon_recovery['expected_reimburs']
-        if recon_recovery.get('lost_stock'):
-            cd['totals']['lost_stock']         = recon_recovery['lost_stock']
-        print(f"[Data] Recon sheet totals — lost: {recon_recovery.get('lost_stock')} actual: {recon_recovery.get('actual_reimbursed')} expected: {recon_recovery.get('expected_reimburs')}")
-
-    main_data['kpis'] = calculate_kpis(cd)
-
-    # Discrepancies come from recon sheet
-    recon_discrepancies = recon_data.get('discrepancies', [])
-
-    # Enrich transporter + product from main sheet
-    main_awb_trans = main_data.get('awb_transporter', {})
-    main_awb_map   = {d['awb']: d for d in main_data.get('discrepancies', []) if d.get('awb')}
-
-    def _lookup_transporter(awb_raw):
-        """Normalize AWB and try multiple forms to find transporter."""
-        if not awb_raw:
-            return ''
-        normalized = awb_raw.replace('\n', ' ').lower().strip()
-        # Try full normalized string
-        if normalized in main_awb_trans:
-            return main_awb_trans[normalized]
-        # Try each part individually (multi-part AWBs like "098-xxx KOCU-xxx")
-        for part in normalized.split():
-            if part in main_awb_trans:
-                return main_awb_trans[part]
-        return ''
-
-    for d in recon_discrepancies:
-        if not d.get('transporter'):
-            d['transporter'] = _lookup_transporter(d.get('awb', ''))
-        if not d.get('product_name') and d.get('awb') in main_awb_map:
-            d['product_name'] = main_awb_map[d['awb']].get('product_name', '')
-
-    main_data['discrepancies'] = recon_discrepancies
-    return main_data
-
-
 def refresh_data():
     try:
         creds    = get_sheets_credentials(CF, TF)
-        MAIN_ID  = CONFIG['sheet_id']
         RECON_ID = CONFIG.get('recon_sheet_id')
 
-        # Volume data from MAIN sheet (all shipments)
-        data = get_sheet_data(creds, MAIN_ID, CONFIG['sheet_tab'], CONFIG.get('recon_tab'), CONFIG.get('data_since'))
+        data = {}
 
-        # Overlay reconciliation from RECON sheet (recovery + discrepancies + case health)
-        if RECON_ID:
-            try:
-                recon_tracker = CONFIG.get('recon_tracker_tab', CONFIG['sheet_tab'])
-                recon = get_sheet_data(creds, RECON_ID, recon_tracker, CONFIG.get('recon_tab'), CONFIG.get('data_since'))
-                # Get recovery totals directly from recon sheet columns (bypass parse_awb_data aggregation)
-                recon_recovery = get_recon_recovery_totals(creds, RECON_ID, recon_tracker)
-                data = merge_reconciliation(data, recon, recon_recovery)
-                print("[Data] Reconciliation merged from recon sheet")
-            except Exception as re:
-                print(f"[Data] Recon merge skipped (using main data): {re}")
-
-        # UPS claims + outward loss from RECON sheet (fallback to main)
-        UPS_SRC = RECON_ID or MAIN_ID
+        # ── India → US tab ────────────────────────────────────────────────────
         try:
-            data['ups_claims'] = get_ups_claims_data(creds, UPS_SRC)
-        except Exception as uc_err:
-            print(f"[Data] UPS claims from recon failed, trying main: {uc_err}")
-            try:
-                data['ups_claims'] = get_ups_claims_data(creds, MAIN_ID)
-            except Exception:
-                data['ups_claims'] = {'summary': {}, 'claims': []}
-        try:
-            data['outward_loss'] = get_outward_loss_data(creds, CONFIG.get('outward_loss_sheet_id', ''))
-        except Exception as ol_err:
-            print(f"[Data] Outward loss load failed (non-fatal): {ol_err}")
-            data['outward_loss'] = {'headers': [], 'rows': []}
+            data['india_us'] = get_india_us_data(creds, RECON_ID)
+            print(f"[Data] India→US loaded: {len(data['india_us'].get('rows', []))} rows")
+        except Exception as e:
+            print(f"[Data] India→US failed: {e}")
+            data['india_us'] = {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
 
-        # India to US tab — bucket-based view
-        if RECON_ID:
-            try:
-                data['india_us'] = get_india_us_data(creds, RECON_ID)
-                print(f"[Data] India→US loaded: {len(data['india_us'].get('rows', []))} rows")
-            except Exception as iu_err:
-                print(f"[Data] India→US load failed (non-fatal): {iu_err}")
-                data['india_us'] = {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
+        # ── Internal US 2 US tab ──────────────────────────────────────────────
+        try:
+            data['us2us'] = get_us2us_data(creds, RECON_ID)
+            print(f"[Data] US2US loaded: {len(data['us2us'].get('rows', []))} rows")
+        except Exception as e:
+            print(f"[Data] US2US failed: {e}")
+            data['us2us'] = {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
+
+        # ── UPS Claims (untouched) ────────────────────────────────────────────
+        try:
+            data['ups_claims'] = get_ups_claims_data(creds, RECON_ID)
+        except Exception as e:
+            print(f"[Data] UPS claims failed: {e}")
+            data['ups_claims'] = {'summary': {}, 'claims': []}
 
         _cache['data'] = None
         gc.collect()

@@ -456,27 +456,6 @@
       <div class="header-sub">India → USA Shipment Tracker</div>
     </div>
   </div>
-  <!-- Hero Stats Strip -->
-  <div class="hero-stats" id="heroStats" style="display:none">
-    <div class="hero-stat">
-      <div class="hero-stat-val" id="hShipped">—</div>
-      <div class="hero-stat-lbl">Units Shipped</div>
-    </div>
-    <div class="hero-stat">
-      <div class="hero-stat-val" id="hLost" style="color:#fca5a5">—</div>
-      <div class="hero-stat-lbl">Units Lost</div>
-      <div class="hero-stat-sub" id="hLostRate" style="color:rgba(255,255,255,0.45)"></div>
-    </div>
-    <div class="hero-stat">
-      <div class="hero-stat-val" id="hRecov" style="color:#86efac">—</div>
-      <div class="hero-stat-lbl">Recovered</div>
-      <div class="hero-stat-sub" id="hRecovRate" style="color:rgba(255,255,255,0.45)"></div>
-    </div>
-    <div class="hero-stat">
-      <div class="hero-stat-val" id="hPending" style="color:#fde68a">—</div>
-      <div class="hero-stat-lbl">Pending</div>
-    </div>
-  </div>
 
   <div class="header-right">
     <span class="last-updated" id="lastUpdated">Loading...</span>
@@ -484,84 +463,20 @@
   </div>
 </div>
 
-<!-- Filter Bar -->
-<div class="filter-bar">
-  <!-- Single row: Year → Channel → Month → View -->
-  <div class="filter-row">
-    <div class="filter-group" id="yearGroup" style="display:none">
-      <span class="filter-label"><i class="fas fa-calendar-alt"></i> Year</span>
-      <div class="month-dropdown" id="yearDropdownWrap">
-        <button class="month-dd-btn" id="yearDdBtn" onclick="toggleYearDropdown(event)" style="min-width:110px">
-          <span id="yearDdLabel">All Years</span>
-          <i class="fas fa-chevron-down" style="font-size:10px"></i>
-        </button>
-        <div class="month-dd-menu" id="yearDdMenu" style="min-width:130px">
-          <div id="yearOptions"></div>
-        </div>
-      </div>
-    </div>
-    <div class="filter-group" id="yearGroupDivider" style="display:none"><div class="filter-divider"></div></div>
-    <div class="filter-group">
-      <span class="filter-label"><i class="fas fa-store"></i> Channel</span>
-      <div class="month-dropdown" id="channelDropdownWrap">
-        <button class="month-dd-btn" id="channelDdBtn" onclick="toggleChannelDropdown(event)">
-          <span id="channelDdLabel">All Channels</span>
-          <i class="fas fa-chevron-down" style="font-size:10px"></i>
-        </button>
-        <div class="month-dd-menu" id="channelDdMenu">
-          <div class="month-dd-item">
-            <label><input type="checkbox" id="channelCheckAll" checked onchange="handleChannelCheckAll(this)"> All Channels</label>
-          </div>
-          <div class="month-dd-divider"></div>
-          <div id="channelCheckboxes"></div>
-        </div>
-      </div>
-    </div>
-    <div class="filter-divider"></div>
-    <div class="filter-group">
-      <span class="filter-label"><i class="fas fa-calendar"></i> Month</span>
-      <div class="month-dropdown" id="monthDropdownWrap">
-        <button class="month-dd-btn" id="monthDdBtn" onclick="toggleMonthDropdown(event)">
-          <span id="monthDdLabel">All Months</span>
-          <i class="fas fa-chevron-down" style="font-size:10px"></i>
-        </button>
-        <div class="month-dd-menu" id="monthDdMenu">
-          <div class="month-dd-item">
-            <label><input type="checkbox" id="monthCheckAll" checked onchange="handleMonthCheckAll(this)"> All Months</label>
-          </div>
-          <div class="month-dd-divider"></div>
-          <div id="monthCheckboxes"></div>
-        </div>
-      </div>
-    </div>
-    <div class="filter-divider"></div>
-    <div class="filter-group push-right">
-      <span class="filter-label"><i class="fas fa-eye"></i> View</span>
-      <div id="viewFilters" class="filter-btns">
-        <button class="filter-btn active" data-view="both" onclick="setView('both')">Both</button>
-        <button class="filter-btn" data-view="channel" onclick="setView('channel')">Channel Only</button>
-        <button class="filter-btn" data-view="carrier" onclick="setView('carrier')">Carrier Only</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Tab Navigation -->
 <div class="tab-nav">
-  <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
-    <i class="fas fa-tachometer-alt"></i> Dashboard
+  <button class="tab-btn active" data-tab="india_us" onclick="switchTab('india_us')">
+    <i class="fas fa-plane-departure"></i> India → US
+    <span id="iusBadge" style="background:#1565c0;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
-  <button class="tab-btn" data-tab="discrepancy" onclick="switchTab('discrepancy')">
-    <i class="fas fa-exclamation-circle"></i> Discrepancy Shipments
-    <span id="discBadge" style="background:#c62828;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
+  <button class="tab-btn" data-tab="us2us" onclick="switchTab('us2us')">
+    <i class="fas fa-exchange-alt"></i> Internal US 2 US
+    <span id="us2usBadge" style="background:#6a1b9a;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
   <button class="tab-btn" data-tab="ups_claims" onclick="switchTab('ups_claims')">
     <i class="fas fa-shipping-fast"></i> UPS Claims
     <span id="upsBadge" style="background:#e65100;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
-  </button>
-  <button class="tab-btn" data-tab="india_us" onclick="switchTab('india_us')">
-    <i class="fas fa-plane-departure"></i> India → US
-    <span id="iusBadge" style="background:#1565c0;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
 </div>
 
@@ -574,18 +489,9 @@
 </div>
 
 <script>
-let chartInstances = {};
 let _rawData = null;
 let _lastUpdated = null;
-let _filterState = { year: 'all', selectedMonths: [], availableMonths: [], channels: [], view: 'both' };
-let _activeTab = 'dashboard';
-let _discSortCol = null;
-let _discSortDir = 1;
-let _discView    = 'active';
-let _discFilters = { month:'', channel:'', transporter:'', reimb_status:'', ship_status:'' };
-let _discTabData = null;
-let _discTabUpdated = null;
-let _colFilterPanel = null;
+let _activeTab = 'india_us';
 
 function setColFilter(col, val) {
   _discFilters[col] = val;
@@ -997,21 +903,225 @@ function updateHeroStats(kpis) {
 
 function applyAndRender() {
   if (!_rawData) return;
-  const filtered = applyFilters(_rawData);
-  // Always update hero stats regardless of which tab is active
-  updateHeroStats(filtered.kpis);
-  if (_activeTab === 'discrepancy') {
-    renderDiscrepancyTab(filtered, _lastUpdated);
-  } else if (_activeTab === 'ups_claims') {
-    renderUPSClaimsTab(filtered, _lastUpdated);
-  } else if (_activeTab === 'india_us') {
-    renderIndiaUSTab(_rawData, _lastUpdated);
+  if (_activeTab === 'ups_claims') {
+    renderUPSClaimsTab(_rawData, _lastUpdated);
+  } else if (_activeTab === 'us2us') {
+    renderUS2USTab(_rawData, _lastUpdated);
   } else {
-    renderDashboard(filtered, _lastUpdated);
+    renderIndiaUSTab(_rawData, _lastUpdated);
   }
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
+
+// ── Internal US 2 US Tab ───────────────────────────────────────────────────
+let _u2Filter = { month: '', bucket: '', from_channel: '', to_channel: '' };
+
+function renderUS2USTab(data, lastUpdated) {
+  destroyCharts();
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  const u2    = (data.us2us) || {};
+  const kpis  = u2.kpis    || {};
+  const rows  = u2.rows    || [];
+  const monthly = u2.monthly || {};
+  const months  = u2.months  || [];
+
+  const closed   = kpis.closed      || {};
+  const transit  = kpis.intransit   || {};
+  const pending  = kpis.pending     || {};
+  const progress = kpis.in_progress || {};
+
+  // Badges
+  const actionNeeded = (pending.count||0) + (progress.count||0);
+  const badge = document.getElementById('us2usBadge');
+  if (badge) { badge.textContent = actionNeeded; badge.style.display = actionNeeded > 0 ? 'inline' : 'none'; }
+
+  // Sub-breakdown for closed
+  const closedSub = closed.sub || {};
+  const subRows = Object.entries(closedSub).sort((a,b) => b[1]-a[1])
+    .map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:11px">
+      <span style="color:#444">${k||'(blank)'}</span><span style="font-weight:600">${v}</span></div>`).join('') || '<div style="font-size:11px;color:#888">—</div>';
+
+  const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const sortedMonths = months.slice().sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+
+  const monthlyRows = sortedMonths.map(m => {
+    const mv = monthly[m] || {};
+    return `<tr>
+      <td style="font-weight:600">${m}</td>
+      <td style="color:#2e7d32;text-align:center">${mv.closed||0}</td>
+      <td style="color:#0277bd;text-align:center">${mv.intransit||0}</td>
+      <td style="color:#c62828;text-align:center">${mv.pending||0}</td>
+      <td style="color:#e65100;text-align:center">${mv.in_progress||0}</td>
+      <td style="text-align:right">${formatUSD(mv.expected||0)}</td>
+      <td style="text-align:right;color:#2e7d32">${formatUSD(mv.recovered||0)}</td>
+    </tr>`;
+  }).join('');
+
+  const uMonths   = [...new Set(rows.map(r => r.month))].filter(Boolean).sort((a,b) => MONTH_ORDER.indexOf(a)-MONTH_ORDER.indexOf(b));
+  const uBuckets  = [...new Set(rows.map(r => r.bucket))].filter(Boolean).sort();
+  const uFromCh   = [...new Set(rows.map(r => r.from_channel))].filter(Boolean).sort();
+  const uToCh     = [...new Set(rows.map(r => r.to_channel))].filter(Boolean).sort();
+
+  const ddOpts = (arr, key) => `<option value="">All</option>` +
+    arr.map(v => `<option value="${v}" ${_u2Filter[key]===v?'selected':''}>${v}</option>`).join('');
+
+  const filtered = rows.filter(r =>
+    (!_u2Filter.month        || r.month        === _u2Filter.month) &&
+    (!_u2Filter.bucket       || r.bucket       === _u2Filter.bucket) &&
+    (!_u2Filter.from_channel || r.from_channel === _u2Filter.from_channel) &&
+    (!_u2Filter.to_channel   || r.to_channel   === _u2Filter.to_channel)
+  );
+
+  const BUCKET_BG = { 'closed':'#2e7d32','intransit':'#0277bd','in_progress':'#e65100','pending':'#c62828','other':'#888' };
+
+  const detailRows = filtered.map(r => {
+    const bc = BUCKET_BG[r.bucket_key] || '#888';
+    const diffTxt = r.diff !== 0
+      ? `<span style="color:${r.diff>0?'#c62828':'#2e7d32'};font-size:10px">${r.diff>0?'−'+r.diff:'+'+Math.abs(r.diff)}</span>`
+      : '';
+    return `<tr>
+      <td style="font-weight:600">${r.month}</td>
+      <td><span style="background:${bc};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px">${r.bucket}</span></td>
+      <td style="font-size:10px;color:#555">${r.subbucket||'—'}</td>
+      <td style="text-align:center">${r.from_channel||'—'}</td>
+      <td style="text-align:center">→ ${r.to_channel||'—'}</td>
+      <td style="font-size:10px">${r.from_label||'—'}</td>
+      <td style="font-size:10px">${r.to_label||'—'}</td>
+      <td style="font-size:11px;text-align:left">${r.sku||'—'}</td>
+      <td style="text-align:center">${r.qty||0} ${diffTxt}</td>
+      <td style="text-align:center;font-size:10px">${r.carrier||'—'}</td>
+      <td style="font-size:10px;color:#888">${r.case_raise_date||'—'}</td>
+      <td style="text-align:right">${r.expected?formatUSD(r.expected):'—'}</td>
+      <td style="text-align:right;color:#2e7d32">${r.recovered?formatUSD(r.recovered):'—'}</td>
+      <td style="text-align:right;color:#c62828">${r.pending?formatUSD(r.pending):'—'}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="14" style="text-align:center;padding:30px;color:#888">No rows</td></tr>`;
+
+  document.getElementById('mainContent').innerHTML = `
+  <div style="padding:20px">
+
+    <!-- KPI Cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #2e7d32;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Closed / Resolved</div>
+        <div style="font-size:32px;font-weight:700;color:#2e7d32">${closed.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">transfers fully actioned</div>
+        <div style="margin-top:10px;border-top:1px solid #f0f0f0;padding-top:10px">${subRows}</div>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #0277bd;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🚚 Intransit</div>
+        <div style="font-size:32px;font-weight:700;color:#0277bd">${transit.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">transfers en route</div>
+        <div style="font-size:11px;color:#888;margin-top:8px">${(transit.qty||0).toLocaleString()} units moving</div>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #c62828;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔴 Pending Action</div>
+        <div style="font-size:32px;font-weight:700;color:#c62828">${pending.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">no case raised yet</div>
+        <div style="font-size:12px;font-weight:600;color:#c62828;margin-top:8px">${formatUSD(pending.expected||0)} at risk</div>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🟡 Case in Progress</div>
+        <div style="font-size:32px;font-weight:700;color:#e65100">${progress.count||0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">cases raised, pending resolution</div>
+        <div style="font-size:12px;font-weight:600;color:#e65100;margin-top:8px">${formatUSD(progress.expected||0)} expected · ${formatUSD(progress.recovered||0)} received</div>
+      </div>
+    </div>
+
+    <!-- Monthly + Summary -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Monthly Breakdown</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#f5f5f5">
+            <th style="text-align:left;padding:6px 8px">Month</th>
+            <th style="text-align:center;padding:6px 8px;color:#2e7d32">Closed</th>
+            <th style="text-align:center;padding:6px 8px;color:#0277bd">Transit</th>
+            <th style="text-align:center;padding:6px 8px;color:#c62828">Pending</th>
+            <th style="text-align:center;padding:6px 8px;color:#e65100">In Prog.</th>
+            <th style="text-align:right;padding:6px 8px">Expected</th>
+            <th style="text-align:right;padding:6px 8px;color:#2e7d32">Recovered</th>
+          </tr></thead>
+          <tbody>${monthlyRows||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#888">No data</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Overall Summary</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="background:#f9fbe7;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:22px;font-weight:700;color:#558b2f">${rows.length?((closed.count||0)/rows.length*100).toFixed(1):0}%</div>
+            <div style="font-size:11px;color:#666">Close Rate</div>
+          </div>
+          <div style="background:#fce4ec;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:22px;font-weight:700;color:#c62828">${(pending.count||0)+(progress.count||0)}</div>
+            <div style="font-size:11px;color:#666">Action Required</div>
+          </div>
+          <div style="background:#e8f5e9;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;color:#2e7d32">${formatUSD(closed.recovered||0)}</div>
+            <div style="font-size:11px;color:#666">Total Recovered</div>
+          </div>
+          <div style="background:#fff3e0;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;color:#e65100">${formatUSD((pending.expected||0)+(progress.expected||0))}</div>
+            <div style="font-size:11px;color:#666">Total at Risk</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:#888;border-top:1px solid #f0f0f0;padding-top:10px">
+          Total rows: ${rows.length} &nbsp;|&nbsp; Filtered: ${filtered.length}
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail Table -->
+    <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="font-weight:700;font-size:13px;color:#1b3a2d">Transfer Detail</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select onchange="_u2Filter.month=this.value;renderUS2USTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+            ${ddOpts(uMonths,'month')}
+          </select>
+          <select onchange="_u2Filter.bucket=this.value;renderUS2USTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+            ${ddOpts(uBuckets,'bucket')}
+          </select>
+          <select onchange="_u2Filter.from_channel=this.value;renderUS2USTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+            <option value="">From: All</option>${uFromCh.map(v=>`<option value="${v}" ${_u2Filter.from_channel===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+          <select onchange="_u2Filter.to_channel=this.value;renderUS2USTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
+            <option value="">To: All</option>${uToCh.map(v=>`<option value="${v}" ${_u2Filter.to_channel===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+          <button onclick="_u2Filter={month:'',bucket:'',from_channel:'',to_channel:''};renderUS2USTab(_rawData,_lastUpdated)"
+            style="font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#f5f5f5">Clear</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#1b3a2d;color:#fff">
+            <th style="padding:8px 10px;text-align:left">Month</th>
+            <th style="padding:8px 10px;text-align:left">Bucket</th>
+            <th style="padding:8px 10px;text-align:left">Sub Bucket</th>
+            <th style="padding:8px 10px;text-align:center">From</th>
+            <th style="padding:8px 10px;text-align:center">To</th>
+            <th style="padding:8px 10px;text-align:left">From Label</th>
+            <th style="padding:8px 10px;text-align:left">To Label</th>
+            <th style="padding:8px 10px;text-align:left">SKU</th>
+            <th style="padding:8px 10px;text-align:center">Qty</th>
+            <th style="padding:8px 10px;text-align:center">Carrier</th>
+            <th style="padding:8px 10px;text-align:left">Case Raise</th>
+            <th style="padding:8px 10px;text-align:right">Expected</th>
+            <th style="padding:8px 10px;text-align:right">Recovered</th>
+            <th style="padding:8px 10px;text-align:right">Pending</th>
+          </tr></thead>
+          <tbody>${detailRows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
 
 // ── India → US Tab ─────────────────────────────────────────────────────────
 let _iusFilter = { month: '', bucket: '', channel: '' };
@@ -2589,16 +2699,19 @@ async function loadData() {
     if (json.data) {
       _rawData = json.data;
       _lastUpdated = json.last_updated;
-      initFilters(_rawData);
-      // Show total discrepancy count on tab badge
-      const total = (_rawData.discrepancies || []).length;
-      const badge = document.getElementById('discBadge');
-      if (badge) { badge.textContent = total; badge.style.display = total > 0 ? 'inline' : 'none'; }
-      // India US action needed badge
+
+      // India→US badge: action needed (pending + in-progress)
       const iusKpis = (_rawData.india_us || {}).kpis || {};
       const iusAction = ((iusKpis.short_grn_pending||{}).count||0) + ((iusKpis.short_grn_progress||{}).count||0);
       const iusBadge = document.getElementById('iusBadge');
       if (iusBadge) { iusBadge.textContent = iusAction; iusBadge.style.display = iusAction > 0 ? 'inline' : 'none'; }
+
+      // US2US badge: pending + in-progress
+      const u2Kpis = (_rawData.us2us || {}).kpis || {};
+      const u2Action = ((u2Kpis.pending||{}).count||0) + ((u2Kpis.in_progress||{}).count||0);
+      const u2Badge = document.getElementById('us2usBadge');
+      if (u2Badge) { u2Badge.textContent = u2Action; u2Badge.style.display = u2Action > 0 ? 'inline' : 'none'; }
+
       applyAndRender();
     } else {
       document.getElementById('mainContent').innerHTML =
