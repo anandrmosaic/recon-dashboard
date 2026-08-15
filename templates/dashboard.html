@@ -466,7 +466,14 @@
 
 <!-- Tab Navigation -->
 <div class="tab-nav">
-  <button class="tab-btn active" data-tab="india_us" onclick="switchTab('india_us')">
+  <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+    <i class="fas fa-chart-pie"></i> Dashboard
+  </button>
+  <button class="tab-btn" data-tab="case_health" onclick="switchTab('case_health')">
+    <i class="fas fa-heartbeat"></i> Case Health
+    <span id="caseHealthBadge" style="background:#c62828;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
+  </button>
+  <button class="tab-btn" data-tab="india_us" onclick="switchTab('india_us')">
     <i class="fas fa-plane-departure"></i> India → US
     <span id="iusBadge" style="background:#1565c0;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
@@ -491,8 +498,10 @@
 <script>
 let _rawData = null;
 let _lastUpdated = null;
-let _activeTab = 'india_us';
+let _activeTab = 'dashboard';
 let chartInstances = {};
+let _dashView = 'india_us';
+let _caseView = 'india_us';
 
 function setColFilter(col, val) {
   _discFilters[col] = val;
@@ -904,7 +913,11 @@ function updateHeroStats(kpis) {
 
 function applyAndRender() {
   if (!_rawData) return;
-  if (_activeTab === 'ups_claims') {
+  if (_activeTab === 'dashboard') {
+    renderDashboardOverview(_rawData, _lastUpdated);
+  } else if (_activeTab === 'case_health') {
+    renderCaseHealth(_rawData, _lastUpdated);
+  } else if (_activeTab === 'ups_claims') {
     renderUPSClaimsTab(_rawData, _lastUpdated);
   } else if (_activeTab === 'us2us') {
     renderUS2USTab(_rawData, _lastUpdated);
@@ -914,6 +927,574 @@ function applyAndRender() {
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
+
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║  DASHBOARD OVERVIEW TAB                                                  ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+
+function renderDashboardOverview(data, lastUpdated) {
+  destroyCharts();
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  const iusD  = data.india_us || {};
+  const u2D   = data.us2us   || {};
+  const src   = _dashView === 'india_us' ? iusD : u2D;
+  const kpis  = src.kpis    || {};
+  const rows  = src.rows    || [];
+  const monthly = src.monthly || {};
+  const months  = src.months  || [];
+
+  const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const sortedMonths = months.slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
+
+  // ── Compute totals ──────────────────────────────────────────────────────
+  let totalShipments, totalExpected, totalRecovered, buckets, actKey, bkKeys, bkLabels;
+
+  if (_dashView === 'india_us') {
+    const c  = kpis.closed             || {};
+    const it = kpis.intransit          || {};
+    const sp = kpis.short_grn_pending  || {};
+    const sg = kpis.short_grn_progress || {};
+    totalShipments = (c.count||0) + (it.count||0) + (sp.count||0) + (sg.count||0);
+    totalExpected  = (c.expected||0) + (sp.expected||0) + (sg.expected||0);
+    totalRecovered = (c.actual||0)   + (sg.actual||0);
+    buckets = [
+      { label:'✅ Closed',            key:'closed',             count:c.count||0,  qty:c.qty||0,  exp:c.expected||0,  rec:c.actual||0,  color:'#4caf50', dark:'#2e7d32' },
+      { label:'🚚 Intransit',          key:'intransit',          count:it.count||0, qty:it.qty||0, exp:0,              rec:0,            color:'#42a5f5', dark:'#0277bd' },
+      { label:'⏳ Pending to Claim',   key:'short_grn_pending',  count:sp.count||0, qty:sp.qty||0, exp:sp.expected||0, rec:0,            color:'#ffa726', dark:'#e65100' },
+      { label:'🔧 Case In Progress',   key:'short_grn_progress', count:sg.count||0, qty:sg.qty||0, exp:sg.expected||0, rec:sg.actual||0, color:'#ef5350', dark:'#c62828' },
+    ];
+    actKey  = 'actual';
+    bkKeys  = ['closed','intransit','short_grn_pending','short_grn_progress'];
+    bkLabels = ['Closed','Intransit','Pending to Claim','In Progress'];
+  } else {
+    const c  = kpis.closed      || {};
+    const it = kpis.intransit   || {};
+    const p  = kpis.pending     || {};
+    const g  = kpis.in_progress || {};
+    totalShipments = (c.count||0) + (it.count||0) + (p.count||0) + (g.count||0);
+    totalExpected  = (c.expected||0) + (p.expected||0) + (g.expected||0);
+    totalRecovered = (c.recovered||0) + (g.recovered||0);
+    buckets = [
+      { label:'✅ Closed',            key:'closed',      count:c.count||0,  qty:c.qty||0,  exp:c.expected||0,   rec:c.recovered||0, color:'#4caf50', dark:'#2e7d32' },
+      { label:'🚚 Intransit',          key:'intransit',   count:it.count||0, qty:it.qty||0, exp:0,               rec:0,             color:'#42a5f5', dark:'#0277bd' },
+      { label:'⏳ Pending to Claim',   key:'pending',     count:p.count||0,  qty:p.qty||0,  exp:p.expected||0,   rec:0,             color:'#ffa726', dark:'#e65100' },
+      { label:'🔧 Case In Progress',   key:'in_progress', count:g.count||0,  qty:g.qty||0,  exp:g.expected||0,   rec:g.recovered||0,color:'#ef5350', dark:'#c62828' },
+    ];
+    actKey  = 'recovered';
+    bkKeys  = ['closed','intransit','pending','in_progress'];
+    bkLabels = ['Closed','Intransit','Pending','In Progress'];
+  }
+
+  // ── Qty: parent (unique-label) vs child (per-SKU row) ──────────────────
+  const seenLabelQty = {};
+  rows.forEach(r => {
+    const lbl = r.label || r.from_label || '';
+    if (lbl && !(lbl in seenLabelQty)) seenLabelQty[lbl] = r.qty || 0;
+  });
+  const parentQty  = Object.values(seenLabelQty).reduce((s,v) => s+v, 0);
+  const childQty   = rows.reduce((s,r) => s + (r.qty||0), 0);
+  const uniqueIBRs = Object.keys(seenLabelQty).length;
+  const uniqueSKUs = new Set(rows.map(r => r.product || r.sku || '').filter(Boolean)).size;
+
+  // ── Total short / pending ───────────────────────────────────────────────
+  const totalShort   = rows.reduce((s,r) => s + Math.max(0, r.diff||0), 0);
+  const totalPending = Math.max(0, totalExpected - totalRecovered);
+  const recovPct     = totalExpected > 0 ? ((totalRecovered/totalExpected)*100).toFixed(1) : '0.0';
+
+  // ── Combined shipment count from both sources (for comparison pill) ─────
+  const iusTot  = Object.values(iusD.kpis || {}).reduce((s,v) => s+(v.count||0), 0);
+  const u2Tot   = Object.values(u2D.kpis  || {}).reduce((s,v) => s+(v.count||0), 0);
+
+  // ── Bucket cards HTML ──────────────────────────────────────────────────
+  const bucketCardsHtml = buckets.map(b => `
+    <div style="border-radius:12px;padding:16px;background:#fff;border:1px solid #e9ecef;
+                border-left:5px solid ${b.color};box-shadow:0 2px 8px rgba(0,0,0,.05);
+                display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">${b.label}</div>
+      <div style="font-size:32px;font-weight:800;color:${b.dark};line-height:1;font-family:'Plus Jakarta Sans',sans-serif">${(b.count).toLocaleString()}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
+        <span style="font-size:10px;background:${b.color}18;color:${b.dark};padding:2px 7px;border-radius:10px;font-weight:600">${(b.qty||0).toLocaleString()} units</span>
+        ${b.exp > 0 ? `<span style="font-size:10px;background:#fff3e0;color:#e65100;padding:2px 7px;border-radius:10px;font-weight:600">${formatUSD(b.exp)} exp</span>` : ''}
+        ${b.rec > 0 ? `<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:2px 7px;border-radius:10px;font-weight:600">${formatUSD(b.rec)} rcv</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  const tgl = (active) => active
+    ? 'background:#1b3a2d;color:#fff;border-color:#1b3a2d;box-shadow:0 2px 6px #1b3a2d44'
+    : 'background:#fff;color:#555;border-color:#dee2e6';
+
+  document.getElementById('mainContent').innerHTML = `
+  <div style="padding:20px 24px">
+
+    <!-- Source toggle -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.8px">Viewing:</span>
+      <button onclick="_dashView='india_us';renderDashboardOverview(_rawData,_lastUpdated)"
+        style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${tgl(_dashView==='india_us')}">
+        ✈️ India → US <span style="opacity:.7;font-weight:400">(${iusTot})</span>
+      </button>
+      <button onclick="_dashView='us2us';renderDashboardOverview(_rawData,_lastUpdated)"
+        style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${tgl(_dashView==='us2us')}">
+        🔄 Internal US 2 US <span style="opacity:.7;font-weight:400">(${u2Tot})</span>
+      </button>
+    </div>
+
+    <!-- KPI cards row 1 -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">
+
+      <div class="kpi-card blue">
+        <div class="kpi-icon"><i class="fas fa-shipping-fast"></i></div>
+        <div class="kpi-value">${totalShipments.toLocaleString()}</div>
+        <div class="kpi-label">Total Shipments</div>
+        <div class="kpi-sub">${uniqueIBRs.toLocaleString()} unique IBR / labels</div>
+      </div>
+
+      <div class="kpi-card" style="background:linear-gradient(135deg,#1565c0,#1976d2,#42a5f5)">
+        <div class="kpi-icon"><i class="fas fa-box-open"></i></div>
+        <div class="kpi-value">${(parentQty/1000).toFixed(1)}<span style="font-size:14px;font-weight:500">K</span></div>
+        <div class="kpi-label">Parent Qty Sent</div>
+        <div class="kpi-sub">${parentQty.toLocaleString()} units · ${uniqueIBRs} IBRs</div>
+      </div>
+
+      <div class="kpi-card" style="background:linear-gradient(135deg,#4a148c,#7b1fa2,#ab47bc)">
+        <div class="kpi-icon"><i class="fas fa-sitemap"></i></div>
+        <div class="kpi-value">${childQty.toLocaleString()}</div>
+        <div class="kpi-label">Child SKU Qty</div>
+        <div class="kpi-sub">${uniqueSKUs || rows.length} unique SKU lines</div>
+      </div>
+
+      <div class="kpi-card" style="background:linear-gradient(135deg,#e65100,#f57c00,#ffa726)">
+        <div class="kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="kpi-value">${totalShort.toLocaleString()}</div>
+        <div class="kpi-label">Qty Short / Lost</div>
+        <div class="kpi-sub">${childQty > 0 ? ((totalShort/childQty)*100).toFixed(2) : '0.00'}% of child qty</div>
+      </div>
+
+      <div class="kpi-card green">
+        <div class="kpi-icon"><i class="fas fa-dollar-sign"></i></div>
+        <div class="kpi-value" style="font-size:22px">${formatUSD(totalRecovered)}</div>
+        <div class="kpi-label">Total Recovered</div>
+        <div class="kpi-sub">${recovPct}% of ${formatUSD(totalExpected)}</div>
+      </div>
+
+    </div>
+
+    <!-- KPI cards row 2 (summary) -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+
+      <div style="background:#fff;border-radius:12px;padding:16px 20px;border:1px solid #e9ecef;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;align-items:center;gap:16px">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#e8f5e9,#c8e6c9);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fas fa-clock" style="color:#2e7d32;font-size:20px"></i>
+        </div>
+        <div>
+          <div style="font-size:22px;font-weight:800;color:#c62828;font-family:'Plus Jakarta Sans',sans-serif">${formatUSD(totalPending)}</div>
+          <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">Pending Recovery</div>
+          <div style="font-size:10px;color:#aaa;margin-top:2px">Expected − Recovered</div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:12px;padding:16px 20px;border:1px solid #e9ecef;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;align-items:center;gap:16px">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#e3f2fd,#bbdefb);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fas fa-chart-pie" style="color:#1565c0;font-size:20px"></i>
+        </div>
+        <div>
+          <div style="font-size:22px;font-weight:800;color:#1565c0;font-family:'Plus Jakarta Sans',sans-serif">${recovPct}%</div>
+          <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">Recovery Rate</div>
+          <div style="font-size:10px;color:#aaa;margin-top:2px">${formatUSD(totalRecovered)} of ${formatUSD(totalExpected)}</div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:12px;padding:16px 20px;border:1px solid #e9ecef;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;align-items:center;gap:16px">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#fce4ec,#f8bbd0);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fas fa-search" style="color:#c62828;font-size:20px"></i>
+        </div>
+        <div>
+          <div style="font-size:22px;font-weight:800;color:#e65100;font-family:'Plus Jakarta Sans',sans-serif">${totalShort.toLocaleString()}</div>
+          <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">Total Units Short</div>
+          <div style="font-size:10px;color:#aaa;margin-top:2px">${childQty>0?((totalShort/childQty)*100).toFixed(2):'0.00'}% of dispatched</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Charts -->
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-bottom:16px">
+
+      <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-chart-bar" style="color:#1b3a2d"></i> Monthly Shipment Status
+          <span style="margin-left:auto;font-size:10px;color:#ccc;font-weight:400">${sortedMonths.length} months</span>
+        </div>
+        <div style="position:relative;height:230px"><canvas id="dashShipChart"></canvas></div>
+      </div>
+
+      <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-chart-line" style="color:#1b3a2d"></i> Recovery Trend
+        </div>
+        <div style="position:relative;height:230px"><canvas id="dashRecovChart"></canvas></div>
+      </div>
+
+    </div>
+
+    <!-- Bucket Breakdown -->
+    <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+        <i class="fas fa-layer-group" style="color:#1b3a2d"></i> Bucket Breakdown
+        <span style="margin-left:auto;font-size:10px;color:#bbb;font-weight:400;text-transform:none">Unique IBR / shipment count × child SKU qty</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        ${bucketCardsHtml}
+      </div>
+    </div>
+
+  </div>`;
+
+  // ── Chart 1: Monthly Shipment Status (stacked bar) ──────────────────────
+  const bkColors  = ['#4caf50','#42a5f5','#ffa726','#ef5350'];
+  const bkColorsA = ['#4caf5077','#42a5f577','#ffa72677','#ef535077'];
+  const shipCtx = document.getElementById('dashShipChart');
+  if (shipCtx) {
+    chartInstances.dashShip = new Chart(shipCtx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: sortedMonths.map(m => m.slice(0,3)),
+        datasets: bkKeys.map((bk, idx) => ({
+          label: bkLabels[idx],
+          data: sortedMonths.map(m => (monthly[m]||{})[bk] || 0),
+          backgroundColor: bkColorsA[idx],
+          borderColor: bkColors[idx],
+          borderWidth: 1.5,
+          borderRadius: idx === bkKeys.length-1 ? 4 : 0,
+          borderSkipped: false,
+        }))
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position:'top', labels:{ font:{size:10}, boxWidth:10, padding:8 } },
+          tooltip: { mode:'index', intersect:false }
+        },
+        scales: {
+          x: { stacked:true, grid:{display:false}, ticks:{font:{size:11}} },
+          y: { stacked:true, grid:{color:'#f5f5f5'}, ticks:{font:{size:10},precision:0}, beginAtZero:true }
+        }
+      }
+    });
+  }
+
+  // ── Chart 2: Recovery Trend (bar + line) ──────────────────────────────
+  const recovCtx = document.getElementById('dashRecovChart');
+  if (recovCtx) {
+    chartInstances.dashRecov = new Chart(recovCtx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: sortedMonths.map(m => m.slice(0,3)),
+        datasets: [
+          {
+            label: 'Expected ($)',
+            data: sortedMonths.map(m => Math.round((monthly[m]||{}).expected || 0)),
+            backgroundColor: '#1b3a2d22',
+            borderColor: '#1b3a2d',
+            borderWidth: 1.5,
+            borderRadius: 4,
+            order: 2,
+          },
+          {
+            label: 'Recovered ($)',
+            type: 'line',
+            data: sortedMonths.map(m => Math.round((monthly[m]||{})[actKey] || 0)),
+            borderColor: '#4caf50',
+            backgroundColor: '#4caf5018',
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.4,
+            order: 1,
+            pointRadius: 5,
+            pointBackgroundColor: '#4caf50',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2.5,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position:'top', labels:{ font:{size:10}, boxWidth:10, padding:8 } },
+          tooltip: {
+            mode:'index', intersect:false,
+            callbacks: { label: ctx => ctx.dataset.label+': $'+ctx.parsed.y.toLocaleString() }
+          }
+        },
+        scales: {
+          x: { grid:{display:false}, ticks:{font:{size:11}} },
+          y: { grid:{color:'#f5f5f5'}, ticks:{ font:{size:10}, callback: v => '$'+(v>=1000?(v/1000).toFixed(0)+'k':v) }, beginAtZero:true }
+        }
+      }
+    });
+  }
+}
+
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║  CASE HEALTH TAB                                                         ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+
+function _parseDate(s) {
+  if (!s || !s.trim()) return null;
+  const d = new Date(s.trim());
+  if (!isNaN(d)) return d;
+  const p = s.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (p) return new Date(+p[3], +p[2]-1, +p[1]);
+  return null;
+}
+
+function renderCaseHealth(data, lastUpdated) {
+  destroyCharts();
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  const iusD  = data.india_us || {};
+  const u2D   = data.us2us   || {};
+  const src   = _caseView === 'india_us' ? iusD : u2D;
+  const rows  = src.rows   || [];
+  const months = src.months || [];
+  const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const sortedMonths = months.slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
+  const closeKey = _caseView === 'india_us' ? 'case_close_date' : 'case_resolve_date';
+  const today = new Date();
+
+  // ── Case metrics ──────────────────────────────────────────────────────
+  const casedRows   = rows.filter(r => r.case_raise_date && r.case_raise_date.trim());
+  const closedCases = casedRows.filter(r => r[closeKey] && r[closeKey].trim());
+  const openCases   = casedRows.filter(r => !r[closeKey] || !r[closeKey].trim());
+
+  const daysToClose = closedCases.map(r => {
+    const rd = _parseDate(r.case_raise_date), cd = _parseDate(r[closeKey]);
+    return (rd && cd) ? Math.max(0, Math.round((cd - rd) / 86400000)) : null;
+  }).filter(d => d !== null);
+
+  const avgDTC     = daysToClose.length ? Math.round(daysToClose.reduce((a,b)=>a+b,0)/daysToClose.length) : 0;
+  const medDTC     = daysToClose.length ? daysToClose.slice().sort((a,b)=>a-b)[Math.floor(daysToClose.length/2)] : 0;
+  const closeRate  = casedRows.length ? ((closedCases.length/casedRows.length)*100).toFixed(1) : '0.0';
+  const openAmt    = openCases.reduce((s,r) => s+(r.expected||0), 0);
+  const closedAmt  = closedCases.reduce((s,r) => s+(r.actual||r.recovered||0), 0);
+
+  // ── Aging open cases ──────────────────────────────────────────────────
+  const aging = { '0-30':[], '31-60':[], '61-90':[], '90+':[] };
+  openCases.forEach(r => {
+    const rd = _parseDate(r.case_raise_date);
+    if (!rd) return;
+    const days = Math.round((today - rd) / 86400000);
+    if (days <= 30)       aging['0-30'].push({...r,days});
+    else if (days <= 60)  aging['31-60'].push({...r,days});
+    else if (days <= 90)  aging['61-90'].push({...r,days});
+    else                  aging['90+'].push({...r,days});
+  });
+
+  // ── Monthly case trend ────────────────────────────────────────────────
+  const mOpened = {}, mClosed = {};
+  casedRows.forEach(r => {
+    if (!r.month) return;
+    mOpened[r.month] = (mOpened[r.month]||0) + 1;
+    if (r[closeKey] && r[closeKey].trim()) mClosed[r.month] = (mClosed[r.month]||0) + 1;
+  });
+
+  // ── Top open cases (oldest first) ────────────────────────────────────
+  const topOpen = openCases
+    .map(r => { const rd = _parseDate(r.case_raise_date); return {...r, days: rd ? Math.round((today-rd)/86400000) : 0}; })
+    .filter(r => r.days >= 0)
+    .sort((a,b) => b.days - a.days)
+    .slice(0, 20);
+
+  // ── Aging card builder ────────────────────────────────────────────────
+  const agTot = openCases.length || 1;
+  const agCard = (label, arr, color, bg) => `
+    <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e9ecef;border-top:4px solid ${color};box-shadow:0 2px 8px rgba(0,0,0,.04)">
+      <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">${label}</div>
+      <div style="font-size:36px;font-weight:800;color:${color};line-height:1;font-family:'Plus Jakarta Sans',sans-serif">${arr.length}</div>
+      <div style="font-size:10px;color:#888;margin-top:5px">${((arr.length/agTot)*100).toFixed(1)}% of open</div>
+      <div style="margin-top:8px;background:#f0f0f0;border-radius:4px;height:4px;overflow:hidden">
+        <div style="height:100%;background:${color};width:${((arr.length/agTot)*100).toFixed(1)}%"></div>
+      </div>
+      <div style="font-size:10px;color:#888;margin-top:6px;font-weight:600">${formatUSD(arr.reduce((s,r)=>s+(r.expected||0),0))} at risk</div>
+    </div>`;
+
+  // ── Open case table rows ──────────────────────────────────────────────
+  const openRows = topOpen.map((r,i) => {
+    const ag = r.days<=30?'#2e7d32':r.days<=60?'#e65100':r.days<=90?'#c62828':'#7b1fa2';
+    return `<tr style="${i%2===0?'background:#fafafa':''}">
+      <td style="padding:8px 12px;font-size:11px;color:#555">${r.month||'—'}</td>
+      <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#1b3a2d">${r.label||r.from_label||'—'}</td>
+      <td style="padding:8px 12px;font-size:11px;color:#888">${r.case_raise_date||'—'}</td>
+      <td style="padding:8px 12px;text-align:center">
+        <span style="background:${ag}18;color:${ag};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap">${r.days}d</span>
+      </td>
+      <td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;color:#c62828">${formatUSD(r.expected||0)}</td>
+      <td style="padding:8px 12px;font-size:10px;color:#777;max-width:180px;word-break:break-word">${r.sub_remark||r.status||r.subbucket||'—'}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa">No open cases with raise date</td></tr>`;
+
+  const iusTot = Object.values(iusD.kpis||{}).reduce((s,v)=>s+(v.count||0),0);
+  const u2Tot  = Object.values(u2D.kpis ||{}).reduce((s,v)=>s+(v.count||0),0);
+  const tgl2 = (a) => a
+    ? 'background:#1b3a2d;color:#fff;border-color:#1b3a2d;box-shadow:0 2px 6px #1b3a2d44'
+    : 'background:#fff;color:#555;border-color:#dee2e6';
+
+  document.getElementById('mainContent').innerHTML = `
+  <div style="padding:20px 24px">
+
+    <!-- Toggle -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.8px">Case Health:</span>
+      <button onclick="_caseView='india_us';renderCaseHealth(_rawData,_lastUpdated)"
+        style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${tgl2(_caseView==='india_us')}">
+        ✈️ India → US <span style="opacity:.7;font-weight:400">(${iusTot})</span>
+      </button>
+      <button onclick="_caseView='us2us';renderCaseHealth(_rawData,_lastUpdated)"
+        style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${tgl2(_caseView==='us2us')}">
+        🔄 US 2 US <span style="opacity:.7;font-weight:400">(${u2Tot})</span>
+      </button>
+    </div>
+
+    <!-- KPI row -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
+
+      <div class="kpi-card blue">
+        <div class="kpi-icon"><i class="fas fa-folder-open"></i></div>
+        <div class="kpi-value">${casedRows.length}</div>
+        <div class="kpi-label">Total Cases</div>
+        <div class="kpi-sub">cases raised to date</div>
+      </div>
+
+      <div class="kpi-card" style="background:linear-gradient(135deg,#b71c1c,#c62828,#ef5350)">
+        <div class="kpi-icon"><i class="fas fa-exclamation-circle"></i></div>
+        <div class="kpi-value">${openCases.length}</div>
+        <div class="kpi-label">Open Cases</div>
+        <div class="kpi-sub">${formatUSD(openAmt)} pending</div>
+      </div>
+
+      <div class="kpi-card green">
+        <div class="kpi-icon"><i class="fas fa-check-circle"></i></div>
+        <div class="kpi-value">${closedCases.length}</div>
+        <div class="kpi-label">Closed Cases</div>
+        <div class="kpi-sub">${formatUSD(closedAmt)} recovered</div>
+      </div>
+
+      <div class="kpi-card" style="background:linear-gradient(135deg,#00695c,#00897b,#26a69a)">
+        <div class="kpi-icon"><i class="fas fa-percentage"></i></div>
+        <div class="kpi-value">${closeRate}%</div>
+        <div class="kpi-label">Close Rate</div>
+        <div class="kpi-sub">${closedCases.length} of ${casedRows.length} resolved</div>
+      </div>
+
+      <div class="kpi-card amber">
+        <div class="kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+        <div class="kpi-value">${avgDTC}<span style="font-size:14px;font-weight:500">d</span></div>
+        <div class="kpi-label">Avg Days to Close</div>
+        <div class="kpi-sub">median ${medDTC}d · from ${daysToClose.length} closed</div>
+      </div>
+
+    </div>
+
+    <!-- Aging + Case trend -->
+    <div style="display:grid;grid-template-columns:5fr 4fr;gap:14px;margin-bottom:16px">
+
+      <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-stopwatch" style="color:#c62828"></i> Open Case Aging
+          <span style="margin-left:auto;font-size:10px;color:#ccc;font-weight:400">${openCases.length} open cases</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          ${agCard('0–30 Days',  aging['0-30'],  '#2e7d32','#e8f5e9')}
+          ${agCard('31–60 Days', aging['31-60'], '#e65100','#fff3e0')}
+          ${agCard('61–90 Days', aging['61-90'], '#c62828','#fce4ec')}
+          ${agCard('90+ Days',   aging['90+'],   '#7b1fa2','#f3e5f5')}
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-chart-line" style="color:#1b3a2d"></i> Monthly Case Trend
+        </div>
+        <div style="position:relative;height:195px"><canvas id="caseTrendChart"></canvas></div>
+      </div>
+
+    </div>
+
+    <!-- Open cases table -->
+    <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+      <div style="padding:14px 18px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-clock" style="color:#c62828"></i> Open Cases — Oldest First
+        </div>
+        <span style="font-size:11px;color:#aaa">top ${topOpen.length} of ${openCases.length}</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Month</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Label / IBR</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Raised On</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:center">Days Open</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:right">Expected</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Status / Remark</th>
+          </tr></thead>
+          <tbody>${openRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>`;
+
+  // ── Case trend chart ──────────────────────────────────────────────────
+  const caseCtx = document.getElementById('caseTrendChart');
+  if (caseCtx) {
+    chartInstances.caseTrend = new Chart(caseCtx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: sortedMonths.map(m => m.slice(0,3)),
+        datasets: [
+          {
+            label: 'Raised',
+            data: sortedMonths.map(m => mOpened[m]||0),
+            backgroundColor: '#ef535066',
+            borderColor: '#c62828',
+            borderWidth: 1.5,
+            borderRadius: 4,
+            order: 2,
+          },
+          {
+            label: 'Closed',
+            type: 'line',
+            data: sortedMonths.map(m => mClosed[m]||0),
+            borderColor: '#4caf50',
+            backgroundColor: '#4caf5015',
+            borderWidth: 2.5,
+            fill: false,
+            tension: 0.4,
+            order: 1,
+            pointRadius: 5,
+            pointBackgroundColor: '#4caf50',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2.5,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position:'top', labels:{ font:{size:10}, boxWidth:10, padding:8 } },
+          tooltip: { mode:'index', intersect:false }
+        },
+        scales: {
+          x: { grid:{display:false}, ticks:{font:{size:11}} },
+          y: { grid:{color:'#f5f5f5'}, ticks:{font:{size:10},precision:0}, beginAtZero:true }
+        }
+      }
+    });
+  }
+}
 
 // ── Internal US 2 US Tab ───────────────────────────────────────────────────
 let _u2Filter = { month: '', bucket: '', from_channel: '', to_channel: '' };
@@ -2712,6 +3293,15 @@ async function loadData() {
       const u2Action = ((u2Kpis.pending||{}).count||0) + ((u2Kpis.in_progress||{}).count||0);
       const u2Badge = document.getElementById('us2usBadge');
       if (u2Badge) { u2Badge.textContent = u2Action; u2Badge.style.display = u2Action > 0 ? 'inline' : 'none'; }
+
+      // Case Health badge: count open cases (have raise date, no close date) across both sources
+      const iusRows = (_rawData.india_us || {}).rows || [];
+      const u2Rows  = (_rawData.us2us    || {}).rows || [];
+      const openIUS = iusRows.filter(r => r.case_raise_date && r.case_raise_date.trim() && (!r.case_close_date   || !r.case_close_date.trim())).length;
+      const openU2  = u2Rows.filter( r => r.case_raise_date && r.case_raise_date.trim() && (!r.case_resolve_date || !r.case_resolve_date.trim())).length;
+      const totalOpen = openIUS + openU2;
+      const chBadge = document.getElementById('caseHealthBadge');
+      if (chBadge) { chBadge.textContent = totalOpen; chBadge.style.display = totalOpen > 0 ? 'inline' : 'none'; }
 
       applyAndRender();
     } else {
