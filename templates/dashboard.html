@@ -1086,8 +1086,8 @@ function renderDashboardOverview(data, lastUpdated) {
   iusCBRows.forEach(r => {
     const m  = r.month;
     const sl = (r.sub_remark || '').toLowerCase().trim();
-    if (!cbAgg[m])            cbAgg[m]            = { rec:0, prog:0, pend:0, dmg:0 };
-    if (!window._cbDetail[m]) window._cbDetail[m]  = { rec:[], prog:[], pend:[], dmg:[] };
+    if (!cbAgg[m])            cbAgg[m]            = { rec:0, prog:0, pend:0 };
+    if (!window._cbDetail[m]) window._cbDetail[m]  = { rec:[], prog:[], pend:[] };
     const det = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'' };
     // ── Bucket 1: Claim raised AND received/settled ──────────────────────
     if (sl.includes('claim raised and received') ||
@@ -1108,24 +1108,17 @@ function renderDashboardOverview(data, lastUpdated) {
                (sl.includes('raised') && sl.includes('claim'))) {
       cbAgg[m].prog += r.expected || 0;
       window._cbDetail[m].prog.push({ ...det, amt: r.expected||0 });
-    // ── Bucket 3: Pending to claim (not yet filed) ───────────────────────
+    // ── Bucket 3: Pending to claim (no claim filed yet) ──────────────────
     } else if (sl.includes('pending') || sl.includes('to be claimed')) {
       cbAgg[m].pend += r.expected || 0;
       window._cbDetail[m].pend.push({ ...det, amt: r.expected||0 });
-    // ── Bucket 4: Identified short/damage — no claim raised yet ──────────
-    } else if (sl.includes('damage') || sl.includes('lost')     ||
-               sl.includes('missing') || sl.includes('defect')  ||
-               sl.includes('broken')  || sl.includes('pilfer')  ||
-               sl.includes('short')) {
-      cbAgg[m].dmg  += r.expected || 0;
-      window._cbDetail[m].dmg.push({ ...det, amt: r.expected||0 });
     }
+    // rows matching none of the above are outside claim scope — excluded from table
   });
   const cbTotRec  = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).rec  ||0), 0);
   const cbTotProg = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).prog ||0), 0);
   const cbTotPend = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).pend ||0), 0);
-  const cbTotDmg  = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).dmg  ||0), 0);
-  const cbGrand   = cbTotRec + cbTotProg + cbTotPend + cbTotDmg;
+  const cbGrand   = cbTotRec + cbTotProg + cbTotPend;
 
   // ── Combined shipment count from both sources (for comparison pill) ─────
   const iusTot  = Object.values(iusD.kpis || {}).reduce((s,v) => s+(v.count||0), 0);
@@ -1154,7 +1147,7 @@ function renderDashboardOverview(data, lastUpdated) {
     (sl.includes('received') && sl.includes('claim') && !sl.includes('not received'));
 
   // Card 1 + 3: Active Claimable $ + unique open label count
-  const icActiveClaim = cbTotProg + cbTotPend + cbTotDmg;
+  const icActiveClaim = cbTotProg + cbTotPend;
   const _icOpenSet    = new Set();
   iusCBRows.forEach(r => {
     if (!_icIsRec((r.sub_remark||'').toLowerCase().trim()))
@@ -1409,12 +1402,6 @@ function renderDashboardOverview(data, lastUpdated) {
               ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','pend')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fce4ec'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).pend>0?formatUSD((cbAgg[m]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
               <td onclick="showCBDrill('all','pend')" style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotPend)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotPend/cbGrand)*100).toFixed(2)+'%':'—'}</td>
-            </tr>
-            <tr style="background:#fffde7">
-              <td style="padding:9px 16px;font-weight:700;color:#f57f17;border-bottom:1px solid #e9ecef;font-size:12px">⚠️ Short / Damaged — No Claim Raised</td>
-              ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','dmg')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#f57f17;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fff9c4'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).dmg>0?formatUSD((cbAgg[m]||{}).dmg):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td onclick="showCBDrill('all','dmg')" style="padding:9px 14px;text-align:right;font-weight:700;color:#f57f17;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotDmg)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#f57f17;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotDmg/cbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
           </tbody>
           <tfoot><tr style="background:#1b3a2d">
@@ -1932,7 +1919,7 @@ function renderWeeklyReview(data, lastUpdated) {
   const sortedChs = Object.entries(chMap).sort((a,b) => (b[1].raised+b[1].closed)-(a[1].raised+a[1].closed));
 
   // ── Claims Bucket for selected week (India→US, week-filtered) ────────────
-  const wkCBAgg = { rec:0, prog:0, pend:0, dmg:0 };
+  const wkCBAgg = { rec:0, prog:0, pend:0 };
   rows.filter(r => inWk(r.case_raise_date) || inWk(r[closeKey])).forEach(r => {
     const sl = (r.sub_remark || '').toLowerCase().trim();
     // Bucket 1: Claim raised and received/settled
@@ -1952,18 +1939,13 @@ function renderWeeklyReview(data, lastUpdated) {
                sl.includes('claim in progress')             ||
                (sl.includes('raised') && sl.includes('claim'))) {
       wkCBAgg.prog += r.expected || 0;
-    // Bucket 3: Pending to claim
+    // Bucket 3: Pending to claim (no claim filed yet)
     } else if (sl.includes('pending') || sl.includes('to be claimed')) {
       wkCBAgg.pend += r.expected || 0;
-    // Bucket 4: Short/Damaged — no claim raised
-    } else if (sl.includes('damage') || sl.includes('lost')    ||
-               sl.includes('missing') || sl.includes('defect') ||
-               sl.includes('broken')  || sl.includes('pilfer') ||
-               sl.includes('short')) {
-      wkCBAgg.dmg  += r.expected || 0;
     }
+    // rows outside claim scope excluded
   });
-  const wkCBGrand = wkCBAgg.rec + wkCBAgg.prog + wkCBAgg.pend + wkCBAgg.dmg;
+  const wkCBGrand = wkCBAgg.rec + wkCBAgg.prog + wkCBAgg.pend;
 
   // ── Aged cases closed this week (prior vintage only) ───────────────────
   const agedSeen  = new Set();
@@ -2271,11 +2253,6 @@ function renderWeeklyReview(data, lastUpdated) {
               <td style="padding:11px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">📋 Pending to Claim</td>
               <td style="padding:11px 16px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;font-size:13px">${wkCBAgg.pend>0?formatUSD(wkCBAgg.pend):'<span style="color:#ccc">—</span>'}</td>
               <td style="padding:11px 16px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${wkCBGrand>0?((wkCBAgg.pend/wkCBGrand)*100).toFixed(2)+'%':'—'}</td>
-            </tr>
-            <tr style="background:#fffde7">
-              <td style="padding:11px 16px;font-weight:700;color:#f57f17;border-bottom:1px solid #e9ecef">⚠️ Short / Damaged — No Claim Raised</td>
-              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#f57f17;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;font-size:13px">${wkCBAgg.dmg>0?formatUSD(wkCBAgg.dmg):'<span style="color:#ccc">—</span>'}</td>
-              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#f57f17;border-bottom:1px solid #e9ecef">${wkCBGrand>0?((wkCBAgg.dmg/wkCBGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
           </tbody>
           <tfoot><tr style="background:#1b3a2d">
