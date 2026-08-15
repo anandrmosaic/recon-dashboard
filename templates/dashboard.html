@@ -1167,7 +1167,7 @@ function renderDashboardOverview(data, lastUpdated) {
     </div>
 
     <!-- KPI cards row 1 -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:16px">
 
       <div class="kpi-card blue">
         <div class="kpi-icon"><i class="fas fa-shipping-fast"></i></div>
@@ -1204,42 +1204,20 @@ function renderDashboardOverview(data, lastUpdated) {
         <div class="kpi-sub">${recovPct}% of ${formatUSD(totalExpected)}</div>
       </div>
 
-    </div>
-
-    <!-- KPI cards row 2 (summary) -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
-
-      <div style="background:#fff;border-radius:12px;padding:16px 20px;border:1px solid #e9ecef;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;align-items:center;gap:16px">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#e8f5e9,#c8e6c9);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <i class="fas fa-clock" style="color:#2e7d32;font-size:20px"></i>
-        </div>
-        <div>
-          <div style="font-size:22px;font-weight:800;color:#c62828;font-family:'Plus Jakarta Sans',sans-serif">${formatUSD(totalPending)}</div>
-          <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">Pending Recovery</div>
-          <div style="font-size:10px;color:#aaa;margin-top:2px">Expected − Recovered</div>
-        </div>
+      <!-- Card 6: Total Claim Value -->
+      <div class="kpi-card" style="background:linear-gradient(135deg,#004d40,#00695c,#00897b)">
+        <div class="kpi-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+        <div class="kpi-value" style="font-size:22px">${_dashView==='india_us' ? formatUSD(cbGrand) : formatUSD(totalExpected)}</div>
+        <div class="kpi-label">Total Claim Value</div>
+        <div class="kpi-sub">${_dashView==='india_us' ? (cbMths.length+' months · all 4 buckets') : ('Expected reimbursement')}</div>
       </div>
 
-      <div style="background:#fff;border-radius:12px;padding:16px 20px;border:1px solid #e9ecef;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;align-items:center;gap:16px">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#e3f2fd,#bbdefb);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <i class="fas fa-chart-pie" style="color:#1565c0;font-size:20px"></i>
-        </div>
-        <div>
-          <div style="font-size:22px;font-weight:800;color:#1565c0;font-family:'Plus Jakarta Sans',sans-serif">${recovPct}%</div>
-          <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">Recovery Rate</div>
-          <div style="font-size:10px;color:#aaa;margin-top:2px">${formatUSD(totalRecovered)} of ${formatUSD(totalExpected)}</div>
-        </div>
-      </div>
-
-      <div style="background:#fff;border-radius:12px;padding:16px 20px;border:1px solid #e9ecef;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;align-items:center;gap:16px">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#fce4ec,#f8bbd0);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <i class="fas fa-search" style="color:#c62828;font-size:20px"></i>
-        </div>
-        <div>
-          <div style="font-size:22px;font-weight:800;color:#e65100;font-family:'Plus Jakarta Sans',sans-serif">${totalShort.toLocaleString()}</div>
-          <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">Total Units Short</div>
-          <div style="font-size:10px;color:#aaa;margin-top:2px">${childQty>0?((totalShort/childQty)*100).toFixed(2):'0.00'}% of dispatched</div>
-        </div>
+      <!-- Card 7: Pending to Recover (actionable) -->
+      <div class="kpi-card" style="background:linear-gradient(135deg,#7b1fa2,#8e24aa,#ab47bc)">
+        <div class="kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+        <div class="kpi-value" style="font-size:22px">${_dashView==='india_us' ? formatUSD(cbTotProg+cbTotPend+cbTotDmg) : formatUSD(totalPending)}</div>
+        <div class="kpi-label">Pending to Recover</div>
+        <div class="kpi-sub">${_dashView==='india_us' ? 'Raised+Pending+Unclaimed' : 'Expected − Recovered'}</div>
       </div>
 
     </div>
