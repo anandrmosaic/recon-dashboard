@@ -2644,6 +2644,7 @@ function renderIndiaUSTab(data, lastUpdated) {
       return '<div style="flex:1;padding:11px 14px;text-align:center;' + br + bg + '">' +
         '<div style="font-size:17px;font-weight:800;color:' + s.c + ';font-variant-numeric:tabular-nums">' + s.v + '</div>' +
         '<div style="font-size:10px;color:' + vc + ';margin-top:2px;text-transform:uppercase;letter-spacing:.4px">' + s.l + '</div>' +
+        (s.d ? '<div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">' + s.d + '</div>' : '') +
         '</div>';
     }).join('');
     return '<div style="display:flex;border-bottom:1px solid var(--border)">' + cells + '</div>';
@@ -2744,10 +2745,10 @@ function renderIndiaUSTab(data, lastUpdated) {
     const cSub = closed.sub||{};
     return '<div>' +
       statsBar([
-        {v:closed.count||0, l:'Closed Shipments', c:'#2e7d32'},
-        {v:formatUSD(closed.actual||0), l:'Total Recovered', c:'#2e7d32'},
-        {v:formatUSD(closed.expected||0), l:'Expected', c:'#e65100'},
-        {v:Object.keys(cSub).length+' types', l:'Resolution Types', c:'#1565c0'},
+        {v:closed.count||0, l:'Resolved Shipments', c:'#2e7d32', d:'Fully settled with carrier'},
+        {v:formatUSD(closed.actual||0), l:'Money Received Back', c:'#2e7d32', d:'Actual reimbursement received'},
+        {v:formatUSD(closed.expected||0), l:'Total Claimed', c:'#e65100', d:'Amount we asked carrier to pay'},
+        {v:Object.keys(cSub).length+' types', l:'Resolution Types', c:'#1565c0', d:'How each case was closed'},
       ]) +
       filterBar('closed', rows.filter(r=>r.bucket_key==='closed')) +
       '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows</div>' +
@@ -2801,21 +2802,24 @@ function renderIndiaUSTab(data, lastUpdated) {
     return '<div>' +
       '<div style="display:flex;border-bottom:1px solid var(--border)">' +
         '<div style="flex:2;padding:12px 18px;border-right:1px solid var(--border);display:flex;gap:28px;align-items:center">' +
-          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + (pending.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Open Cases</div></div>' +
-          '<div style="width:1px;height:36px;background:var(--border)"></div>' +
-          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + formatUSD(pending.expected||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Total at Risk</div></div>' +
+          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + (pending.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">No Claim Filed Yet</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Short shipments with no claim submitted</div></div>' +
+          '<div style="width:1px;height:52px;background:var(--border)"></div>' +
+          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + formatUSD(pending.expected||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Recoverable if Claimed</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Money we can still get back</div></div>' +
         '</div>' +
         '<div style="flex:1;padding:11px 10px;text-align:center;background:#fce4ec;border-right:1px solid var(--border)">' +
           '<div style="font-size:20px;font-weight:800;color:#c62828">' + crit + '</div>' +
           '<div style="font-size:10px;color:#c62828;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">⚠️ 90+ Day</div>' +
+          '<div style="font-size:10px;color:#c62828;margin-top:3px;line-height:1.3">File immediately — carrier may deny</div>' +
         '</div>' +
         '<div style="flex:1;padding:11px 10px;text-align:center;background:#fff3e0;border-right:1px solid var(--border)">' +
           '<div style="font-size:20px;font-weight:800;color:#e65100">' + high + '</div>' +
           '<div style="font-size:10px;color:#e65100;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">⏰ 30–90 Day</div>' +
+          '<div style="font-size:10px;color:#e65100;margin-top:3px;line-height:1.3">Approaching deadline — file soon</div>' +
         '</div>' +
         '<div style="flex:1;padding:11px 10px;text-align:center;background:#e8f5e9">' +
           '<div style="font-size:20px;font-weight:800;color:#2e7d32">' + norm + '</div>' +
           '<div style="font-size:10px;color:#2e7d32;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">✅ Under 30 Days</div>' +
+          '<div style="font-size:10px;color:#2e7d32;margin-top:3px;line-height:1.3">Within safe claim window</div>' +
         '</div>' +
       '</div>' +
       warnBanner +
@@ -2870,10 +2874,10 @@ function renderIndiaUSTab(data, lastUpdated) {
 
     return '<div>' +
       statsBar([
-        {v:progress.count||0, l:'Cases Open', c:'#e65100'},
-        {v:formatUSD(progress.expected||0), l:'Total Expected', c:'#e65100'},
-        {v:formatUSD(progress.actual||0), l:'Received So Far', c:'#2e7d32'},
-        {v:formatUSD(Math.max(0,(progress.expected||0)-(progress.actual||0))), l:'Still Pending', c:'#c62828'},
+        {v:progress.count||0, l:'Claims Filed', c:'#e65100', d:'Submitted, awaiting carrier response'},
+        {v:formatUSD(progress.expected||0), l:'Total Claimed', c:'#e65100', d:'Amount asked from carrier'},
+        {v:formatUSD(progress.actual||0), l:'Paid by Carrier', c:'#2e7d32', d:'Money received so far'},
+        {v:formatUSD(Math.max(0,(progress.expected||0)-(progress.actual||0))), l:'Carrier Still Owes', c:'#c62828', d:'Remaining unpaid balance'},
       ]) +
       filterBar('progress', rows.filter(r=>r.bucket_key==='short_grn_progress'||r.bucket_key==='short_grn_awaiting_ibr')) +
       '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressRowsSorted.length + ' rows · sorted oldest case first</div>' +
@@ -2921,8 +2925,8 @@ function renderIndiaUSTab(data, lastUpdated) {
 
     return '<div>' +
       '<div style="display:flex;border-bottom:1px solid var(--border)">' +
-        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0">' + (transit.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Shipments Moving</div></div>' +
-        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + (transit.qty||0).toLocaleString() + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Units in Transit</div></div>' +
+        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0">' + (transit.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Shipments En Route</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Currently being delivered to US</div></div>' +
+        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + (transit.qty||0).toLocaleString() + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Units En Route</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Total product units dispatched</div></div>' +
         '<div style="flex:3;padding:11px 14px;display:flex;align-items:center"><div style="font-size:11px;color:#1565c0;background:#e3f2fd;padding:7px 11px;border-radius:8px;border:1px solid #bbdefb">🚚 Monitoring only — shipments en route. No financial claims raised yet.</div></div>' +
       '</div>' +
       filterBar('intransit', rows.filter(r=>r.bucket_key==='intransit')) +

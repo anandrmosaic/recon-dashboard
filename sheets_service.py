@@ -777,11 +777,17 @@ def get_india_us_data(creds, sheet_id):
     raise_col       = fc('case raise date')
     close_col       = fc('case close date')
     lost_col        = fc('lost stock')
-    channel_col     = fc('channel')
+    # Exact-match 'channel' first — avoids picking up 'Sub Channel', 'Sales Channel', etc.
+    # that appear before column AM.  Fallback to substring, then hardcode AM (col 39 = idx 38).
+    channel_col     = next((i for i, h in enumerate(headers) if h == 'channel'), -1)
+    if channel_col < 0:
+        channel_col = fc('channel')
+    if channel_col < 0:
+        channel_col = 38  # hardcoded: column AM (39th column, 0-indexed 38)
     transporter_col = fc('transporter')
 
     print(f"[IndiaUS] Cols — month:{month_col} bucket:{bucket_col} sub:{sub_col} "
-          f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col}")
+          f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col} (AM=38)")
 
     kpis = {
         'closed':              {'count': 0, 'qty': 0, 'expected': 0.0, 'actual': 0.0, 'sub': {}},
