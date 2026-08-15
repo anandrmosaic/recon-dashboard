@@ -2532,6 +2532,7 @@ function renderUS2USTab(data, lastUpdated) {
 
 // ── India → US Tab ─────────────────────────────────────────────────────────
 let _iusFilter = { month: '', bucket: '', channel: '' };
+let _iusTab    = 'all'; // 'all' | 'closed' | 'pending' | 'progress' | 'intransit'
 
 function renderIndiaUSTab(data, lastUpdated) {
   destroyCharts();
@@ -2553,229 +2554,457 @@ function renderIndiaUSTab(data, lastUpdated) {
   const badge = document.getElementById('iusBadge');
   if (badge) { badge.textContent = actionNeeded; badge.style.display = actionNeeded > 0 ? 'inline' : 'none'; }
 
-  // Sub-bucket breakdown for closed
-  const closedSub = closed.sub || {};
-  const subRows = Object.entries(closedSub).sort((a,b) => b[1]-a[1])
-    .map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:11px">
-      <span style="color:#444">${k}</span><span style="font-weight:600">${v}</span></div>`).join('');
-
-  // Monthly table
+  // Sort months by year then month name (handles multi-year data)
   const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const sortedMonths = months.slice().sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
-  const monthlyRows = sortedMonths.map(m => {
-    const mv = monthly[m] || {};
-    return `<tr>
-      <td style="font-weight:600">${m}</td>
-      <td style="color:#2e7d32;text-align:center">${mv.closed||0}</td>
-      <td style="color:#0277bd;text-align:center">${mv.intransit||0}</td>
-      <td style="color:#c62828;text-align:center">${mv.short_grn_pending||0}</td>
-      <td style="color:#e65100;text-align:center">${mv.short_grn_progress||0}</td>
-      <td style="text-align:right">${formatUSD(mv.expected||0)}</td>
-      <td style="text-align:right;color:#2e7d32">${formatUSD(mv.actual||0)}</td>
-    </tr>`;
-  }).join('');
-
-  // Filter unique values for dropdowns
-  const uMonths   = [...new Set(rows.map(r => r.month))].filter(Boolean).sort((a,b) => MONTH_ORDER.indexOf(a)-MONTH_ORDER.indexOf(b));
-  const uChannels = [...new Set(rows.map(r => r.channel))].filter(Boolean).sort();
-  const uBuckets  = [...new Set(rows.map(r => r.bucket))].filter(Boolean).sort();
-
-  const ddOpts = (arr, key) => `<option value="">All</option>` +
-    arr.map(v => `<option value="${v}" ${_iusFilter[key]===v?'selected':''}>${v}</option>`).join('');
-
-  // Filter rows
-  const filtered = rows.filter(r =>
-    (!_iusFilter.month   || r.month   === _iusFilter.month) &&
-    (!_iusFilter.bucket  || r.bucket  === _iusFilter.bucket) &&
-    (!_iusFilter.channel || r.channel === _iusFilter.channel)
-  );
-
-  // Detail table rows
-  const BUCKET_COLORS = {
-    'Closed':    '#2e7d32',
-    'Intransit': '#0277bd',
-    'Short GRN': '#c62828',
-  };
-  const SUB_COLORS = {
-    'Fully Received':                              '#4caf50',
-    'Claim raised and Received':                   '#1b5e20',
-    'Excess Received':                             '#81c784',
-    'Damage received':                             '#78909c',
-    'New IBR/WRO-Received against old IBR/WRO':   '#26a69a',
-    'Pending qty inwarded against new IBR/WRO':    '#ffa726',
-    'Intransit':                                   '#1565c0',
-    'Pending to claim':                            '#c62828',
-    'Claim raised but not received':               '#e65100',
-  };
-
-  // Build parent→children map for IBR split shipments
-  const childrenOf = {};  // parent label → [child labels]
-  rows.forEach(r => {
-    if (r.old_ibr) {
-      if (!childrenOf[r.old_ibr]) childrenOf[r.old_ibr] = [];
-      childrenOf[r.old_ibr].push(r.label);
-    }
+  const sortedMonths = months.slice().sort((a, b) => {
+    const [am, ay] = a.split(' '); const [bm, by] = b.split(' ');
+    const yd = parseInt(ay||0) - parseInt(by||0);
+    return yd !== 0 ? yd : MONTH_ORDER.indexOf(am) - MONTH_ORDER.indexOf(bm);
   });
 
-  const detailRows = filtered.map(r => {
-    const bc = BUCKET_COLORS[r.bucket] || '#666';
-    const sc = SUB_COLORS[r.sub_remark] || '#555';
-    // Parent IBR split indicator
-    const children = childrenOf[r.label] || [];
-    const parentTag = children.length > 0
-      ? `<div style="font-size:9px;color:#26a69a;margin-top:2px">↳ ${children.length} child IBR${children.length>1?'s':''}</div>`
-      : '';
-    const childTag = r.old_ibr
-      ? `<div style="font-size:9px;color:#ffa726;margin-top:2px">← Parent: ${r.old_ibr.slice(-8)}</div>`
-      : '';
-    // Qty display: child rows have qty=0, show GRN instead
-    const qtyDisplay = r.qty > 0 ? r.qty : (r.grn > 0 ? `+${r.grn} GRN` : '—');
-    // Diff display
-    const diffDisplay = r.diff !== 0
-      ? `<span style="color:${r.diff>0?'#c62828':'#2e7d32'};font-size:10px">${r.diff>0?'−'+r.diff:'+'+Math.abs(r.diff)}</span>`
-      : '';
-    // Awaiting IBR tag
-    const awaitingTag = r.bucket_key === 'short_grn_awaiting_ibr'
-      ? `<span style="background:#fff3e0;color:#e65100;padding:1px 5px;border-radius:4px;font-size:9px;margin-left:4px">Awaiting IBR</span>`
-      : '';
-    return `<tr>
-      <td style="font-weight:600">${r.month}</td>
-      <td><span style="background:${bc};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;white-space:nowrap">${r.bucket}</span></td>
-      <td><span style="background:${sc}22;color:${sc};padding:2px 7px;border-radius:8px;font-size:10px">${r.sub_remark}</span>${awaitingTag}</td>
-      <td style="font-size:11px;color:#555">${r.awb||'—'}</td>
-      <td style="font-size:10px">${r.label||'—'}${parentTag}${childTag}</td>
-      <td style="font-size:11px;text-align:left">${r.product||'—'}</td>
-      <td style="text-align:center">${qtyDisplay} ${diffDisplay}</td>
-      <td style="text-align:center">${r.channel||'—'}</td>
-      <td style="font-size:11px;color:#888">${r.case_raise_date||'—'}</td>
-      <td style="text-align:right">${r.expected?formatUSD(r.expected):'—'}</td>
-      <td style="text-align:right;color:#2e7d32">${r.actual?formatUSD(r.actual):'—'}</td>
-      <td style="text-align:right;color:#c62828">${r.pending?formatUSD(r.pending):'—'}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="12" style="text-align:center;padding:30px;color:#888">No rows</td></tr>`;
+  // Helper: "January 2026" → Date object
+  const monthToDate = (ms) => {
+    if (!ms) return null;
+    const p = ms.split(' '); const mi = MONTH_ORDER.indexOf(p[0]);
+    return (mi >= 0 && p[1]) ? new Date(parseInt(p[1]), mi, 1) : null;
+  };
 
-  document.getElementById('mainContent').innerHTML = `
-  <div style="padding:20px">
+  // Helper: days since YYYY-MM-DD string
+  const daysSince = (ds) => {
+    if (!ds || ds === '—') return null;
+    const d = new Date(ds);
+    return isNaN(d.getTime()) ? null : Math.floor((Date.now() - d.getTime()) / 86400000);
+  };
 
-    <!-- KPI Cards -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #2e7d32;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Closed</div>
-        <div style="font-size:32px;font-weight:700;color:#2e7d32">${closed.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">shipments fully actioned</div>
-        <div style="margin-top:10px;border-top:1px solid #f0f0f0;padding-top:10px">${subRows}</div>
-      </div>
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #0277bd;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🚚 Intransit</div>
-        <div style="font-size:32px;font-weight:700;color:#0277bd">${transit.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">shipments en route</div>
-        <div style="font-size:11px;color:#888;margin-top:8px">${(transit.qty||0).toLocaleString()} units in transit</div>
-      </div>
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #c62828;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔴 Pending to Claim</div>
-        <div style="font-size:32px;font-weight:700;color:#c62828">${pending.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">no case raised yet</div>
-        <div style="font-size:12px;font-weight:600;color:#c62828;margin-top:8px">${formatUSD(pending.expected||0)} at risk</div>
-      </div>
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🟡 Claim in Progress</div>
-        <div style="font-size:32px;font-weight:700;color:#e65100">${progress.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">cases raised, awaiting settlement</div>
-        <div style="font-size:12px;font-weight:600;color:#e65100;margin-top:8px">${formatUSD(progress.expected||0)} expected · ${formatUSD(progress.actual||0)} received</div>
-      </div>
-    </div>
+  // Helper: colour-coded age chip
+  const ageChip = (days) => {
+    if (days === null || days === undefined) return '<span style="color:#aaa;font-size:10px">—</span>';
+    if (days >= 90) return '<span style="background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap">⚠️ ' + days + 'd</span>';
+    if (days >= 30) return '<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap">⏰ ' + days + 'd</span>';
+    return '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap">' + days + 'd</span>';
+  };
 
-    <!-- Monthly Breakdown + Filters row -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+  // Financials
+  const totalExpected  = (closed.expected||0) + (pending.expected||0) + (progress.expected||0);
+  const totalRecovered = (closed.actual||0)   + (progress.actual||0);
+  const totalPending   = Math.max(0, totalExpected - totalRecovered);
+  const recovRate      = totalExpected > 0 ? ((totalRecovered / totalExpected) * 100).toFixed(1) : '0.0';
+  const totalCount     = (closed.count||0) + (transit.count||0) + (pending.count||0) + (progress.count||0);
 
-      <!-- Monthly table -->
-      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Monthly Breakdown</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#f5f5f5">
-            <th style="text-align:left;padding:6px 8px">Month</th>
-            <th style="text-align:center;padding:6px 8px;color:#2e7d32">Closed</th>
-            <th style="text-align:center;padding:6px 8px;color:#0277bd">Intransit</th>
-            <th style="text-align:center;padding:6px 8px;color:#c62828">Pending</th>
-            <th style="text-align:center;padding:6px 8px;color:#e65100">In Prog.</th>
-            <th style="text-align:right;padding:6px 8px">Expected</th>
-            <th style="text-align:right;padding:6px 8px;color:#2e7d32">Recovered</th>
-          </tr></thead>
-          <tbody>${monthlyRows||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#888">No data</td></tr>'}</tbody>
-        </table>
-      </div>
+  // Parent → child IBR map
+  const childrenOf = {};
+  rows.forEach(r => { if (r.old_ibr) { if (!childrenOf[r.old_ibr]) childrenOf[r.old_ibr] = []; childrenOf[r.old_ibr].push(r.label); } });
 
-      <!-- Summary stats -->
-      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Overall Summary</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div style="background:#f9fbe7;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:22px;font-weight:700;color:#558b2f">${((closed.count||0)/((rows.length||1))*100).toFixed(1)}%</div>
-            <div style="font-size:11px;color:#666">Close Rate</div>
-          </div>
-          <div style="background:#fce4ec;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:22px;font-weight:700;color:#c62828">${((pending.count||0)+(progress.count||0))}</div>
-            <div style="font-size:11px;color:#666">Action Required</div>
-          </div>
-          <div style="background:#e8f5e9;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:16px;font-weight:700;color:#2e7d32">${formatUSD(closed.actual||0)}</div>
-            <div style="font-size:11px;color:#666">Total Recovered</div>
-          </div>
-          <div style="background:#fff3e0;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:16px;font-weight:700;color:#e65100">${formatUSD((pending.expected||0)+(progress.expected||0))}</div>
-            <div style="font-size:11px;color:#666">Total at Risk</div>
-          </div>
-        </div>
-        <div style="margin-top:12px;font-size:11px;color:#888;border-top:1px solid #f0f0f0;padding-top:10px">
-          Total rows: ${rows.length} &nbsp;|&nbsp; Filtered: ${filtered.length}
-        </div>
-      </div>
-    </div>
+  // Base filter
+  const baseFilter = r =>
+    (!_iusFilter.month   || r.month   === _iusFilter.month) &&
+    (!_iusFilter.channel || r.channel === _iusFilter.channel);
 
-    <!-- Detail Table -->
-    <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <div style="font-weight:700;font-size:13px;color:#1b3a2d">Shipment Detail</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select onchange="_iusFilter.month=this.value;renderIndiaUSTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
-            ${ddOpts(uMonths,'month')}
-          </select>
-          <select onchange="_iusFilter.bucket=this.value;renderIndiaUSTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
-            ${ddOpts(uBuckets,'bucket')}
-          </select>
-          <select onchange="_iusFilter.channel=this.value;renderIndiaUSTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
-            ${ddOpts(uChannels,'channel')}
-          </select>
-          <button onclick="_iusFilter={month:'',bucket:'',channel:''};renderIndiaUSTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#f5f5f5">
-            Clear
-          </button>
-        </div>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead><tr style="background:#1b3a2d;color:#fff">
-            <th style="padding:8px 10px;text-align:left">Month</th>
-            <th style="padding:8px 10px;text-align:left">Bucket</th>
-            <th style="padding:8px 10px;text-align:left">Sub Remark</th>
-            <th style="padding:8px 10px;text-align:left">AWB</th>
-            <th style="padding:8px 10px;text-align:left">Label</th>
-            <th style="padding:8px 10px;text-align:left">Product</th>
-            <th style="padding:8px 10px;text-align:center">Qty</th>
-            <th style="padding:8px 10px;text-align:center">Channel</th>
-            <th style="padding:8px 10px;text-align:left">Case Raise</th>
-            <th style="padding:8px 10px;text-align:right">Expected</th>
-            <th style="padding:8px 10px;text-align:right">Recovered</th>
-            <th style="padding:8px 10px;text-align:right">Pending</th>
-          </tr></thead>
-          <tbody>${detailRows}</tbody>
-        </table>
-      </div>
-    </div>
-  </div>`;
+  // Sub-tab row sets
+  const closedRows         = rows.filter(r => r.bucket_key === 'closed' && baseFilter(r));
+  const pendingRows        = rows.filter(r => r.bucket_key === 'short_grn_pending' && baseFilter(r));
+  const progressRows       = rows.filter(r => (r.bucket_key === 'short_grn_progress' || r.bucket_key === 'short_grn_awaiting_ibr') && baseFilter(r));
+  const transitRows        = rows.filter(r => r.bucket_key === 'intransit' && baseFilter(r));
+
+  // Sorted oldest-first (highest urgency at top)
+  const pendingRowsSorted  = pendingRows.slice().sort((a, b) => {
+    const da = monthToDate(a.month), db = monthToDate(b.month);
+    if (!da && !db) return (b.expected||0)-(a.expected||0);
+    return !da ? 1 : !db ? -1 : da-db;
+  });
+  const progressRowsSorted = progressRows.slice().sort((a, b) => {
+    const da = a.case_raise_date ? new Date(a.case_raise_date) : monthToDate(a.month);
+    const db = b.case_raise_date ? new Date(b.case_raise_date) : monthToDate(b.month);
+    if (!da && !db) return (b.expected||0)-(a.expected||0);
+    return !da ? 1 : !db ? -1 : da-db;
+  });
+
+  // Reusable filter bar
+  const filterBar = (tabId, srcRows) => {
+    const fM = [...new Set(srcRows.map(r => r.month))].filter(Boolean);
+    const fC = [...new Set(srcRows.map(r => r.channel))].filter(Boolean).sort();
+    const mOpts = fM.map(m => '<option value="' + m + '"' + (_iusFilter.month===m?' selected':'') + '>' + m + '</option>').join('');
+    const cOpts = fC.map(c => '<option value="' + c + '"' + (_iusFilter.channel===c?' selected':'') + '>' + c + '</option>').join('');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.018);flex-wrap:wrap">' +
+      '<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Filter:</span>' +
+      '<select onchange="_iusFilter.month=this.value;_iusTab=\'' + tabId + '\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"><option value="">All Months</option>' + mOpts + '</select>' +
+      '<select onchange="_iusFilter.channel=this.value;_iusTab=\'' + tabId + '\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"><option value="">All Channels</option>' + cOpts + '</select>' +
+      '<button onclick="_iusFilter={month:\'\',bucket:\'\',channel:\'\'};_iusTab=\'' + tabId + '\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-weight:600">✕ Clear</button>' +
+    '</div>';
+  };
+
+  // Reusable mini stats bar
+  const statsBar = (items) => {
+    const cells = items.map((s, i) => {
+      const br = i < items.length-1 ? 'border-right:1px solid var(--border);' : '';
+      const bg = s.bg ? 'background:' + s.bg + ';' : '';
+      const vc = s.bg ? s.c : 'var(--muted)';
+      return '<div style="flex:1;padding:11px 14px;text-align:center;' + br + bg + '">' +
+        '<div style="font-size:17px;font-weight:800;color:' + s.c + ';font-variant-numeric:tabular-nums">' + s.v + '</div>' +
+        '<div style="font-size:10px;color:' + vc + ';margin-top:2px;text-transform:uppercase;letter-spacing:.4px">' + s.l + '</div>' +
+        '</div>';
+    }).join('');
+    return '<div style="display:flex;border-bottom:1px solid var(--border)">' + cells + '</div>';
+  };
+
+  // ── TAB BUILDERS ────────────────────────────────────────────────────────
+
+  const buildAllTab = () => {
+    const mRows = sortedMonths.map(m => {
+      const mv = monthly[m] || {};
+      const rate = mv.expected > 0 ? ((mv.actual||0)/mv.expected*100).toFixed(0)+'%' : '—';
+      const rc = mv.expected > 0 && (mv.actual||0)/mv.expected >= 0.5 ? '#2e7d32' : '#e65100';
+      const ms = (m.split(' ')[0]||'').slice(0,3)+' '+(m.split(' ')[1]||'');
+      return '<tr>' +
+        '<td style="padding:7px 12px;font-weight:600;font-size:11px">' + ms + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#2e7d32;font-weight:600;font-size:11px">' + (mv.closed||0) + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#1565c0;font-weight:600;font-size:11px">' + (mv.intransit||0) + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#c62828;font-weight:600;font-size:11px">' + (mv.short_grn_pending||0) + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#e65100;font-weight:600;font-size:11px">' + (mv.short_grn_progress||0) + '</td>' +
+        '<td style="padding:7px 12px;text-align:right;font-size:11px">' + formatUSD(mv.expected||0) + '</td>' +
+        '<td style="padding:7px 12px;text-align:right;color:#2e7d32;font-weight:600;font-size:11px">' + formatUSD(mv.actual||0) + '</td>' +
+        '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:11px;color:' + rc + '">' + rate + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:20px;color:#888">No data</td></tr>';
+
+    return '<div style="display:grid;grid-template-columns:3fr 2fr;gap:14px;padding:15px">' +
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">' +
+        '<div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">' +
+          '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">📅 Monthly Breakdown</span>' +
+          '<span style="font-size:10px;color:var(--muted)">' + sortedMonths.length + ' months</span>' +
+        '</div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+          '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
+            '<th style="padding:7px 12px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">✅ Closed</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">🚚 Transit</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">🔴 Pending</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">⏳ Prog.</th>' +
+            '<th style="padding:7px 12px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:right">Expected</th>' +
+            '<th style="padding:7px 12px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:right">Recovered</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:right">Rate</th>' +
+          '</tr></thead>' +
+          '<tbody>' + mRows + '</tbody>' +
+          '<tfoot><tr style="background:rgba(27,58,45,.06);border-top:2px solid var(--border)">' +
+            '<td style="padding:7px 12px;font-weight:700;font-size:11px;color:#1b3a2d">TOTAL</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#2e7d32;font-weight:700;font-size:11px">' + (closed.count||0) + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#1565c0;font-weight:700;font-size:11px">' + (transit.count||0) + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#c62828;font-weight:700;font-size:11px">' + (pending.count||0) + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#e65100;font-weight:700;font-size:11px">' + (progress.count||0) + '</td>' +
+            '<td style="padding:7px 12px;text-align:right;font-weight:700;font-size:11px">' + formatUSD(totalExpected) + '</td>' +
+            '<td style="padding:7px 12px;text-align:right;color:#2e7d32;font-weight:700;font-size:11px">' + formatUSD(totalRecovered) + '</td>' +
+            '<td style="padding:7px 8px;text-align:right;color:#2e7d32;font-weight:700;font-size:11px">' + recovRate + '%</td>' +
+          '</tr></tfoot>' +
+        '</table></div>' +
+      '</div>' +
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;display:flex;flex-direction:column;gap:9px">' +
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">💰 Financial Summary</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div style="padding:10px;background:#fff3e0;border-radius:9px;border:1px solid #ffe0b2;text-align:center"><div style="font-size:15px;font-weight:800;color:#e65100;font-variant-numeric:tabular-nums">' + formatUSD(totalExpected) + '</div><div style="font-size:10px;color:#e65100;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Expected</div></div>' +
+          '<div style="padding:10px;background:#e8f5e9;border-radius:9px;border:1px solid #c8e6c9;text-align:center"><div style="font-size:15px;font-weight:800;color:#2e7d32;font-variant-numeric:tabular-nums">' + formatUSD(totalRecovered) + '</div><div style="font-size:10px;color:#2e7d32;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Recovered</div></div>' +
+          '<div style="padding:10px;background:#fce4ec;border-radius:9px;border:1px solid #f8bbd0;text-align:center"><div style="font-size:15px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + formatUSD(totalPending) + '</div><div style="font-size:10px;color:#c62828;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Pending</div></div>' +
+          '<div style="padding:10px;background:#e3f2fd;border-radius:9px;border:1px solid #bbdefb;text-align:center"><div style="font-size:15px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + recovRate + '%</div><div style="font-size:10px;color:#1565c0;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Recovery Rate</div></div>' +
+        '</div>' +
+        '<div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:4px"><span>Progress</span><span style="font-weight:700;color:#2e7d32">' + recovRate + '%</span></div>' +
+          '<div style="background:var(--border);border-radius:5px;height:7px;overflow:hidden"><div style="height:100%;width:' + Math.min(parseFloat(recovRate),100) + '%;background:linear-gradient(90deg,#1b5e20,#43a047);border-radius:5px"></div></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div style="text-align:center;padding:9px;background:rgba(0,0,0,.03);border-radius:8px;border:1px solid var(--border)"><div style="font-size:15px;font-weight:800;color:#558b2f;font-variant-numeric:tabular-nums">' + ((closed.count||0)/Math.max(totalCount,1)*100).toFixed(1) + '%</div><div style="font-size:10px;color:var(--muted);margin-top:2px">Close Rate</div></div>' +
+          '<div style="text-align:center;padding:9px;background:#fce4ec;border-radius:8px;border:1px solid #f8bbd0"><div style="font-size:15px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + actionNeeded + '</div><div style="font-size:10px;color:#c62828;margin-top:2px">Need Action ⚠️</div></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  };
+
+  const buildClosedTab = () => {
+    const tRows = closedRows.map(r => {
+      const ch = childrenOf[r.label]||[];
+      const pTag = ch.length>0 ? '<span style="font-size:9px;color:#26a69a;display:block;margin-top:2px">↳ ' + ch.length + ' child IBR' + (ch.length>1?'s':'') + '</span>' : '';
+      const cTag = r.old_ibr ? '<span style="font-size:9px;color:#ffa726;display:block;margin-top:2px">← ' + r.old_ibr.slice(-10) + '</span>' : '';
+      const diff = r.diff||0;
+      const dChip = diff!==0 ? '<span style="color:' + (diff>0?'#c62828':'#2e7d32') + ';font-weight:700;margin-left:4px;font-size:10px">' + (diff>0?'−'+diff:'+'+Math.abs(diff)) + '</span>' : '';
+      const qty = r.qty>0 ? r.qty+dChip : (r.grn>0 ? '+'+r.grn+' GRN' : '—');
+      const scMap = {'Fully Received':'#2e7d32','Claim raised and Received':'#1b5e20','Excess Received':'#00695c','Damage received':'#78909c','New IBR/WRO-Received against old IBR/WRO':'#26a69a','Pending qty inwarded against new IBR/WRO':'#ffa726'};
+      const SC = scMap[r.sub_remark]||'#2e7d32';
+      const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;font-weight:600">' + (r.label||'—') + pTag + cTag + '</td>' +
+        '<td style="padding:7px 9px"><span style="background:' + SC + '18;color:' + SC + ';padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;white-space:nowrap">' + (r.sub_remark||'—') + '</span></td>' +
+        '<td style="padding:7px 9px;font-size:11px">' + (r.channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.product||'') + '">' + (r.product||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:11px">' + qty + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;color:#888">' + (r.case_raise_date||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;font-size:11px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;font-size:11px;color:#2e7d32;font-weight:700">' + (r.actual?formatUSD(r.actual):'—') + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="9" style="text-align:center;padding:28px;color:#888">No closed rows match the current filter</td></tr>';
+
+    const cSub = closed.sub||{};
+    return '<div>' +
+      statsBar([
+        {v:closed.count||0, l:'Closed Shipments', c:'#2e7d32'},
+        {v:formatUSD(closed.actual||0), l:'Total Recovered', c:'#2e7d32'},
+        {v:formatUSD(closed.expected||0), l:'Expected', c:'#e65100'},
+        {v:Object.keys(cSub).length+' types', l:'Resolution Types', c:'#1565c0'},
+        {v:'', l:'', c:'transparent'},
+      ]) +
+      filterBar('closed', rows.filter(r=>r.bucket_key==='closed')) +
+      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Resolution</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Product</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Qty / Diff</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Case Raised</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Expected</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Recovered</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  const buildPendingTab = () => {
+    let crit=0, high=0, norm=0, critAmt=0;
+    pendingRows.forEach(r => {
+      const d = monthToDate(r.month);
+      const days = d ? Math.floor((Date.now()-d.getTime())/86400000) : null;
+      if (days===null){norm++;return;}
+      if (days>=90){crit++;critAmt+=r.expected||0;} else if (days>=30) high++; else norm++;
+    });
+    const pendingTotal = pendingRowsSorted.reduce((s,r)=>s+(r.expected||0),0);
+
+    const tRows = pendingRowsSorted.map(r => {
+      const d = monthToDate(r.month);
+      const days = d ? Math.floor((Date.now()-d.getTime())/86400000) : null;
+      const diff = r.diff||0;
+      const qsDisplay = diff>0 ? '<span style="color:#c62828;font-weight:700">−'+diff+'</span>' : (r.qty>0?r.qty:'—');
+      const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;font-weight:600">' + (r.label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px">' + (r.channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.product||'') + '">' + (r.product||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:11px">' + qsDisplay + '</td>' +
+        '<td style="padding:7px 9px;text-align:center">' + ageChip(days) + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;color:#c62828;font-weight:700;font-size:11px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.sub_remark||'—') + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:28px;color:#888">No pending rows match the current filter</td></tr>';
+
+    const warnBanner = crit>0 ? '<div style="padding:8px 14px;background:#fff5f5;border-bottom:1px solid #ffcdd2;font-size:11px;color:#c62828;font-weight:600">⚠️ ' + crit + ' case' + (crit>1?'s are':' is') + ' 90+ days old — carriers typically close claims after 90 days. ' + formatUSD(critAmt) + ' at immediate risk. File now.</div>' : '';
+
+    return '<div>' +
+      statsBar([
+        {v:pending.count||0, l:'Open Cases', c:'#c62828'},
+        {v:formatUSD(pending.expected||0), l:'Total at Risk', c:'#c62828'},
+        {v:crit, l:'⚠️ 90+ Day Critical', c:'#c62828', bg:'#fce4ec'},
+        {v:high, l:'⏰ 30–90 Day High', c:'#e65100', bg:'#fff3e0'},
+        {v:norm, l:'✅ Under 30 Days', c:'#2e7d32', bg:'#e8f5e9'},
+      ]) +
+      warnBanner +
+      filterBar('pending', rows.filter(r=>r.bucket_key==='short_grn_pending')) +
+      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + pendingRowsSorted.length + ' rows · sorted oldest first</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#b71c1c,#c62828)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Product</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Qty Short</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Age</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">$ at Risk</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Remark</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+        '<tfoot><tr style="background:rgba(198,40,40,.07);border-top:2px solid var(--border)">' +
+          '<td colspan="6" style="padding:7px 9px;font-weight:700;font-size:11px;color:#c62828">' + pendingRowsSorted.length + ' cases</td>' +
+          '<td style="padding:7px 9px;text-align:right;font-weight:700;font-size:11px;color:#c62828">' + formatUSD(pendingTotal) + '</td>' +
+          '<td></td>' +
+        '</tr></tfoot>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  const buildProgressTab = () => {
+    const pTot = {
+      exp:  progressRowsSorted.reduce((s,r)=>s+(r.expected||0),0),
+      act:  progressRowsSorted.reduce((s,r)=>s+(r.actual||0),0),
+      pend: progressRowsSorted.reduce((s,r)=>s+(r.pending||0),0)
+    };
+
+    const tRows = progressRowsSorted.map(r => {
+      const days = r.case_raise_date ? daysSince(r.case_raise_date) : null;
+      const awbTag = r.bucket_key==='short_grn_awaiting_ibr' ? '<span style="background:#fff3e0;color:#e65100;font-size:9px;padding:1px 5px;border-radius:4px;margin-left:4px">Awaiting IBR</span>' : '';
+      const scPMap = {'Claim raised but not received':'#e65100','Pending to claim':'#c62828'};
+      const SC = scPMap[r.sub_remark]||'#e65100';
+      const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;font-weight:600">' + (r.label||'—') + '</td>' +
+        '<td style="padding:7px 9px"><span style="background:' + SC + '18;color:' + SC + ';padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600">' + (r.sub_remark||'—') + '</span>' + awbTag + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px">' + (r.channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center">' + ageChip(days) + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;color:#888">' + (r.case_raise_date||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;font-size:11px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;font-size:11px;color:#2e7d32;font-weight:600">' + (r.actual?formatUSD(r.actual):'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;font-size:11px;color:#c62828;font-weight:600">' + (r.pending?formatUSD(r.pending):'—') + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="9" style="text-align:center;padding:28px;color:#888">No in-progress rows match the current filter</td></tr>';
+
+    return '<div>' +
+      statsBar([
+        {v:progress.count||0, l:'Cases Open', c:'#e65100'},
+        {v:formatUSD(progress.expected||0), l:'Total Expected', c:'#e65100'},
+        {v:formatUSD(progress.actual||0), l:'Received So Far', c:'#2e7d32'},
+        {v:formatUSD(Math.max(0,(progress.expected||0)-(progress.actual||0))), l:'Still Pending', c:'#c62828'},
+        {v:'', l:'', c:'transparent'},
+      ]) +
+      filterBar('progress', rows.filter(r=>r.bucket_key==='short_grn_progress'||r.bucket_key==='short_grn_awaiting_ibr')) +
+      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressRowsSorted.length + ' rows · sorted oldest case first</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#bf360c,#e65100)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Status</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Days Open</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Case Raised</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Expected</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Received</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Pending</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+        '<tfoot><tr style="background:rgba(230,81,0,.07);border-top:2px solid var(--border)">' +
+          '<td colspan="6" style="padding:7px 9px;font-weight:700;font-size:11px;color:#e65100">' + progressRowsSorted.length + ' cases</td>' +
+          '<td style="padding:7px 9px;text-align:right;font-weight:700;font-size:11px">' + formatUSD(pTot.exp) + '</td>' +
+          '<td style="padding:7px 9px;text-align:right;font-weight:700;font-size:11px;color:#2e7d32">' + formatUSD(pTot.act) + '</td>' +
+          '<td style="padding:7px 9px;text-align:right;font-weight:700;font-size:11px;color:#c62828">' + formatUSD(pTot.pend) + '</td>' +
+        '</tr></tfoot>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  const buildTransitTab = () => {
+    const tRows = transitRows.map(r => {
+      const d = monthToDate(r.month);
+      const days = d ? Math.floor((Date.now()-d.getTime())/86400000) : null;
+      const dc = days!==null ? (days>=30 ?
+        '<span style="background:#fff3e0;color:#e65100;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">'+days+'d ⚠️</span>' :
+        '<span style="background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">'+days+'d</span>') : '—';
+      const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;font-weight:600">' + (r.label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;color:#555">' + (r.awb||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px">' + (r.channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:11px">' + (r.qty||0).toLocaleString() + '</td>' +
+        '<td style="padding:7px 9px;text-align:center">' + dc + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.product||'') + '">' + (r.product||'—') + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="7" style="text-align:center;padding:28px;color:#888">No intransit rows match the current filter</td></tr>';
+
+    return '<div>' +
+      '<div style="display:flex;border-bottom:1px solid var(--border)">' +
+        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0">' + (transit.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Shipments Moving</div></div>' +
+        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + (transit.qty||0).toLocaleString() + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Units in Transit</div></div>' +
+        '<div style="flex:3;padding:11px 14px;display:flex;align-items:center"><div style="font-size:11px;color:#1565c0;background:#e3f2fd;padding:7px 11px;border-radius:8px;border:1px solid #bbdefb">🚚 Monitoring only — shipments en route. No financial claims raised yet.</div></div>' +
+      '</div>' +
+      filterBar('intransit', rows.filter(r=>r.bucket_key==='intransit')) +
+      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + transitRows.length + ' rows</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#0d47a1,#1565c0)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">AWB</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Qty Sent</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Days in Transit</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Product</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  // ── Tab config (after builders so fn refs are valid) ─────────────────────
+  const tabGrads = {
+    all:       'background:linear-gradient(135deg,#1b3a2d,#2d5a3d)',
+    closed:    'background:linear-gradient(135deg,#1b5e20,#2e7d32)',
+    pending:   'background:linear-gradient(135deg,#b71c1c,#c62828)',
+    progress:  'background:linear-gradient(135deg,#bf360c,#e65100)',
+    intransit: 'background:linear-gradient(135deg,#0d47a1,#1565c0)',
+  };
+  const TABS = [
+    { id:'all',       icon:'📋', label:'All',              count:totalCount,         grad:tabGrads.all,       fn:buildAllTab },
+    { id:'closed',    icon:'✅', label:'Closed',           count:closed.count||0,    grad:tabGrads.closed,    fn:buildClosedTab },
+    { id:'pending',   icon:'🔴', label:'Pending to Claim', count:pending.count||0,   grad:tabGrads.pending,   fn:buildPendingTab },
+    { id:'progress',  icon:'⏳', label:'In Progress',      count:progress.count||0,  grad:tabGrads.progress,  fn:buildProgressTab },
+    { id:'intransit', icon:'🚚', label:'Intransit',        count:transit.count||0,   grad:tabGrads.intransit, fn:buildTransitTab },
+  ];
+  const activeTab = TABS.find(t => t.id === _iusTab) || TABS[0];
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  const tabBar = TABS.map(t => {
+    const isActive = _iusTab === t.id;
+    const tabStyle = isActive ? t.grad+';color:#fff' : 'background:var(--surface);color:var(--muted)';
+    const cntStyle = isActive ? 'background:rgba(255,255,255,.22);color:#fff' : 'background:rgba(27,58,45,.08);color:#1b3a2d';
+    return '<div onclick="_iusTab=\''+t.id+'\';renderIndiaUSTab(_rawData,_lastUpdated)"' +
+      ' style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:1px solid var(--border);font-size:11px;font-weight:600;transition:background .12s;'+tabStyle+'"' +
+      ' onmouseover="if(\''+t.id+'\'!==\''+_iusTab+'\')this.style.background=\'rgba(27,58,45,.05)\'"' +
+      ' onmouseout="if(\''+t.id+'\'!==\''+_iusTab+'\')this.style.background=\'var(--surface)\'">' +
+      t.icon+' '+t.label+'<span style="margin-left:5px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;'+cntStyle+'">'+t.count+'</span>' +
+      '</div>';
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML =
+    '<div>' +
+      '<div style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<div style="width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">✈️</div>' +
+          '<div><div style="font-size:14px;font-weight:700;color:#fff">India → US Recon</div><div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:1px">Updated: ' + lastUpdated + '</div></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<span style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.85);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600">' + rows.length + ' rows</span>' +
+          (actionNeeded>0 ? '<span style="background:rgba(198,40,40,.4);border:1px solid rgba(198,40,40,.6);color:#ffcdd2;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600">' + actionNeeded + ' need action ⚠️</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;padding:14px 20px 10px">' +
+        '<div onclick="_iusTab=\'all\';renderIndiaUSTab(_rawData,_lastUpdated)" style="border-radius:12px;padding:15px;background:linear-gradient(135deg,#1b3a2d,#2d5a3d,#3a7050);color:#fff;cursor:pointer;transition:transform .15s;' + (_iusTab==='all'?'box-shadow:0 0 0 3px rgba(255,255,255,.42),0 4px 18px rgba(0,0,0,.18)':'box-shadow:0 3px 14px rgba(0,0,0,.12)') + '" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'\'">' +
+          '<div style="font-size:15px;opacity:.7;margin-bottom:4px">📋</div>' +
+          '<div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">' + totalCount + '</div>' +
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-top:5px;opacity:.85">All Shipments</div>' +
+          '<div style="font-size:10px;opacity:.5;margin-top:2px">Overview &amp; monthly</div>' +
+        '</div>' +
+        '<div onclick="_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="border-radius:12px;padding:15px;background:linear-gradient(135deg,#1b5e20,#2e7d32,#43a047);color:#fff;cursor:pointer;transition:transform .15s;' + (_iusTab==='closed'?'box-shadow:0 0 0 3px rgba(255,255,255,.42),0 4px 18px rgba(0,0,0,.18)':'box-shadow:0 3px 14px rgba(0,0,0,.12)') + '" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'\'">' +
+          '<div style="font-size:15px;opacity:.7;margin-bottom:4px">✅</div>' +
+          '<div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">' + (closed.count||0) + '</div>' +
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-top:5px;opacity:.85">Closed / Resolved</div>' +
+          '<div style="font-size:10px;opacity:.5;margin-top:2px;font-variant-numeric:tabular-nums">' + formatUSD(closed.actual||0) + ' recovered</div>' +
+        '</div>' +
+        '<div onclick="_iusTab=\'pending\';renderIndiaUSTab(_rawData,_lastUpdated)" style="border-radius:12px;padding:15px;background:linear-gradient(135deg,#b71c1c,#c62828,#ef5350);color:#fff;cursor:pointer;transition:transform .15s;' + (_iusTab==='pending'?'box-shadow:0 0 0 3px rgba(255,255,255,.42),0 4px 18px rgba(0,0,0,.18)':'box-shadow:0 3px 14px rgba(0,0,0,.12)') + '" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'\'">' +
+          '<div style="font-size:15px;opacity:.7;margin-bottom:4px">🔴</div>' +
+          '<div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">' + (pending.count||0) + '</div>' +
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-top:5px;opacity:.85">Pending to Claim</div>' +
+          '<div style="font-size:10px;opacity:.5;margin-top:2px;font-variant-numeric:tabular-nums">' + formatUSD(pending.expected||0) + ' at risk</div>' +
+        '</div>' +
+        '<div onclick="_iusTab=\'progress\';renderIndiaUSTab(_rawData,_lastUpdated)" style="border-radius:12px;padding:15px;background:linear-gradient(135deg,#bf360c,#e65100,#ff7043);color:#fff;cursor:pointer;transition:transform .15s;' + (_iusTab==='progress'?'box-shadow:0 0 0 3px rgba(255,255,255,.42),0 4px 18px rgba(0,0,0,.18)':'box-shadow:0 3px 14px rgba(0,0,0,.12)') + '" onmouseover="this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.transform=\'\'">' +
+          '<div style="font-size:15px;opacity:.7;margin-bottom:4px">⏳</div>' +
+          '<div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">' + (progress.count||0) + '</div>' +
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-top:5px;opacity:.85">Claim in Progress</div>' +
+          '<div style="font-size:10px;opacity:.5;margin-top:2px;font-variant-numeric:tabular-nums">' + formatUSD(progress.expected||0) + ' exp · ' + formatUSD(progress.actual||0) + ' rcvd</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="margin:0 20px 20px">' +
+        '<div style="display:flex;border:1px solid var(--border);border-bottom:none;border-radius:11px 11px 0 0;overflow:hidden">' + tabBar + '</div>' +
+        '<div style="background:var(--surface);border:1px solid var(--border);border-radius:0 0 11px 11px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06)">' +
+          activeTab.fn() +
+        '</div>' +
+      '</div>' +
+    '</div>';
 }
 
 function renderUPSClaimsTab(data, lastUpdated) {
