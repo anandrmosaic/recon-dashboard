@@ -729,6 +729,18 @@ def get_us2us_data(creds, sheet_id):
     }
 
 
+def _norm_channel(ch):
+    """Normalise raw channel strings → TikTok | Amazon | ShipBob (or original)."""
+    lc = ch.lower().strip()
+    if 'tiktok' in lc or 'tik tok' in lc or 'tik-tok' in lc:
+        return 'TikTok'
+    if 'amazon' in lc:
+        return 'Amazon'
+    if 'shipbob' in lc:
+        return 'ShipBob'
+    return ch  # keep as-is for any future channels
+
+
 def get_india_us_data(creds, sheet_id):
     """Read Inward India to US tab — classify rows by Bucket + Sub Remarks."""
     service = build('sheets', 'v4', credentials=creds)
@@ -863,7 +875,7 @@ def get_india_us_data(creds, sheet_id):
             'qty':          int(qty),
             'grn':          int(safe_float(g(row, grn_col))),
             'diff':         int(safe_float(g(row, diff_col))),
-            'channel':      str(g(row, channel_col)).strip(),
+            'channel':      _norm_channel(str(g(row, channel_col)).strip()),
             'transporter':  str(g(row, transporter_col)).strip(),
             'status':       str(g(row, status_col)).strip(),
             'case_raise_date': str(g(row, raise_col)).strip(),
