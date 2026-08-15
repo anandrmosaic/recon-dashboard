@@ -567,6 +567,63 @@ function destroyCharts() {
   chartInstances = {};
 }
 
+// ── Claims Bucket drill-down modal ────────────────────────────────────────
+function showCBDrill(month, bucket) {
+  const allDetail = window._cbDetail || {};
+  const rows = month === 'all'
+    ? Object.values(allDetail).flatMap(d => d[bucket] || [])
+    : ((allDetail[month] || {})[bucket] || []);
+  const bktLabel = bucket === 'rec'  ? 'Claim Raised & Received'
+                 : bucket === 'prog' ? 'Claim Raised, Pending Receipt'
+                 :                     'Pending to Claim';
+  const amtLabel = bucket === 'rec' ? 'Actual ($)' : 'Expected ($)';
+  const total    = rows.reduce((s,r) => s + r.amt, 0);
+
+  const rowsHtml = rows.length === 0
+    ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;font-size:13px">No rows found</td></tr>'
+    : rows.map((r,i) => `
+        <tr style="${i%2?'background:#f9fafb':''}">
+          <td style="padding:8px 14px;font-size:11px;color:#888;font-variant-numeric:tabular-nums">${r.row||'—'}</td>
+          <td style="padding:8px 14px;font-size:12px;font-weight:700;color:#1b3a2d">${r.lbl||'—'}</td>
+          <td style="padding:8px 14px;font-size:11px;color:#666;max-width:220px">${r.sub||'—'}</td>
+          <td style="padding:8px 14px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:#1565c0;font-size:12px">${formatUSD(r.amt)}</td>
+        </tr>`).join('');
+
+  let modal = document.getElementById('cbDrillModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'cbDrillModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;width:100%;max-width:740px;max-height:82vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.35)">
+      <div style="padding:16px 22px;background:linear-gradient(135deg,#1b3a2d,#2d5a3d);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="color:#fff;font-weight:700;font-size:14px">${month} — ${bktLabel}</div>
+          <div style="color:rgba(255,255,255,.65);font-size:11px;margin-top:3px">${rows.length} row${rows.length!==1?'s':''} · Total ${formatUSD(total)}</div>
+        </div>
+        <button onclick="document.getElementById('cbDrillModal').remove()"
+          style="background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f5f7fa;position:sticky;top:0;z-index:1">
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Sheet Row</th>
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px">IBR / Label</th>
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px">Sub Remark</th>
+            <th style="padding:9px 14px;text-align:right;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px">${amtLabel}</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot><tr style="background:#1b3a2d">
+            <td colspan="3" style="padding:10px 14px;font-weight:700;color:#fff;font-size:12px">Total</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:13px">${formatUSD(total)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
 function computeTrends(filteredData) {
   const gt = filteredData.channel_data?.grand_total || [];
   if (gt.length < 2) return null;
@@ -1025,16 +1082,21 @@ function renderDashboardOverview(data, lastUpdated) {
   const iusCBRows = iusD.rows || [];
   const cbMths    = (iusD.months || []).slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
   const cbAgg     = {};
+  window._cbDetail = {};
   iusCBRows.forEach(r => {
     const m  = r.month;
     const sl = (r.sub_remark || '').toLowerCase().trim();
-    if (!cbAgg[m]) cbAgg[m] = { rec:0, prog:0, pend:0 };
+    if (!cbAgg[m])           cbAgg[m]           = { rec:0, prog:0, pend:0 };
+    if (!window._cbDetail[m]) window._cbDetail[m] = { rec:[], prog:[], pend:[] };
     if (sl.includes('claim raised and received')) {
-      cbAgg[m].rec  += r.actual   || 0;   // money received → actual
+      cbAgg[m].rec  += r.actual   || 0;
+      window._cbDetail[m].rec.push({ lbl: r.label||r.awb||'', sub: r.sub_remark||'', amt: r.actual||0, row: r.row_index||'' });
     } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending')) {
-      cbAgg[m].prog += r.expected || 0;   // pending receipt → expected
+      cbAgg[m].prog += r.expected || 0;
+      window._cbDetail[m].prog.push({ lbl: r.label||r.awb||'', sub: r.sub_remark||'', amt: r.expected||0, row: r.row_index||'' });
     } else if (sl.includes('pending')) {
-      cbAgg[m].pend += r.expected || 0;   // not yet claimed → expected
+      cbAgg[m].pend += r.expected || 0;
+      window._cbDetail[m].pend.push({ lbl: r.label||r.awb||'', sub: r.sub_remark||'', amt: r.expected||0, row: r.row_index||'' });
     }
   });
   const cbTotRec  = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).rec  ||0), 0);
@@ -1179,20 +1241,20 @@ function renderDashboardOverview(data, lastUpdated) {
           <tbody>
             <tr style="background:#f0fdf4">
               <td style="padding:9px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px">✅ Claim Raised &amp; Received</td>
-              ${cbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(cbAgg[m]||{}).rec>0?formatUSD((cbAgg[m]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(cbTotRec)}</td>
+              ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','rec')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#e8f5e9'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).rec>0?formatUSD((cbAgg[m]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td onclick="showCBDrill('all','rec')" style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotRec)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotRec/cbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fffbf0">
               <td style="padding:9px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px">⏳ Claim Raised, Pending Receipt</td>
-              ${cbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(cbAgg[m]||{}).prog>0?formatUSD((cbAgg[m]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(cbTotProg)}</td>
+              ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','prog')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fff3e0'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).prog>0?formatUSD((cbAgg[m]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td onclick="showCBDrill('all','prog')" style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotProg)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotProg/cbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fff8f8">
               <td style="padding:9px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px">📋 Pending to Claim</td>
-              ${cbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(cbAgg[m]||{}).pend>0?formatUSD((cbAgg[m]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(cbTotPend)}</td>
+              ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','pend')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fce4ec'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).pend>0?formatUSD((cbAgg[m]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td onclick="showCBDrill('all','pend')" style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotPend)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotPend/cbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
           </tbody>
