@@ -1091,7 +1091,9 @@ function renderDashboardOverview(data, lastUpdated) {
     if (sl.includes('claim raised and received')) {
       cbAgg[m].rec  += r.actual   || 0;
       window._cbDetail[m].rec.push({ lbl: r.label||r.awb||'', sub: r.sub_remark||'', amt: r.actual||0, row: r.row_index||'' });
-    } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending')) {
+    } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending') ||
+               (sl.includes('raised') && sl.includes('claim'))) {
+      // ↑ also catches "Raised with Xindus for claim", "Raised claim with carrier" etc.
       cbAgg[m].prog += r.expected || 0;
       window._cbDetail[m].prog.push({ lbl: r.label||r.awb||'', sub: r.sub_remark||'', amt: r.expected||0, row: r.row_index||'' });
     } else if (sl.includes('pending')) {
@@ -1778,7 +1780,8 @@ function renderWeeklyReview(data, lastUpdated) {
     const sl = (r.sub_remark || '').toLowerCase().trim();
     if (sl.includes('claim raised and received')) {
       wkCBAgg.rec  += r.actual   || 0;
-    } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending')) {
+    } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending') ||
+               (sl.includes('raised') && sl.includes('claim'))) {
       wkCBAgg.prog += r.expected || 0;
     } else if (sl.includes('pending')) {
       wkCBAgg.pend += r.expected || 0;
