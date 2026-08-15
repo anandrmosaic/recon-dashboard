@@ -1146,6 +1146,65 @@ function renderDashboardOverview(data, lastUpdated) {
     </div>
   `).join('');
 
+  // ── Intelligence KPI Cards — 7 metrics (India→US only) ──────────────────
+  // Shared: is this row's claim already settled/received?
+  const _icIsRec = sl =>
+    sl.includes('claim raised and received') || sl.includes('claim settled')  ||
+    sl.includes('reimbursement received')    || sl.includes('claim received') ||
+    (sl.includes('received') && sl.includes('claim') && !sl.includes('not received'));
+
+  // Card 1 + 3: Active Claimable $ + unique open label count
+  const icActiveClaim = cbTotProg + cbTotPend + cbTotDmg;
+  const _icOpenSet    = new Set();
+  iusCBRows.forEach(r => {
+    if (!_icIsRec((r.sub_remark||'').toLowerCase().trim()))
+      _icOpenSet.add(r.label || r.awb || '');
+  });
+  const icOpenCount = _icOpenSet.size;
+  const icAvgCase   = icOpenCount > 0 ? icActiveClaim / icOpenCount : 0;
+
+  // Card 2: Claim Win Rate (of formally raised claims, % received)
+  const icWinRate = (cbTotRec + cbTotProg) > 0
+    ? ((cbTotRec / (cbTotRec + cbTotProg)) * 100).toFixed(1) : '0.0';
+
+  // Card 4: MoM Recovery (last two months in Claims Bucket)
+  const icCurMth  = cbMths.length > 0 ? cbMths[cbMths.length-1] : null;
+  const icPrevMth = cbMths.length > 1 ? cbMths[cbMths.length-2] : null;
+  const icCurRec  = icCurMth  ? ((cbAgg[icCurMth] ||{}).rec||0) : 0;
+  const icPrevRec = icPrevMth ? ((cbAgg[icPrevMth]||{}).rec||0) : 0;
+  const icMomPct  = icPrevRec > 0 ? (((icCurRec-icPrevRec)/icPrevRec)*100).toFixed(1) : null;
+
+  // Card 5: GRN Fill Rate (units received ÷ dispatched)
+  const icFillRate = parentQty > 0 ? (((parentQty-totalShort)/parentQty)*100).toFixed(1) : '0.0';
+
+  // Card 6: 90+ Day open cases (deduplicated by label)
+  let icAging90 = 0, icAging90Amt = 0;
+  const _icAgedSet = new Set();
+  iusCBRows.forEach(r => {
+    if (!r.case_raise_date) return;
+    if (_icIsRec((r.sub_remark||'').toLowerCase().trim())) return;
+    const ms = new Date(r.case_raise_date).getTime();
+    if (isNaN(ms)) return;
+    const days = Math.floor((Date.now() - ms) / 86400000);
+    if (days >= 90) {
+      const lbl = r.label || r.awb || '';
+      if (lbl && !_icAgedSet.has(lbl)) {
+        _icAgedSet.add(lbl); icAging90++; icAging90Amt += r.expected || 0;
+      }
+    }
+  });
+
+  // Card 7: Top Loss Channel (by unrecovered pending $)
+  const _icChPend = {};
+  iusCBRows.forEach(r => {
+    if (_icIsRec((r.sub_remark||'').toLowerCase().trim())) return;
+    const ch = r.channel || 'Other';
+    _icChPend[ch] = (_icChPend[ch]||0) + (r.expected||0);
+  });
+  const icTopChs = Object.entries(_icChPend).sort((a,b) => b[1]-a[1]).slice(0,3);
+  const icTopCh  = icTopChs[0] || ['—', 0];
+  const icMaxAmt = Math.max(icTopCh[1], 1);
+
   const tgl = (active) => active
     ? 'background:#1b3a2d;color:#fff;border-color:#1b3a2d;box-shadow:0 2px 6px #1b3a2d44'
     : 'background:#fff;color:#555;border-color:#dee2e6';
@@ -1221,6 +1280,99 @@ function renderDashboardOverview(data, lastUpdated) {
       </div>
 
     </div>
+
+    <!-- Intelligence KPI Cards: Financial & Operational (India→US only) -->
+    ${_dashView === 'india_us' ? `
+    <div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="flex:1;height:1px;background:#e9ecef"></div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;
+                    color:#1b3a2d;background:#1b3a2d12;border:1px solid #1b3a2d28;
+                    padding:4px 14px;border-radius:20px;white-space:nowrap;display:flex;align-items:center;gap:6px">
+          <i class="fas fa-brain" style="font-size:9px"></i> Financial &amp; Operational Intelligence
+        </div>
+        <div style="flex:1;height:1px;background:#e9ecef"></div>
+      </div>
+
+      <!-- Row A: Financial Health (4 cards) -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+
+        <div class="kpi-card" style="background:linear-gradient(135deg,#b71c1c,#c62828,#ef5350)">
+          <div class="kpi-icon"><i class="fas fa-coins"></i></div>
+          <div class="kpi-value" style="font-size:22px">${formatUSD(icActiveClaim)}</div>
+          <div class="kpi-label">Active Claimable</div>
+          <div class="kpi-sub">${icOpenCount} open cases · not yet recovered</div>
+        </div>
+
+        <div class="kpi-card" style="background:linear-gradient(135deg,#1b5e20,#2e7d32,#43a047)">
+          <div class="kpi-icon"><i class="fas fa-trophy"></i></div>
+          <div class="kpi-value">${icWinRate}<span style="font-size:14px;font-weight:500">%</span></div>
+          <div class="kpi-label">Claim Win Rate</div>
+          <div class="kpi-sub">${formatUSD(cbTotRec)} received of ${formatUSD(cbTotRec+cbTotProg)} raised</div>
+        </div>
+
+        <div class="kpi-card" style="background:linear-gradient(135deg,#bf360c,#e65100,#ff7043)">
+          <div class="kpi-icon"><i class="fas fa-calculator"></i></div>
+          <div class="kpi-value" style="font-size:22px">${formatUSD(icAvgCase)}</div>
+          <div class="kpi-label">Avg per Open Case</div>
+          <div class="kpi-sub">Active claimable ÷ ${icOpenCount} open labels</div>
+        </div>
+
+        <div class="kpi-card" style="background:linear-gradient(135deg,#0d47a1,#1565c0,#1976d2)">
+          <div class="kpi-icon"><i class="fas fa-chart-line"></i></div>
+          <div class="kpi-value" style="font-size:${icMomPct!==null?'22':'28'}px">${icMomPct!==null?(parseFloat(icMomPct)>=0?'+':'')+icMomPct+'%':'—'}</div>
+          <div class="kpi-label">MoM Recovery</div>
+          <div class="kpi-sub">${icCurMth||'—'} vs ${icPrevMth||'—'}</div>
+          ${icMomPct!==null?`<div style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:6px;width:fit-content;background:${parseFloat(icMomPct)>=0?'rgba(76,175,80,.25)':'rgba(244,67,54,.25)'}">${parseFloat(icMomPct)>=0?'▲ Improving':'▼ Declining'}</div>`:''}
+        </div>
+
+      </div>
+
+      <!-- Row B: Operational Health (3 cards) -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+
+        <div class="kpi-card" style="background:linear-gradient(135deg,#004d40,#00695c,#00897b)">
+          <div class="kpi-icon"><i class="fas fa-boxes"></i></div>
+          <div class="kpi-value">${icFillRate}<span style="font-size:14px;font-weight:500">%</span></div>
+          <div class="kpi-label">GRN Fill Rate</div>
+          <div class="kpi-sub">${(parentQty-totalShort).toLocaleString()} of ${parentQty.toLocaleString()} units received</div>
+          <div style="margin-top:10px;background:rgba(255,255,255,.15);border-radius:4px;height:5px;overflow:hidden">
+            <div style="height:100%;background:rgba(255,255,255,.8);border-radius:4px;width:${Math.min(parseFloat(icFillRate),100)}%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.6;margin-top:3px">
+            <span>0%</span><span>Fill Target 95%</span><span>100%</span>
+          </div>
+        </div>
+
+        <div class="kpi-card" style="background:linear-gradient(135deg,#4a148c,#6a1b9a,#8e24aa)">
+          <div class="kpi-icon"><i class="fas fa-hourglass-end"></i></div>
+          <div class="kpi-value">${icAging90}<span style="font-size:14px;font-weight:500"> cases</span></div>
+          <div class="kpi-label">90+ Day Open Cases</div>
+          <div class="kpi-sub">${icAging90Amt>0?formatUSD(icAging90Amt)+' at risk · escalate':'No aged cases with expected $'}</div>
+          ${icAging90>0
+            ? `<div style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:6px;width:fit-content;background:rgba(244,67,54,.3)">⚠️ Action Required</div>`
+            : `<div style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:6px;width:fit-content;background:rgba(76,175,80,.3)">✅ All within 90d</div>`}
+        </div>
+
+        <div class="kpi-card" style="background:linear-gradient(135deg,#0a2540,#1b3a2d,#243b55)">
+          <div class="kpi-icon"><i class="fas fa-store"></i></div>
+          <div class="kpi-label" style="margin-top:0;margin-bottom:4px">Top Loss Channel</div>
+          <div style="font-size:18px;font-weight:800;letter-spacing:-.2px;line-height:1.1;color:#fff">${icTopCh[0]}</div>
+          <div class="kpi-sub">${formatUSD(icTopCh[1])} unrecovered pending</div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-top:10px">
+            ${icTopChs.map(([ch,amt]) => `<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#fff">
+              <span style="width:70px;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ch}</span>
+              <div style="flex:1;height:4px;background:rgba(255,255,255,.15);border-radius:2px">
+                <div style="height:100%;border-radius:2px;background:rgba(255,255,255,.7);width:${((amt/icMaxAmt)*100).toFixed(0)}%"></div>
+              </div>
+              <span style="width:52px;text-align:right;opacity:.85;font-variant-numeric:tabular-nums">${formatUSD(amt)}</span>
+            </div>`).join('')}
+          </div>
+        </div>
+
+      </div>
+    </div>
+    ` : ''}
 
     <!-- Claims Bucket (India→US only) -->
     ${_dashView === 'india_us' && cbMths.length > 0 ? `
