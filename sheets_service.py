@@ -785,9 +785,15 @@ def get_india_us_data(creds, sheet_id):
     if channel_col < 0:
         channel_col = 38  # hardcoded: column AM (39th column, 0-indexed 38)
     transporter_col = fc('transporter')
+    # Exact-match 'remarks' to avoid matching 'sub remark'; fallback to col AJ (idx 35)
+    remarks_col     = next((i for i, h in enumerate(headers) if h == 'remarks'), -1)
+    if remarks_col < 0:
+        remarks_col = next((i for i, h in enumerate(headers) if h == 'remark'), -1)
+    if remarks_col < 0:
+        remarks_col = 35  # hardcoded: column AJ (36th column, 0-indexed 35)
 
     print(f"[IndiaUS] Cols — month:{month_col} bucket:{bucket_col} sub:{sub_col} "
-          f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col} (AM=38)")
+          f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col} remarks:{remarks_col}")
 
     kpis = {
         'closed':              {'count': 0, 'qty': 0, 'expected': 0.0, 'actual': 0.0, 'sub': {}},
@@ -883,6 +889,7 @@ def get_india_us_data(creds, sheet_id):
             'diff':         int(safe_float(g(row, diff_col))),
             'channel':      _norm_channel(str(g(row, channel_col)).strip()),
             'transporter':  str(g(row, transporter_col)).strip(),
+            'remarks':      str(g(row, remarks_col)).strip(),
             'status':       str(g(row, status_col)).strip(),
             'case_raise_date': str(g(row, raise_col)).strip(),
             'case_close_date': str(g(row, close_col)).strip(),

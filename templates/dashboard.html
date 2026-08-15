@@ -1085,7 +1085,8 @@ function renderDashboardOverview(data, lastUpdated) {
   window._cbDetail = {};
   iusCBRows.forEach(r => {
     const m  = r.month;
-    const sl = (r.sub_remark || '').toLowerCase().trim();
+    // Check both Sub Remark and Remarks (AJ) columns — write keyword in either
+    const sl = ((r.sub_remark || '') + ' ' + (r.remarks || '')).toLowerCase().trim();
     if (!cbAgg[m])            cbAgg[m]            = { rec:0, prog:0, pend:0 };
     if (!window._cbDetail[m]) window._cbDetail[m]  = { rec:[], prog:[], pend:[] };
     const det = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'' };
@@ -1922,7 +1923,8 @@ function renderWeeklyReview(data, lastUpdated) {
   // ── Claims Bucket for selected week (India→US, week-filtered) ────────────
   const wkCBAgg = { rec:0, prog:0, pend:0 };
   rows.filter(r => inWk(r.case_raise_date) || inWk(r[closeKey])).forEach(r => {
-    const sl = (r.sub_remark || '').toLowerCase().trim();
+    // Check both Sub Remark and Remarks (AJ) columns — write keyword in either
+    const sl = ((r.sub_remark || '') + ' ' + (r.remarks || '')).toLowerCase().trim();
     // Bucket 1: Claim raised and received/settled
     if (sl.includes('claim raised and received') ||
         sl.includes('claim settled') ||
