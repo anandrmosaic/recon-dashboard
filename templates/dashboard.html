@@ -997,8 +997,9 @@ function renderDashboardOverview(data, lastUpdated) {
   const uniqueIBRs = Object.keys(seenLabelQty).length;
   const uniqueSKUs = new Set(rows.map(r => r.product || r.sku || '').filter(Boolean)).size;
 
-  // ── Total short / pending ───────────────────────────────────────────────
-  const totalShort   = rows.reduce((s,r) => s + Math.max(0, r.diff||0), 0);
+  // ── Total short: Final Diff (Q-T), positive rows only — no netting ────
+  // Only count rows where Final Diff > 0 (actual short); ignore negative (over-received)
+  const totalShort = rows.filter(r => (r.diff || 0) > 0).reduce((s, r) => s + r.diff, 0);
   const totalPending = Math.max(0, totalExpected - totalRecovered);
   const recovPct     = totalExpected > 0 ? ((totalRecovered/totalExpected)*100).toFixed(1) : '0.0';
 
