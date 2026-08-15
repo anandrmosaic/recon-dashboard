@@ -1700,29 +1700,19 @@ function renderWeeklyReview(data, lastUpdated) {
   closed.forEach(r => pushCh(r, false, true));
   const sortedChs = Object.entries(chMap).sort((a,b) => (b[1].raised+b[1].closed)-(a[1].raised+a[1].closed));
 
-  // ── Claims Bucket monthly breakdown (all India→US rows, not week-filtered) ─
-  const _WR_MO = ['January','February','March','April','May','June',
-                  'July','August','September','October','November','December'];
-  const wrCBRows = (data.india_us || {}).rows || [];
-  const wrCBMths = ((data.india_us || {}).months || []).slice()
-                   .sort((a,b) => _WR_MO.indexOf(a) - _WR_MO.indexOf(b));
-  const wrCBAgg  = {};
-  wrCBRows.forEach(r => {
-    const m  = r.month;
+  // ── Claims Bucket for selected week (India→US, week-filtered) ────────────
+  const wkCBAgg = { rec:0, prog:0, pend:0 };
+  rows.filter(r => inWk(r.case_raise_date) || inWk(r[closeKey])).forEach(r => {
     const sl = (r.sub_remark || '').toLowerCase().trim();
-    if (!wrCBAgg[m]) wrCBAgg[m] = { rec:0, prog:0, pend:0 };
     if (sl.includes('claim raised and received')) {
-      wrCBAgg[m].rec  += r.actual   || 0;   // money received → actual
+      wkCBAgg.rec  += r.actual   || 0;
     } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending')) {
-      wrCBAgg[m].prog += r.expected || 0;   // pending receipt → expected
+      wkCBAgg.prog += r.expected || 0;
     } else if (sl.includes('pending')) {
-      wrCBAgg[m].pend += r.expected || 0;   // not yet claimed → expected
+      wkCBAgg.pend += r.expected || 0;
     }
   });
-  const wrCBTotRec  = wrCBMths.reduce((s,m) => s+((wrCBAgg[m]||{}).rec  ||0), 0);
-  const wrCBTotProg = wrCBMths.reduce((s,m) => s+((wrCBAgg[m]||{}).prog ||0), 0);
-  const wrCBTotPend = wrCBMths.reduce((s,m) => s+((wrCBAgg[m]||{}).pend ||0), 0);
-  const wrCBGrand   = wrCBTotRec + wrCBTotProg + wrCBTotPend;
+  const wkCBGrand = wkCBAgg.rec + wkCBAgg.prog + wkCBAgg.pend;
 
   // ── Aged cases closed this week (prior vintage only) ───────────────────
   const agedSeen  = new Set();
@@ -1999,52 +1989,47 @@ function renderWeeklyReview(data, lastUpdated) {
       </div>
     </div>
 
-    <!-- Claims Bucket (India→US, year-to-date) -->
-    ${_weeklyView === 'india_us' && wrCBMths.length > 0 ? `
+    <!-- Claims Bucket (week-filtered) -->
+    ${_weeklyView === 'india_us' ? `
     <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:14px">
       <div style="padding:13px 18px;border-bottom:1px solid #e9ecef;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
-          <i class="fas fa-table" style="color:#1b3a2d"></i> Claims Bucket — Year-to-Date
-          <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:#bbb">full year · all months</span>
+          <i class="fas fa-table" style="color:#1b3a2d"></i> Claims Bucket
         </div>
-        <span style="font-size:11px;color:#bbb">India → US</span>
+        <span style="font-size:11px;color:#bbb">${selWk.label}</span>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:220px">Claims Bucket</th>
-            ${wrCBMths.map(m=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`).join('')}
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">YTD%</th>
+            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Claims Bucket</th>
+            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Amount</th>
+            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">% of Week</th>
           </tr></thead>
           <tbody>
             <tr style="background:#f0fdf4">
-              <td style="padding:9px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">✅ Claim Raised &amp; Received</td>
-              ${wrCBMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums">${(wrCBAgg[m]||{}).rec>0?formatUSD((wrCBAgg[m]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(wrCBTotRec)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${wrCBGrand>0?((wrCBTotRec/wrCBGrand)*100).toFixed(2)+'%':'—'}</td>
+              <td style="padding:11px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">✅ Claim Raised &amp; Received</td>
+              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;font-size:13px">${wkCBAgg.rec>0?formatUSD(wkCBAgg.rec):'<span style="color:#ccc">—</span>'}</td>
+              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${wkCBGrand>0?((wkCBAgg.rec/wkCBGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fffbf0">
-              <td style="padding:9px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">⏳ Claim Raised, Pending Receipt</td>
-              ${wrCBMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums">${(wrCBAgg[m]||{}).prog>0?formatUSD((wrCBAgg[m]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(wrCBTotProg)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${wrCBGrand>0?((wrCBTotProg/wrCBGrand)*100).toFixed(2)+'%':'—'}</td>
+              <td style="padding:11px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">⏳ Claim Raised, Pending Receipt</td>
+              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;font-size:13px">${wkCBAgg.prog>0?formatUSD(wkCBAgg.prog):'<span style="color:#ccc">—</span>'}</td>
+              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${wkCBGrand>0?((wkCBAgg.prog/wkCBGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fff8f8">
-              <td style="padding:9px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">📋 Pending to Claim</td>
-              ${wrCBMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums">${(wrCBAgg[m]||{}).pend>0?formatUSD((wrCBAgg[m]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(wrCBTotPend)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${wrCBGrand>0?((wrCBTotPend/wrCBGrand)*100).toFixed(2)+'%':'—'}</td>
+              <td style="padding:11px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">📋 Pending to Claim</td>
+              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;font-size:13px">${wkCBAgg.pend>0?formatUSD(wkCBAgg.pend):'<span style="color:#ccc">—</span>'}</td>
+              <td style="padding:11px 16px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${wkCBGrand>0?((wkCBAgg.pend/wkCBGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
           </tbody>
           <tfoot><tr style="background:#1b3a2d">
             <td style="padding:10px 16px;font-weight:700;color:#fff">Total Eligible Claims</td>
-            ${wrCBMths.map(m=>{const t=((wrCBAgg[m]||{}).rec||0)+((wrCBAgg[m]||{}).prog||0)+((wrCBAgg[m]||{}).pend||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(wrCBGrand)}</td>
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
+            <td style="padding:10px 16px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:13px">${wkCBGrand>0?formatUSD(wkCBGrand):'<span style="opacity:.5">—</span>'}</td>
+            <td style="padding:10px 16px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
         </table>
       </div>
+      ${wkCBGrand===0?'<div style="padding:14px 18px;font-size:11px;color:#aaa;text-align:center">No eligible claim activity in this week</div>':''}
     </div>` : ''}
 
     <!-- Aged cases closed this week -->
