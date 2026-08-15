@@ -1005,9 +1005,15 @@ function renderDashboardOverview(data, lastUpdated) {
   const uniqueIBRs = Object.keys(seenLabelQty).length;
   const uniqueSKUs = new Set(rows.map(r => r.product || r.sku || '').filter(Boolean)).size;
 
-  // ── Total short: Final Diff (Q-T), positive rows only — no netting ────
-  // Only count rows where Final Diff > 0 (actual short); ignore negative (over-received)
-  const totalShort = rows.filter(r => (r.diff || 0) > 0).reduce((s, r) => s + r.diff, 0);
+  // ── Total short: Final Diff (Q-T), one value per unique label (dedup parent) ─
+  // Each IBR label appears across multiple child-SKU rows sharing the same diff value.
+  // Take only the first row per label → then sum positive diffs (no netting, no double-count).
+  const _seenDiffLbl = {};
+  rows.forEach(r => {
+    const lbl = r.label || r.from_label || '';
+    if (lbl && !(lbl in _seenDiffLbl)) _seenDiffLbl[lbl] = r.diff || 0;
+  });
+  const totalShort = Object.values(_seenDiffLbl).filter(v => v > 0).reduce((s,v) => s+v, 0);
   const totalPending = Math.max(0, totalExpected - totalRecovered);
   const recovPct     = totalExpected > 0 ? ((totalRecovered/totalExpected)*100).toFixed(1) : '0.0';
 
