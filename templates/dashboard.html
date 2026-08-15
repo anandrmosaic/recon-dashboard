@@ -473,6 +473,9 @@
     <i class="fas fa-heartbeat"></i> Case Health
     <span id="caseHealthBadge" style="background:#c62828;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
+  <button class="tab-btn" data-tab="weekly_review" onclick="switchTab('weekly_review')">
+    <i class="fas fa-calendar-week"></i> Weekly Review
+  </button>
   <button class="tab-btn" data-tab="india_us" onclick="switchTab('india_us')">
     <i class="fas fa-plane-departure"></i> India → US
     <span id="iusBadge" style="background:#1565c0;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
@@ -500,8 +503,11 @@ let _rawData = null;
 let _lastUpdated = null;
 let _activeTab = 'dashboard';
 let chartInstances = {};
-let _dashView = 'india_us';
-let _caseView = 'india_us';
+let _dashView    = 'india_us';
+let _caseView    = 'india_us';
+let _weeklyView  = 'india_us';
+let _weekIdx     = 0;
+let _weekOptions = [];
 
 function setColFilter(col, val) {
   _discFilters[col] = val;
@@ -917,6 +923,8 @@ function applyAndRender() {
     renderDashboardOverview(_rawData, _lastUpdated);
   } else if (_activeTab === 'case_health') {
     renderCaseHealth(_rawData, _lastUpdated);
+  } else if (_activeTab === 'weekly_review') {
+    renderWeeklyReview(_rawData, _lastUpdated);
   } else if (_activeTab === 'ups_claims') {
     renderUPSClaimsTab(_rawData, _lastUpdated);
   } else if (_activeTab === 'us2us') {
@@ -1495,6 +1503,441 @@ function renderCaseHealth(data, lastUpdated) {
       }
     });
   }
+}
+
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║  WEEKLY REVIEW TAB                                                       ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+
+// ── Thu-Thu week helpers ─────────────────────────────────────────────────────
+function _weekThursday(d) {
+  const day  = d.getDay();                      // 0=Sun … 4=Thu … 6=Sat
+  const back = day >= 4 ? day - 4 : day + 3;   // days back to most recent Thursday
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
+}
+
+function _wkLabel(thu) {
+  const end = new Date(thu);
+  end.setDate(end.getDate() + 6);
+  const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const f   = dt => `${dt.getDate()} ${MO[dt.getMonth()]}`;
+  const yr  = thu.getFullYear();
+  return `Thu ${f(thu)} – Wed ${f(end)} ${yr}`;
+}
+
+function _buildWeekOptions(data) {
+  const thuSet = new Set();
+  ['india_us','us2us'].forEach(src => {
+    ((data[src]||{}).rows||[]).forEach(r => {
+      ['case_raise_date','case_close_date','case_resolve_date'].forEach(f => {
+        const d = _parseDate(r[f]);
+        if (d) thuSet.add(_weekThursday(d).getTime());
+      });
+    });
+  });
+  _weekOptions = Array.from(thuSet)
+    .sort((a,b) => b - a)           // newest first
+    .map(ms => ({ thuMs: ms, label: _wkLabel(new Date(ms)) }));
+  // Default to first fully-elapsed week (not the current live week)
+  const now = Date.now();
+  const liveWkStart = _weekThursday(new Date()).getTime();
+  const firstPast = _weekOptions.findIndex(w => w.thuMs < liveWkStart);
+  _weekIdx = Math.max(0, firstPast);
+}
+
+// ── Outcome classifier ───────────────────────────────────────────────────────
+function _closeType(r, actKey) {
+  const act = r[actKey] || 0;
+  const sr  = (r.sub_remark || r.status || r.subbucket || '').toLowerCase();
+  if (act > 0)                                                    return 'cash';
+  if (/locat|found|stock sent|stock.*receiv|receiv.*stock/.test(sr)) return 'inventory';
+  if (/reject|deny|denied|no.*claim/.test(sr))                    return 'rejected';
+  return 'other';
+}
+
+// ── Main render ──────────────────────────────────────────────────────────────
+function renderWeeklyReview(data, lastUpdated) {
+  destroyCharts();
+  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
+
+  if (_weekOptions.length === 0) _buildWeekOptions(data);
+
+  if (_weekOptions.length === 0) {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="loading"><p style="color:#888">No case dates found. Fill <em>case_raise_date</em> / <em>case_close_date</em> columns in the sheet.</p></div>';
+    return;
+  }
+
+  _weekIdx = Math.max(0, Math.min(_weekIdx, _weekOptions.length - 1));
+  const selWk     = _weekOptions[_weekIdx];
+  const weekStart = new Date(selWk.thuMs);
+  const weekEnd   = new Date(selWk.thuMs); weekEnd.setDate(weekEnd.getDate() + 7);
+
+  const src       = _weeklyView === 'india_us' ? (data.india_us||{}) : (data.us2us||{});
+  const rows      = src.rows || [];
+  const closeKey  = _weeklyView === 'india_us' ? 'case_close_date' : 'case_resolve_date';
+  const actKey    = _weeklyView === 'india_us' ? 'actual' : 'recovered';
+  const today     = new Date();
+
+  const inWk = ds => { const d = _parseDate(ds); return d && d >= weekStart && d < weekEnd; };
+
+  // ── Core buckets ────────────────────────────────────────────────────────
+  const raised      = rows.filter(r => inWk(r.case_raise_date));
+  const closed      = rows.filter(r => inWk(r[closeKey]));
+  const noDates     = rows.filter(r => (!r.case_raise_date||!r.case_raise_date.trim()) && (!r[closeKey]||!r[closeKey].trim())).length;
+
+  // Unique label sets for counts
+  const raisedLbls  = new Set(raised.map(r => r.label||r.from_label||r.awb||''));
+  const closedLbls  = new Set(closed.map(r => r.label||r.from_label||r.awb||''));
+  const raisedCount = raisedLbls.size;
+  const closedCount = closedLbls.size;
+
+  // Recovery totals
+  const recovTotal  = closed.reduce((s,r) => s + (r[actKey]||0), 0);
+  const raisedExp   = raised.reduce((s,r) => s + (r.expected||0), 0);
+
+  // Closed same-week vs prior
+  const closedSame  = closed.filter(r => inWk(r.case_raise_date));
+  const closedPrior = closed.filter(r => { const d=_parseDate(r.case_raise_date); return d && d < weekStart; });
+  const recovSame   = closedSame.reduce( (s,r) => s+(r[actKey]||0), 0);
+  const recovPrior  = closedPrior.reduce((s,r) => s+(r[actKey]||0), 0);
+
+  // Still pending (raised this week, not yet closed)
+  const stillOpen   = raised.filter(r => !r[closeKey]||!r[closeKey].trim());
+  const pendingAmt  = stillOpen.reduce((s,r) => s+(r.expected||0), 0);
+
+  // ── Close outcome split ─────────────────────────────────────────────────
+  const outcomeSeen = new Set();
+  const outcomes    = { cash:0, inventory:0, rejected:0, other:0, cashAmt:0, invAmt:0 };
+  closed.forEach(r => {
+    const lbl = r.label||r.from_label||r.awb||'';
+    if (outcomeSeen.has(lbl)) return;
+    outcomeSeen.add(lbl);
+    const t = _closeType(r, actKey);
+    outcomes[t]++;
+    if (t === 'cash')      outcomes.cashAmt += (r[actKey]||0);
+    if (t === 'inventory') outcomes.invAmt  += (r.expected||0);
+  });
+
+  // ── Channel breakdown ───────────────────────────────────────────────────
+  const chMap = {};
+  const pushCh = (r, isRaised, isClosed) => {
+    const ch  = r.channel || r.from_channel || '—';
+    const lbl = r.label   || r.from_label   || r.awb || Math.random()+'';
+    if (!chMap[ch]) chMap[ch] = { rl:new Set(), cl:new Set(), raised:0, closed:0, recovered:0, expected:0 };
+    if (isRaised && !chMap[ch].rl.has(lbl)) { chMap[ch].rl.add(lbl); chMap[ch].raised++; chMap[ch].expected+=(r.expected||0); }
+    if (isClosed && !chMap[ch].cl.has(lbl)) { chMap[ch].cl.add(lbl); chMap[ch].closed++; chMap[ch].recovered+=(r[actKey]||0); }
+  };
+  raised.forEach(r => pushCh(r, true, false));
+  closed.forEach(r => pushCh(r, false, true));
+  const sortedChs = Object.entries(chMap).sort((a,b) => (b[1].raised+b[1].closed)-(a[1].raised+a[1].closed));
+
+  // ── Aged cases closed this week (prior vintage only) ───────────────────
+  const agedSeen  = new Set();
+  const agedCases = closedPrior
+    .filter(r => { const lbl=r.label||r.from_label||r.awb||''; if(agedSeen.has(lbl)) return false; agedSeen.add(lbl); return true; })
+    .map(r => {
+      const rd = _parseDate(r.case_raise_date);
+      const cd = _parseDate(r[closeKey]);
+      const age = rd ? Math.round((cd ? cd : today) - rd) / 86400000 : null;
+      return { ...r, age: age ? Math.round(age) : null };
+    })
+    .sort((a,b) => (b.age||0) - (a.age||0))
+    .slice(0, 20);
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  const chColors  = ['#1565c0','#c2185b','#00897b','#7b1fa2','#e65100','#2e7d32','#795548','#455a64'];
+  const tgl = a => a
+    ? 'background:#1b3a2d;color:#fff;border-color:#1b3a2d'
+    : 'background:#fff;color:#555;border-color:#dee2e6';
+
+  const weekOpts = _weekOptions.map((w,i) =>
+    `<option value="${i}"${i===_weekIdx?' selected':''}>${w.label}</option>`
+  ).join('');
+
+  // ── Channel table rows ──────────────────────────────────────────────────
+  const chRows = sortedChs.map(([ch,d], idx) => {
+    const rate = d.raised > 0 ? Math.round((d.closed/d.raised)*100) : null;
+    const rc   = rate==null?'#aaa':rate>=80?'#2e7d32':rate>=40?'#e65100':'#c62828';
+    return `<tr style="${idx%2===1?'background:#f9fafb':''}">
+      <td style="padding:9px 14px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px">
+        <div style="width:8px;height:8px;border-radius:50%;background:${chColors[idx%chColors.length]};flex-shrink:0"></div>${ch}
+      </td>
+      <td style="padding:9px 14px;text-align:right;font-weight:700;color:#1565c0;font-size:14px;font-variant-numeric:tabular-nums">${d.raised||'—'}</td>
+      <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;font-size:14px;font-variant-numeric:tabular-nums">${d.closed||'—'}</td>
+      <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;font-size:13px;font-variant-numeric:tabular-nums">${d.recovered>0?formatUSD(d.recovered):'<span style="color:#ccc">—</span>'}</td>
+      <td style="padding:9px 14px;text-align:right;color:#888;font-size:13px;font-variant-numeric:tabular-nums">${d.expected>0?formatUSD(d.expected):'<span style="color:#ccc">—</span>'}</td>
+      <td style="padding:9px 14px;text-align:right">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px">
+          <div style="width:50px;height:4px;background:#e9ecef;border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:${rate||0}%;background:${rc};border-radius:2px"></div>
+          </div>
+          <span style="font-size:12px;font-weight:700;color:${rc};font-variant-numeric:tabular-nums">${rate!=null?rate+'%':'—'}</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa">No cases with dates in this week</td></tr>`;
+
+  const totR=sortedChs.reduce((s,[,d])=>s+d.raised,0);
+  const totC=sortedChs.reduce((s,[,d])=>s+d.closed,0);
+  const totRec=sortedChs.reduce((s,[,d])=>s+d.recovered,0);
+  const totExp=sortedChs.reduce((s,[,d])=>s+d.expected,0);
+  const totRate=totR>0?Math.round((totC/totR)*100):null;
+  const totRc=totRate==null?'#888':totRate>=80?'#2e7d32':totRate>=40?'#e65100':'#c62828';
+
+  // ── Aged cases table rows ───────────────────────────────────────────────
+  const agedRows = agedCases.map((r,i) => {
+    const ac = r.age||0;
+    const acC= ac>90?'#7b1fa2':ac>60?'#c62828':ac>30?'#e65100':'#2e7d32';
+    const t  = _closeType(r, actKey);
+    const outcomeTag = t==='cash'
+      ? `<span style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">💰 Cash</span>`
+      : t==='inventory'
+      ? `<span style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">📦 Inventory</span>`
+      : t==='rejected'
+      ? `<span style="background:#ffebee;color:#c62828;border:1px solid #ef9a9a;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">❌ Rejected</span>`
+      : `<span style="background:#f5f5f5;color:#888;border:1px solid #ddd;padding:2px 7px;border-radius:10px;font-size:10px">— Other</span>`;
+    return `<tr style="${i%2===1?'background:#f9fafb':''}">
+      <td style="padding:8px 14px;font-size:11px;color:#666">${r.month||'—'}</td>
+      <td style="padding:8px 14px;font-size:11px;font-weight:600;color:#1b3a2d">${r.label||r.from_label||'—'}</td>
+      <td style="padding:8px 14px;font-size:11px;color:#888">${r.case_raise_date||'—'}</td>
+      <td style="padding:8px 14px;text-align:center">
+        <span style="background:${acC}18;color:${acC};padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700">${ac}d old</span>
+      </td>
+      <td style="padding:8px 14px;text-align:center">${outcomeTag}</td>
+      <td style="padding:8px 14px;text-align:right;font-size:12px;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums">${r[actKey]>0?formatUSD(r[actKey]):'<span style="color:#ccc">—</span>'}</td>
+      <td style="padding:8px 14px;font-size:10px;color:#777;max-width:160px;word-break:break-word">${r.sub_remark||r.status||'—'}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" style="text-align:center;padding:20px;color:#aaa">No prior-vintage cases closed this week</td></tr>`;
+
+  // ── Render HTML ─────────────────────────────────────────────────────────
+  document.getElementById('mainContent').innerHTML = `
+  <div style="padding:20px 24px">
+
+    <!-- Week picker + toggle -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:wrap">
+
+      <button onclick="_weekIdx=Math.min(_weekIdx+1,_weekOptions.length-1);renderWeeklyReview(_rawData,_lastUpdated)"
+        style="width:34px;height:34px;border-radius:8px;border:1.5px solid #dee2e6;background:#fff;color:#555;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;font-family:inherit">
+        ←
+      </button>
+
+      <div style="position:relative">
+        <select onchange="_weekIdx=+this.value;renderWeeklyReview(_rawData,_lastUpdated)"
+          style="appearance:none;border:1.5px solid #dee2e6;background:#fff;color:#1b3a2d;
+                 font-size:13px;font-weight:700;padding:8px 36px 8px 14px;border-radius:8px;
+                 cursor:pointer;min-width:310px;font-family:inherit">
+          ${weekOpts}
+        </select>
+        <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:#999;font-size:11px">▾</span>
+      </div>
+
+      <button onclick="_weekIdx=Math.max(_weekIdx-1,0);renderWeeklyReview(_rawData,_lastUpdated)"
+        style="width:34px;height:34px;border-radius:8px;border:1.5px solid #dee2e6;background:#fff;color:#555;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;font-family:inherit">
+        →
+      </button>
+
+      <div style="display:flex;border:1.5px solid #dee2e6;border-radius:8px;overflow:hidden">
+        <button onclick="_weeklyView='india_us';renderWeeklyReview(_rawData,_lastUpdated)"
+          style="padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:all .15s;${tgl(_weeklyView==='india_us')}">
+          ✈️ India → US
+        </button>
+        <button onclick="_weeklyView='us2us';renderWeeklyReview(_rawData,_lastUpdated)"
+          style="padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;border:none;border-left:1px solid #dee2e6;font-family:inherit;transition:all .15s;${tgl(_weeklyView==='us2us')}">
+          🔄 US 2 US
+        </button>
+      </div>
+
+      ${noDates>0 ? `<div style="margin-left:auto;font-size:11px;color:#e65100;background:#fff3e0;border:1px solid #ffcc80;border-radius:6px;padding:5px 10px">⚠️ ${noDates} rows have no dates</div>` : ''}
+    </div>
+
+    <!-- 4 KPI cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+
+      <div class="kpi-card blue">
+        <div class="kpi-icon"><i class="fas fa-folder-plus"></i></div>
+        <div class="kpi-value">${raisedCount}</div>
+        <div class="kpi-label">Cases Raised</div>
+        <div class="kpi-sub">${formatUSD(raisedExp)} expected · ${Object.keys(chMap).length} channels</div>
+      </div>
+
+      <div class="kpi-card" style="background:linear-gradient(135deg,#004d40,#00695c,#00897b)">
+        <div class="kpi-icon"><i class="fas fa-check-double"></i></div>
+        <div class="kpi-value">${closedCount}</div>
+        <div class="kpi-label">Cases Closed</div>
+        <div class="kpi-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+          ${outcomes.cash>0?`<span style="background:rgba(255,255,255,.18);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:600">💰 ${outcomes.cash} cash</span>`:''}
+          ${outcomes.inventory>0?`<span style="background:rgba(255,255,255,.18);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:600">📦 ${outcomes.inventory} inventory</span>`:''}
+          ${outcomes.rejected>0?`<span style="background:rgba(255,255,255,.18);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:600">❌ ${outcomes.rejected} rejected</span>`:''}
+          ${outcomes.other>0?`<span style="background:rgba(255,255,255,.15);border-radius:6px;padding:2px 7px;font-size:10px">? ${outcomes.other} other</span>`:''}
+          ${closedCount===0?'<span style="opacity:.6">no closures this week</span>':''}
+        </div>
+      </div>
+
+      <div class="kpi-card green">
+        <div class="kpi-icon"><i class="fas fa-dollar-sign"></i></div>
+        <div class="kpi-value" style="font-size:${recovTotal>=10000?'22px':'28px'}">${formatUSD(recovTotal)}</div>
+        <div class="kpi-label">Recovery Received</div>
+        <div class="kpi-sub">${closedCount} cases closed · ${closedSame.length} same-wk + ${closedPrior.length} aged</div>
+      </div>
+
+      <div class="kpi-card" style="background:linear-gradient(135deg,#b71c1c,#c62828,#e53935)">
+        <div class="kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+        <div class="kpi-value" style="font-size:${pendingAmt>=10000?'22px':'28px'}">${formatUSD(pendingAmt)}</div>
+        <div class="kpi-label">Still Pending</div>
+        <div class="kpi-sub">${stillOpen.length} cases raised this week, not closed yet</div>
+      </div>
+
+    </div>
+
+    <!-- Recovery split + Outcome split (side by side) -->
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-bottom:14px">
+
+      <!-- Recovery split panel -->
+      <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06);display:grid;grid-template-columns:auto 1fr 1fr;align-items:stretch;gap:0">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;
+                    writing-mode:vertical-rl;transform:rotate(180deg);padding:0 14px 0 0;margin-right:14px;
+                    border-right:1px solid #e9ecef;display:flex;align-items:center;justify-content:center">
+          Recovery Source
+        </div>
+        <div style="padding:0 18px;display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#888;margin-bottom:5px">From cases raised THIS week</div>
+          <div style="font-size:26px;font-weight:800;color:#2e7d32;line-height:1;font-variant-numeric:tabular-nums;font-family:'Plus Jakarta Sans',sans-serif">${formatUSD(recovSame)}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">${closedSame.length} case${closedSame.length!==1?'s':''} — raised & closed same week</div>
+          <span style="display:inline-block;margin-top:8px;font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;width:fit-content;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">⚡ Same-week closure</span>
+        </div>
+        <div style="padding:0 18px;border-left:1px solid #e9ecef;display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#888;margin-bottom:5px">From cases raised BEFORE this week</div>
+          <div style="font-size:26px;font-weight:800;color:#00695c;line-height:1;font-variant-numeric:tabular-nums;font-family:'Plus Jakarta Sans',sans-serif">${formatUSD(recovPrior)}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">${closedPrior.length} case${closedPrior.length!==1?'s':''} — opened earlier, settled this week</div>
+          <span style="display:inline-block;margin-top:8px;font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;width:fit-content;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9">📦 Aged recovery</span>
+        </div>
+      </div>
+
+      <!-- Close outcome breakdown -->
+      <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.06)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:14px;display:flex;align-items:center;gap:6px">
+          <i class="fas fa-tags" style="color:#1b3a2d"></i> How Cases Were Closed
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">💰</span>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#2e7d32;margin-bottom:3px">
+                <span>Cash Reimbursed</span><span>${outcomes.cash} cases · ${formatUSD(outcomes.cashAmt)}</span>
+              </div>
+              <div style="background:#e9ecef;border-radius:3px;height:5px;overflow:hidden">
+                <div style="height:100%;background:#4caf50;width:${closedCount>0?Math.round((outcomes.cash/closedCount)*100):0}%;border-radius:3px"></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">📦</span>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#1565c0;margin-bottom:3px">
+                <span>Inventory Located</span><span>${outcomes.inventory} cases</span>
+              </div>
+              <div style="background:#e9ecef;border-radius:3px;height:5px;overflow:hidden">
+                <div style="height:100%;background:#42a5f5;width:${closedCount>0?Math.round((outcomes.inventory/closedCount)*100):0}%;border-radius:3px"></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">❌</span>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#c62828;margin-bottom:3px">
+                <span>Rejected / No Claim</span><span>${outcomes.rejected} cases</span>
+              </div>
+              <div style="background:#e9ecef;border-radius:3px;height:5px;overflow:hidden">
+                <div style="height:100%;background:#ef5350;width:${closedCount>0?Math.round((outcomes.rejected/closedCount)*100):0}%;border-radius:3px"></div>
+              </div>
+            </div>
+          </div>
+
+          ${outcomes.other>0?`
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">❓</span>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#888;margin-bottom:3px">
+                <span>Outcome Unclear</span><span>${outcomes.other} cases</span>
+              </div>
+              <div style="background:#e9ecef;border-radius:3px;height:5px;overflow:hidden">
+                <div style="height:100%;background:#bdbdbd;width:${closedCount>0?Math.round((outcomes.other/closedCount)*100):0}%;border-radius:3px"></div>
+              </div>
+              <div style="font-size:10px;color:#aaa;margin-top:3px">sub_remark doesn't match known outcome keywords</div>
+            </div>
+          </div>` : ''}
+
+          ${closedCount===0 ? '<div style="text-align:center;color:#bbb;font-size:12px;padding:10px 0">No cases closed this week</div>' : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- Channel table -->
+    <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:14px">
+      <div style="padding:13px 18px;border-bottom:1px solid #e9ecef;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
+          <div style="width:6px;height:6px;border-radius:50%;background:#1b3a2d"></div> Channel Breakdown
+        </div>
+        <span style="font-size:11px;color:#bbb">${selWk.label}</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Channel</th>
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Cases Raised</th>
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Cases Closed</th>
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Recovered</th>
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Expected</th>
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Close Rate</th>
+          </tr></thead>
+          <tbody>${chRows}</tbody>
+          <tfoot><tr style="border-top:2px solid #e9ecef;background:#f9fafb">
+            <td style="padding:10px 14px;font-weight:700">Total</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#1565c0;font-variant-numeric:tabular-nums">${totR}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums">${totC}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums">${formatUSD(totRec)}</td>
+            <td style="padding:10px 14px;text-align:right;color:#888;font-variant-numeric:tabular-nums">${formatUSD(totExp)}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:${totRc};font-variant-numeric:tabular-nums">${totRate!=null?totRate+'%':'—'}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- Aged cases closed this week -->
+    <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:14px">
+      <div style="padding:13px 18px;border-bottom:1px solid #e9ecef;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-history" style="color:#c62828"></i> Prior Cases Settled This Week
+          <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:#bbb">(raised before this week, closed now)</span>
+        </div>
+        <span style="font-size:11px;color:#bbb">top ${agedCases.length} of ${closedPrior.length} · oldest first</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:linear-gradient(135deg,#4a148c,#6a1b9a)">
+            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Month</th>
+            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Label / IBR</th>
+            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Raised On</th>
+            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">Case Age</th>
+            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">Outcome</th>
+            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Recovered</th>
+            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Remark</th>
+          </tr></thead>
+          <tbody>${agedRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    ${noDates>0?`
+    <div style="padding:10px 14px;border-radius:8px;background:#fff3e0;border:1px solid #ffcc80;font-size:11px;color:#888;display:flex;align-items:flex-start;gap:8px">
+      <span style="flex-shrink:0">⚠️</span>
+      <div><strong style="color:#e65100">Data note:</strong> ${noDates} rows in the dataset have neither case_raise_date nor case_close_date filled in — excluded from this view. Rows with "Fully Received" status (no case raised) are correctly excluded.</div>
+    </div>`:''}`
+  + `</div>`;
 }
 
 // ── Internal US 2 US Tab ───────────────────────────────────────────────────
@@ -3294,6 +3737,9 @@ async function loadData() {
       const u2Action = ((u2Kpis.pending||{}).count||0) + ((u2Kpis.in_progress||{}).count||0);
       const u2Badge = document.getElementById('us2usBadge');
       if (u2Badge) { u2Badge.textContent = u2Action; u2Badge.style.display = u2Action > 0 ? 'inline' : 'none'; }
+
+      // Reset weekly options so they rebuild from fresh data
+      _weekOptions = [];
 
       // Case Health badge: count open cases (have raise date, no close date) across both sources
       const iusRows = (_rawData.india_us || {}).rows || [];
