@@ -1016,12 +1016,16 @@ function renderDashboardOverview(data, lastUpdated) {
   const cbMths    = (iusD.months || []).slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
   const cbAgg     = {};
   iusCBRows.forEach(r => {
-    const m = r.month;
+    const m  = r.month;
+    const sl = (r.sub_remark || '').toLowerCase().trim();
     if (!cbAgg[m]) cbAgg[m] = { rec:0, prog:0, pend:0 };
-    if (r.bucket_key === 'closed')                 cbAgg[m].rec  += r.actual   || 0;
-    if (r.bucket_key === 'short_grn_progress')     cbAgg[m].prog += r.expected || 0;
-    if (r.bucket_key === 'short_grn_pending' ||
-        r.bucket_key === 'short_grn_awaiting_ibr') cbAgg[m].pend += r.expected || 0;
+    if (sl.includes('claim raised and received')) {
+      cbAgg[m].rec  += r.actual   || 0;   // money received → actual
+    } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending')) {
+      cbAgg[m].prog += r.expected || 0;   // pending receipt → expected
+    } else if (sl.includes('pending')) {
+      cbAgg[m].pend += r.expected || 0;   // not yet claimed → expected
+    }
   });
   const cbTotRec  = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).rec  ||0), 0);
   const cbTotProg = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).prog ||0), 0);
@@ -1704,12 +1708,16 @@ function renderWeeklyReview(data, lastUpdated) {
                    .sort((a,b) => _WR_MO.indexOf(a) - _WR_MO.indexOf(b));
   const wrCBAgg  = {};
   wrCBRows.forEach(r => {
-    const m = r.month;
+    const m  = r.month;
+    const sl = (r.sub_remark || '').toLowerCase().trim();
     if (!wrCBAgg[m]) wrCBAgg[m] = { rec:0, prog:0, pend:0 };
-    if (r.bucket_key === 'closed')                 wrCBAgg[m].rec  += r.actual   || 0;
-    if (r.bucket_key === 'short_grn_progress')     wrCBAgg[m].prog += r.expected || 0;
-    if (r.bucket_key === 'short_grn_pending' ||
-        r.bucket_key === 'short_grn_awaiting_ibr') wrCBAgg[m].pend += r.expected || 0;
+    if (sl.includes('claim raised and received')) {
+      wrCBAgg[m].rec  += r.actual   || 0;   // money received → actual
+    } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending')) {
+      wrCBAgg[m].prog += r.expected || 0;   // pending receipt → expected
+    } else if (sl.includes('pending')) {
+      wrCBAgg[m].pend += r.expected || 0;   // not yet claimed → expected
+    }
   });
   const wrCBTotRec  = wrCBMths.reduce((s,m) => s+((wrCBAgg[m]||{}).rec  ||0), 0);
   const wrCBTotProg = wrCBMths.reduce((s,m) => s+((wrCBAgg[m]||{}).prog ||0), 0);
