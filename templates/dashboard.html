@@ -2748,7 +2748,6 @@ function renderIndiaUSTab(data, lastUpdated) {
         {v:formatUSD(closed.actual||0), l:'Total Recovered', c:'#2e7d32'},
         {v:formatUSD(closed.expected||0), l:'Expected', c:'#e65100'},
         {v:Object.keys(cSub).length+' types', l:'Resolution Types', c:'#1565c0'},
-        {v:'', l:'', c:'transparent'},
       ]) +
       filterBar('closed', rows.filter(r=>r.bucket_key==='closed')) +
       '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows</div>' +
@@ -2800,13 +2799,25 @@ function renderIndiaUSTab(data, lastUpdated) {
     const warnBanner = crit>0 ? '<div style="padding:8px 14px;background:#fff5f5;border-bottom:1px solid #ffcdd2;font-size:11px;color:#c62828;font-weight:600">⚠️ ' + crit + ' case' + (crit>1?'s are':' is') + ' 90+ days old — carriers typically close claims after 90 days. ' + formatUSD(critAmt) + ' at immediate risk. File now.</div>' : '';
 
     return '<div>' +
-      statsBar([
-        {v:pending.count||0, l:'Open Cases', c:'#c62828'},
-        {v:formatUSD(pending.expected||0), l:'Total at Risk', c:'#c62828'},
-        {v:crit, l:'⚠️ 90+ Day Critical', c:'#c62828', bg:'#fce4ec'},
-        {v:high, l:'⏰ 30–90 Day High', c:'#e65100', bg:'#fff3e0'},
-        {v:norm, l:'✅ Under 30 Days', c:'#2e7d32', bg:'#e8f5e9'},
-      ]) +
+      '<div style="display:flex;border-bottom:1px solid var(--border)">' +
+        '<div style="flex:2;padding:12px 18px;border-right:1px solid var(--border);display:flex;gap:28px;align-items:center">' +
+          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + (pending.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Open Cases</div></div>' +
+          '<div style="width:1px;height:36px;background:var(--border)"></div>' +
+          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + formatUSD(pending.expected||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Total at Risk</div></div>' +
+        '</div>' +
+        '<div style="flex:1;padding:11px 10px;text-align:center;background:#fce4ec;border-right:1px solid var(--border)">' +
+          '<div style="font-size:20px;font-weight:800;color:#c62828">' + crit + '</div>' +
+          '<div style="font-size:10px;color:#c62828;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">⚠️ 90+ Day</div>' +
+        '</div>' +
+        '<div style="flex:1;padding:11px 10px;text-align:center;background:#fff3e0;border-right:1px solid var(--border)">' +
+          '<div style="font-size:20px;font-weight:800;color:#e65100">' + high + '</div>' +
+          '<div style="font-size:10px;color:#e65100;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">⏰ 30–90 Day</div>' +
+        '</div>' +
+        '<div style="flex:1;padding:11px 10px;text-align:center;background:#e8f5e9">' +
+          '<div style="font-size:20px;font-weight:800;color:#2e7d32">' + norm + '</div>' +
+          '<div style="font-size:10px;color:#2e7d32;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">✅ Under 30 Days</div>' +
+        '</div>' +
+      '</div>' +
       warnBanner +
       filterBar('pending', rows.filter(r=>r.bucket_key==='short_grn_pending')) +
       '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + pendingRowsSorted.length + ' rows · sorted oldest first</div>' +
@@ -2863,7 +2874,6 @@ function renderIndiaUSTab(data, lastUpdated) {
         {v:formatUSD(progress.expected||0), l:'Total Expected', c:'#e65100'},
         {v:formatUSD(progress.actual||0), l:'Received So Far', c:'#2e7d32'},
         {v:formatUSD(Math.max(0,(progress.expected||0)-(progress.actual||0))), l:'Still Pending', c:'#c62828'},
-        {v:'', l:'', c:'transparent'},
       ]) +
       filterBar('progress', rows.filter(r=>r.bucket_key==='short_grn_progress'||r.bucket_key==='short_grn_awaiting_ibr')) +
       '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressRowsSorted.length + ' rows · sorted oldest case first</div>' +
