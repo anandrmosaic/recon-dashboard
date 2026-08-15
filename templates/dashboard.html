@@ -1267,9 +1267,9 @@ function renderDashboardOverview(data, lastUpdated) {
       <!-- Card 7: Pending to Recover (actionable) -->
       <div class="kpi-card" style="background:linear-gradient(135deg,#7b1fa2,#8e24aa,#ab47bc)">
         <div class="kpi-icon"><i class="fas fa-hourglass-half"></i></div>
-        <div class="kpi-value" style="font-size:22px">${_dashView==='india_us' ? formatUSD(cbTotProg+cbTotPend+cbTotDmg) : formatUSD(totalPending)}</div>
+        <div class="kpi-value" style="font-size:22px">${_dashView==='india_us' ? formatUSD(cbTotProg+cbTotPend) : formatUSD(totalPending)}</div>
         <div class="kpi-label">Pending to Recover</div>
-        <div class="kpi-sub">${_dashView==='india_us' ? 'Raised+Pending+Unclaimed' : 'Expected − Recovered'}</div>
+        <div class="kpi-sub">${_dashView==='india_us' ? 'Claim Filed + Pending to File' : 'Expected − Recovered'}</div>
       </div>
 
     </div>
