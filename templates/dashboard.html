@@ -1105,6 +1105,7 @@ function renderDashboardOverview(data, lastUpdated) {
                sl.includes('case raised')                   ||
                sl.includes('under review')                  ||
                sl.includes('claim in progress')             ||
+               sl.includes('raised')                        ||
                (sl.includes('raised') && sl.includes('claim'))) {
       cbAgg[m].prog += r.expected || 0;
       window._cbDetail[m].prog.push({ ...det, amt: r.expected||0 });
@@ -1937,6 +1938,7 @@ function renderWeeklyReview(data, lastUpdated) {
                sl.includes('case raised')                   ||
                sl.includes('under review')                  ||
                sl.includes('claim in progress')             ||
+               sl.includes('raised')                        ||
                (sl.includes('raised') && sl.includes('claim'))) {
       wkCBAgg.prog += r.expected || 0;
     // Bucket 3: Pending to claim (no claim filed yet)
