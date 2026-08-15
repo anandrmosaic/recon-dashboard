@@ -2619,12 +2619,14 @@ function renderIndiaUSTab(data, lastUpdated) {
     return !da ? 1 : !db ? -1 : da-db;
   });
 
+  // All distinct channels across ALL rows (shown in every tab's filter bar)
+  const allChannels = [...new Set(rows.map(r => r.channel))].filter(Boolean).sort();
+
   // Reusable filter bar
   const filterBar = (tabId, srcRows) => {
     const fM = [...new Set(srcRows.map(r => r.month))].filter(Boolean);
-    const fC = [...new Set(srcRows.map(r => r.channel))].filter(Boolean).sort();
     const mOpts = fM.map(m => '<option value="' + m + '"' + (_iusFilter.month===m?' selected':'') + '>' + m + '</option>').join('');
-    const cOpts = fC.map(c => '<option value="' + c + '"' + (_iusFilter.channel===c?' selected':'') + '>' + c + '</option>').join('');
+    const cOpts = allChannels.map(c => '<option value="' + c + '"' + (_iusFilter.channel===c?' selected':'') + '>' + c + '</option>').join('');
     return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.018);flex-wrap:wrap">' +
       '<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Filter:</span>' +
       '<select onchange="_iusFilter.month=this.value;_iusTab=\'' + tabId + '\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"><option value="">All Months</option>' + mOpts + '</select>' +
