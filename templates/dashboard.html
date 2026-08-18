@@ -1906,7 +1906,7 @@ function renderWeeklyReview(data, lastUpdated) {
   // ── Channel breakdown ───────────────────────────────────────────────────
   const chMap = {};
   const pushCh = (r, isRaised, isClosed) => {
-    const ch  = r.channel || r.from_channel || '—';
+    const ch  = r.channel || (_weeklyView === 'us2us' ? r.to_channel : r.from_channel) || '—';
     const lbl = r.label   || r.from_label   || r.awb || Math.random()+'';
     if (!chMap[ch]) chMap[ch] = { rl:new Set(), cl:new Set(), raised:0, closed:0, recovered:0, expected:0 };
     if (isRaised && !chMap[ch].rl.has(lbl)) { chMap[ch].rl.add(lbl); chMap[ch].raised++; chMap[ch].expected+=(r.expected||0); }
@@ -2017,7 +2017,7 @@ function renderWeeklyReview(data, lastUpdated) {
       </td>
       <td style="padding:8px 14px;text-align:center">${outcomeTag}</td>
       <td style="padding:8px 14px;text-align:right;font-size:12px;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums">${r[actKey]>0?formatUSD(r[actKey]):'<span style="color:#ccc">—</span>'}</td>
-      <td style="padding:8px 14px;font-size:10px;color:#777;max-width:160px;word-break:break-word">${r.sub_remark||r.status||'—'}</td>
+      <td style="padding:8px 14px;font-size:10px;color:#777;max-width:160px;word-break:break-word">${r.sub_remark||r.status||r.subbucket||'—'}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="7" style="text-align:center;padding:20px;color:#aaa">No prior-vintage cases closed this week</td></tr>`;
 
@@ -2389,7 +2389,24 @@ function renderUS2USTab(data, lastUpdated) {
   // ── Tab builders ──────────────────────────────────────────────────────────
 
   const buildAllTab = function() {
-    var mRows = sortedMonths.map(function(m) {
+    // Respect month filter — channel filter doesn't apply (monthly data is pre-aggregated without channel)
+    var displayMonths = _u2Filter.month
+      ? sortedMonths.filter(function(m) { return m === _u2Filter.month; })
+      : sortedMonths;
+    // Recalculate totals for the displayed months
+    var filtExp = 0, filtRec = 0, fClosed = 0, fTransit = 0, fPending = 0, fProgress = 0;
+    displayMonths.forEach(function(m) {
+      var mv = monthly[m] || {};
+      filtExp   += mv.expected    || 0;
+      filtRec   += mv.recovered   || 0;
+      fClosed   += mv.closed      || 0;
+      fTransit  += mv.intransit   || 0;
+      fPending  += mv.pending     || 0;
+      fProgress += mv.in_progress || 0;
+    });
+    var grandRate = filtExp > 0 ? ((filtRec / filtExp) * 100).toFixed(0) + '%' : '—';
+
+    var mRows = displayMonths.map(function(m) {
       var mv = monthly[m] || {};
       var totExp = mv.expected || 0;
       var totRec = mv.recovered || 0;
@@ -2405,14 +2422,14 @@ function renderUS2USTab(data, lastUpdated) {
         '<td style="padding:7px 12px;text-align:right;color:#2e7d32;font-weight:600;font-size:11px">' + formatUSD(totRec) + '</td>' +
         '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:11px;color:' + rateC + '">' + rate + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:24px;color:#888">No data</td></tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:24px;color:#888">No data for selected filter</td></tr>';
 
-    var grandRate = totalExpected > 0 ? ((totalRecovered / totalExpected) * 100).toFixed(0) + '%' : '—';
-    return '<div style="padding:14px">' +
+    return u2FilterBar('all') +
+      '<div style="padding:14px">' +
       '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">' +
         '<div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">' +
           '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">📅 Monthly Breakdown</span>' +
-          '<span style="font-size:10px;color:var(--muted)">' + sortedMonths.length + ' months · ' + rows.length + ' total rows</span>' +
+          '<span style="font-size:10px;color:var(--muted)">' + displayMonths.length + ' of ' + sortedMonths.length + ' months · ' + rows.length + ' total rows</span>' +
         '</div>' +
         '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
           '<thead><tr style="background:linear-gradient(135deg,#1a2e4a,#1565c0)">' +
@@ -2428,12 +2445,12 @@ function renderUS2USTab(data, lastUpdated) {
           '<tbody>' + mRows + '</tbody>' +
           '<tfoot><tr style="background:rgba(21,101,192,.07);border-top:2px solid var(--border)">' +
             '<td style="padding:7px 12px;font-weight:700;font-size:11px;color:#1565c0">TOTAL</td>' +
-            '<td style="padding:7px 8px;text-align:center;color:#2e7d32;font-weight:700;font-size:11px">' + (closed.count||0) + '</td>' +
-            '<td style="padding:7px 8px;text-align:center;color:#1565c0;font-weight:700;font-size:11px">' + (transit.count||0) + '</td>' +
-            '<td style="padding:7px 8px;text-align:center;color:#c62828;font-weight:700;font-size:11px">' + (pending.count||0) + '</td>' +
-            '<td style="padding:7px 8px;text-align:center;color:#e65100;font-weight:700;font-size:11px">' + (progress.count||0) + '</td>' +
-            '<td style="padding:7px 12px;text-align:right;font-weight:700;font-size:11px">' + formatUSD(totalExpected) + '</td>' +
-            '<td style="padding:7px 12px;text-align:right;color:#2e7d32;font-weight:700;font-size:11px">' + formatUSD(totalRecovered) + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#2e7d32;font-weight:700;font-size:11px">' + fClosed + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#1565c0;font-weight:700;font-size:11px">' + fTransit + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#c62828;font-weight:700;font-size:11px">' + fPending + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#e65100;font-weight:700;font-size:11px">' + fProgress + '</td>' +
+            '<td style="padding:7px 12px;text-align:right;font-weight:700;font-size:11px">' + formatUSD(filtExp) + '</td>' +
+            '<td style="padding:7px 12px;text-align:right;color:#2e7d32;font-weight:700;font-size:11px">' + formatUSD(filtRec) + '</td>' +
             '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:11px;color:#2e7d32">' + grandRate + '</td>' +
           '</tr></tfoot>' +
         '</table></div>' +
@@ -2458,9 +2475,8 @@ function renderUS2USTab(data, lastUpdated) {
     var totRec = closedRows.reduce(function(s, r) { return s + (r.recovered||0); }, 0);
     return '<div>' +
       u2StatsBar([
-        { v: (closed.count||0),  l: 'Resolved Transfers', c: '#2e7d32', d: 'Fully settled / closed' },
-        { v: formatUSD(totRec),  l: 'Total Recovered',    c: '#2e7d32', d: 'Actual money received back' },
-        { v: closedRows.length + ' shown', l: 'Rows (filtered)', c: '#1565c0', d: 'After month / channel filter' }
+        { v: closedRows.length,  l: 'Resolved (Filtered)',  c: '#2e7d32', d: (closed.count||0) + ' total all-time' },
+        { v: formatUSD(totRec),  l: 'Recovered (Filtered)', c: '#2e7d32', d: 'Actual money received back' }
       ]) +
       u2FilterBar('closed') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows</div>' +
@@ -2496,9 +2512,8 @@ function renderUS2USTab(data, lastUpdated) {
     var totPend = pendingRows.reduce(function(s, r) { return s + (r.expected||0); }, 0);
     return '<div>' +
       u2StatsBar([
-        { v: (pending.count||0),     l: 'No Claim Filed Yet',      c: '#c62828', d: 'Transfers with no case raised' },
-        { v: formatUSD(totPend),     l: 'Recoverable if Claimed',  c: '#c62828', d: 'Money we can still get back' },
-        { v: pendingRows.length + ' shown', l: 'Rows (filtered)',  c: '#1565c0', d: 'After month / channel filter' }
+        { v: pendingRows.length,     l: 'No Claim Filed (Filtered)', c: '#c62828', d: (pending.count||0) + ' total all-time' },
+        { v: formatUSD(totPend),     l: 'At Risk (Filtered)',        c: '#c62828', d: 'Money we can still get back' }
       ]) +
       u2FilterBar('pending') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + pendingRows.length + ' rows</div>' +
@@ -2547,10 +2562,10 @@ function renderUS2USTab(data, lastUpdated) {
     var pStill  = Math.max(0, pTotExp - pTotRec);
     return '<div>' +
       u2StatsBar([
-        { v: (progress.count||0),  l: 'Claims Filed',        c: '#e65100', d: 'Submitted, awaiting carrier' },
-        { v: formatUSD(pTotExp),   l: 'Total Claimed',       c: '#e65100', d: 'Amount asked from carrier' },
-        { v: formatUSD(pTotRec),   l: 'Carrier Paid So Far', c: '#2e7d32', d: 'Money received back' },
-        { v: formatUSD(pStill),    l: 'Carrier Still Owes',  c: '#c62828', d: 'Remaining unpaid balance' }
+        { v: progressRows.length,  l: 'Claims Filed (Filtered)', c: '#e65100', d: (progress.count||0) + ' total all-time' },
+        { v: formatUSD(pTotExp),   l: 'Total Claimed',           c: '#e65100', d: 'Amount asked from carrier' },
+        { v: formatUSD(pTotRec),   l: 'Carrier Paid So Far',     c: '#2e7d32', d: 'Money received back' },
+        { v: formatUSD(pStill),    l: 'Carrier Still Owes',      c: '#c62828', d: 'Remaining unpaid balance' }
       ]) +
       u2FilterBar('progress') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressSorted.length + ' rows · sorted oldest case first</div>' +
@@ -2586,9 +2601,8 @@ function renderUS2USTab(data, lastUpdated) {
     var tQty = transitRows.reduce(function(s, r) { return s + (r.qty||0); }, 0);
     return '<div>' +
       u2StatsBar([
-        { v: (transit.count||0),        l: 'Shipments En Route',    c: '#1565c0', d: 'Currently being delivered internally' },
-        { v: tQty.toLocaleString(),      l: 'Units En Route',        c: '#1565c0', d: 'Total product units in transit' },
-        { v: transitRows.length + ' shown', l: 'Rows (filtered)',    c: '#888',    d: 'After month / channel filter' }
+        { v: transitRows.length,         l: 'Shipments (Filtered)',  c: '#1565c0', d: (transit.count||0) + ' total all-time' },
+        { v: tQty.toLocaleString(),       l: 'Units En Route',        c: '#1565c0', d: 'Total product units in transit' }
       ]) +
       u2FilterBar('intransit') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + transitRows.length + ' rows · monitoring only, no financial claim yet</div>' +
