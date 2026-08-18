@@ -2295,15 +2295,16 @@ function renderWeeklyReview(data, lastUpdated) {
 }
 
 // ── Internal US 2 US Tab ───────────────────────────────────────────────────
-let _u2Filter = { month: '', bucket: '', from_channel: '', to_channel: '' };
+let _u2Filter = { month: '', channel: '' };
+let _u2Tab    = 'all'; // 'all' | 'closed' | 'pending' | 'progress' | 'intransit'
 
 function renderUS2USTab(data, lastUpdated) {
   destroyCharts();
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
 
-  const u2    = (data.us2us) || {};
-  const kpis  = u2.kpis    || {};
-  const rows  = u2.rows    || [];
+  const u2      = (data.us2us) || {};
+  const kpis    = u2.kpis    || {};
+  const rows    = u2.rows    || [];
   const monthly = u2.monthly || {};
   const months  = u2.months  || [];
 
@@ -2317,189 +2318,368 @@ function renderUS2USTab(data, lastUpdated) {
   const badge = document.getElementById('us2usBadge');
   if (badge) { badge.textContent = actionNeeded; badge.style.display = actionNeeded > 0 ? 'inline' : 'none'; }
 
-  // Sub-breakdown for closed
-  const closedSub = closed.sub || {};
-  const subRows = Object.entries(closedSub).sort((a,b) => b[1]-a[1])
-    .map(([k,v]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:11px">
-      <span style="color:#444">${k||'(blank)'}</span><span style="font-weight:600">${v}</span></div>`).join('') || '<div style="font-size:11px;color:#888">—</div>';
-
   const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const sortedMonths = months.slice().sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
 
-  const monthlyRows = sortedMonths.map(m => {
-    const mv = monthly[m] || {};
-    return `<tr>
-      <td style="font-weight:600">${m}</td>
-      <td style="color:#2e7d32;text-align:center">${mv.closed||0}</td>
-      <td style="color:#0277bd;text-align:center">${mv.intransit||0}</td>
-      <td style="color:#c62828;text-align:center">${mv.pending||0}</td>
-      <td style="color:#e65100;text-align:center">${mv.in_progress||0}</td>
-      <td style="text-align:right">${formatUSD(mv.expected||0)}</td>
-      <td style="text-align:right;color:#2e7d32">${formatUSD(mv.recovered||0)}</td>
-    </tr>`;
+  const totalCount     = (closed.count||0) + (transit.count||0) + (pending.count||0) + (progress.count||0);
+  const totalExpected  = (pending.expected||0) + (progress.expected||0);
+  const totalRecovered = (closed.recovered||0) + (progress.recovered||0);
+
+  // Unique channels for filter dropdown
+  const allChannels = [...new Set(rows.map(r => r.from_channel))].filter(Boolean).sort();
+
+  // Base filter (month + channel)
+  const baseFilter = function(r) {
+    return (!_u2Filter.month   || r.month        === _u2Filter.month) &&
+           (!_u2Filter.channel || r.from_channel === _u2Filter.channel);
+  };
+
+  // Row sets per bucket
+  const closedRows   = rows.filter(function(r) { return r.bucket_key === 'closed'      && baseFilter(r); });
+  const pendingRows  = rows.filter(function(r) { return r.bucket_key === 'pending'     && baseFilter(r); });
+  const progressRows = rows.filter(function(r) { return r.bucket_key === 'in_progress' && baseFilter(r); });
+  const transitRows  = rows.filter(function(r) { return r.bucket_key === 'intransit'   && baseFilter(r); });
+
+  // Sort progress oldest first
+  const progressSorted = progressRows.slice().sort(function(a, b) {
+    const da = a.case_raise_date ? _parseDate(a.case_raise_date) : null;
+    const db = b.case_raise_date ? _parseDate(b.case_raise_date) : null;
+    if (!da && !db) return 0;
+    return !da ? 1 : !db ? -1 : da - db;
+  });
+
+  // Pre-build filter option strings
+  const fmtOpts = sortedMonths.map(function(m) {
+    return '<option value="' + m + '"' + (_u2Filter.month === m ? ' selected' : '') + '>' + m + '</option>';
+  }).join('');
+  const fcOpts = allChannels.map(function(c) {
+    return '<option value="' + c + '"' + (_u2Filter.channel === c ? ' selected' : '') + '>' + c + '</option>';
   }).join('');
 
-  const uMonths   = [...new Set(rows.map(r => r.month))].filter(Boolean).sort((a,b) => MONTH_ORDER.indexOf(a)-MONTH_ORDER.indexOf(b));
-  const uBuckets  = [...new Set(rows.map(r => r.bucket))].filter(Boolean).sort();
-  const uFromCh   = [...new Set(rows.map(r => r.from_channel))].filter(Boolean).sort();
-  const uToCh     = [...new Set(rows.map(r => r.to_channel))].filter(Boolean).sort();
+  // Local stats bar helper
+  const u2StatsBar = function(items) {
+    var cells = items.map(function(s, i) {
+      var br = i < items.length - 1 ? 'border-right:1px solid var(--border);' : '';
+      return '<div style="flex:1;padding:11px 14px;text-align:center;' + br + '">' +
+        '<div style="font-size:17px;font-weight:800;color:' + s.c + ';font-variant-numeric:tabular-nums">' + s.v + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">' + s.l + '</div>' +
+        (s.d ? '<div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">' + s.d + '</div>' : '') +
+        '</div>';
+    }).join('');
+    return '<div style="display:flex;border-bottom:1px solid var(--border)">' + cells + '</div>';
+  };
 
-  const ddOpts = (arr, key) => `<option value="">All</option>` +
-    arr.map(v => `<option value="${v}" ${_u2Filter[key]===v?'selected':''}>${v}</option>`).join('');
+  // Shared filter bar — preserves current tab when a filter changes
+  const u2FilterBar = function(tabId) {
+    return '<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Filter:</span>' +
+      '<select onchange="_u2Filter.month=this.value;_u2Tab=\'' + tabId + '\';renderUS2USTab(_rawData,_lastUpdated)" ' +
+        'style="font-size:11px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">' +
+        '<option value="">All Months</option>' + fmtOpts +
+      '</select>' +
+      '<select onchange="_u2Filter.channel=this.value;_u2Tab=\'' + tabId + '\';renderUS2USTab(_rawData,_lastUpdated)" ' +
+        'style="font-size:11px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">' +
+        '<option value="">All Channels</option>' + fcOpts +
+      '</select>' +
+      '<button onclick="_u2Filter={month:\'\',channel:\'\'};_u2Tab=\'' + tabId + '\';renderUS2USTab(_rawData,_lastUpdated)" ' +
+        'style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-weight:600">✕ Clear</button>' +
+    '</div>';
+  };
 
-  const filtered = rows.filter(r =>
-    (!_u2Filter.month        || r.month        === _u2Filter.month) &&
-    (!_u2Filter.bucket       || r.bucket       === _u2Filter.bucket) &&
-    (!_u2Filter.from_channel || r.from_channel === _u2Filter.from_channel) &&
-    (!_u2Filter.to_channel   || r.to_channel   === _u2Filter.to_channel)
-  );
+  // ── Tab builders ──────────────────────────────────────────────────────────
 
-  const BUCKET_BG = { 'closed':'#2e7d32','intransit':'#0277bd','in_progress':'#e65100','pending':'#c62828','other':'#888' };
+  const buildAllTab = function() {
+    var mRows = sortedMonths.map(function(m) {
+      var mv = monthly[m] || {};
+      var totExp = mv.expected || 0;
+      var totRec = mv.recovered || 0;
+      var rate   = totExp > 0 ? ((totRec / totExp) * 100).toFixed(0) + '%' : '—';
+      var rateC  = totExp > 0 && totRec / totExp >= 0.5 ? '#2e7d32' : '#c62828';
+      return '<tr>' +
+        '<td style="padding:7px 12px;font-weight:600;font-size:11px">' + m + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#2e7d32;font-weight:600;font-size:11px">' + (mv.closed||0) + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#1565c0;font-weight:600;font-size:11px">' + (mv.intransit||0) + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#c62828;font-weight:600;font-size:11px">' + (mv.pending||0) + '</td>' +
+        '<td style="padding:7px 8px;text-align:center;color:#e65100;font-weight:600;font-size:11px">' + (mv.in_progress||0) + '</td>' +
+        '<td style="padding:7px 12px;text-align:right;font-size:11px">' + formatUSD(totExp) + '</td>' +
+        '<td style="padding:7px 12px;text-align:right;color:#2e7d32;font-weight:600;font-size:11px">' + formatUSD(totRec) + '</td>' +
+        '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:11px;color:' + rateC + '">' + rate + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:24px;color:#888">No data</td></tr>';
 
-  const detailRows = filtered.map(r => {
-    const bc = BUCKET_BG[r.bucket_key] || '#888';
-    const diffTxt = r.diff !== 0
-      ? `<span style="color:${r.diff>0?'#c62828':'#2e7d32'};font-size:10px">${r.diff>0?'−'+r.diff:'+'+Math.abs(r.diff)}</span>`
-      : '';
-    return `<tr>
-      <td style="font-weight:600">${r.month}</td>
-      <td><span style="background:${bc};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px">${r.bucket}</span></td>
-      <td style="font-size:10px;color:#555">${r.subbucket||'—'}</td>
-      <td style="text-align:center">${r.from_channel||'—'}</td>
-      <td style="text-align:center">→ ${r.to_channel||'—'}</td>
-      <td style="font-size:10px">${r.from_label||'—'}</td>
-      <td style="font-size:10px">${r.to_label||'—'}</td>
-      <td style="font-size:11px;text-align:left">${r.sku||'—'}</td>
-      <td style="text-align:center">${r.qty||0} ${diffTxt}</td>
-      <td style="text-align:center;font-size:10px">${r.carrier||'—'}</td>
-      <td style="font-size:10px;color:#888">${r.case_raise_date||'—'}</td>
-      <td style="text-align:right">${r.expected?formatUSD(r.expected):'—'}</td>
-      <td style="text-align:right;color:#2e7d32">${r.recovered?formatUSD(r.recovered):'—'}</td>
-      <td style="text-align:right;color:#c62828">${r.pending?formatUSD(r.pending):'—'}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="14" style="text-align:center;padding:30px;color:#888">No rows</td></tr>`;
+    var grandRate = totalExpected > 0 ? ((totalRecovered / totalExpected) * 100).toFixed(0) + '%' : '—';
+    return '<div style="padding:14px">' +
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">' +
+        '<div style="padding:9px 13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">' +
+          '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">📅 Monthly Breakdown</span>' +
+          '<span style="font-size:10px;color:var(--muted)">' + sortedMonths.length + ' months · ' + rows.length + ' total rows</span>' +
+        '</div>' +
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+          '<thead><tr style="background:linear-gradient(135deg,#1a2e4a,#1565c0)">' +
+            '<th style="padding:7px 12px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">✅ Closed</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">🚚 Transit</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">🔴 Pending</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">⏳ In Prog</th>' +
+            '<th style="padding:7px 12px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:right">Expected</th>' +
+            '<th style="padding:7px 12px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:right">Recovered</th>' +
+            '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:right">Rate</th>' +
+          '</tr></thead>' +
+          '<tbody>' + mRows + '</tbody>' +
+          '<tfoot><tr style="background:rgba(21,101,192,.07);border-top:2px solid var(--border)">' +
+            '<td style="padding:7px 12px;font-weight:700;font-size:11px;color:#1565c0">TOTAL</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#2e7d32;font-weight:700;font-size:11px">' + (closed.count||0) + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#1565c0;font-weight:700;font-size:11px">' + (transit.count||0) + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#c62828;font-weight:700;font-size:11px">' + (pending.count||0) + '</td>' +
+            '<td style="padding:7px 8px;text-align:center;color:#e65100;font-weight:700;font-size:11px">' + (progress.count||0) + '</td>' +
+            '<td style="padding:7px 12px;text-align:right;font-weight:700;font-size:11px">' + formatUSD(totalExpected) + '</td>' +
+            '<td style="padding:7px 12px;text-align:right;color:#2e7d32;font-weight:700;font-size:11px">' + formatUSD(totalRecovered) + '</td>' +
+            '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:11px;color:#2e7d32">' + grandRate + '</td>' +
+          '</tr></tfoot>' +
+        '</table></div>' +
+      '</div>' +
+    '</div>';
+  };
 
-  document.getElementById('mainContent').innerHTML = `
-  <div style="padding:20px">
+  const buildClosedTab = function() {
+    var tRows = closedRows.map(function(r) {
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + (r.month||'') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;font-weight:600">' + (r.from_label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;color:var(--muted)">' + (r.to_label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px">' + (r.from_channel||'—') + ' → ' + (r.to_channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px">' + (r.sku||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:11px">' + (r.qty||0) + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;color:#2e7d32;font-weight:700;font-size:11px">' + (r.recovered ? formatUSD(r.recovered) : '—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="' + (r.subbucket||'') + '">' + (r.subbucket||'—') + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:28px;color:#888">No closed rows match the current filter</td></tr>';
 
-    <!-- KPI Cards -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #2e7d32;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Closed / Resolved</div>
-        <div style="font-size:32px;font-weight:700;color:#2e7d32">${closed.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">transfers fully actioned</div>
-        <div style="margin-top:10px;border-top:1px solid #f0f0f0;padding-top:10px">${subRows}</div>
+    var totRec = closedRows.reduce(function(s, r) { return s + (r.recovered||0); }, 0);
+    return '<div>' +
+      u2StatsBar([
+        { v: (closed.count||0),  l: 'Resolved Transfers', c: '#2e7d32', d: 'Fully settled / closed' },
+        { v: formatUSD(totRec),  l: 'Total Recovered',    c: '#2e7d32', d: 'Actual money received back' },
+        { v: closedRows.length + ' shown', l: 'Rows (filtered)', c: '#1565c0', d: 'After month / channel filter' }
+      ]) +
+      u2FilterBar('closed') +
+      '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">From Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">To Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel (From→To)</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">SKU</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Qty</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Recovered</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Resolution</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  const buildPendingTab = function() {
+    var tRows = pendingRows.map(function(r) {
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + (r.month||'') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;font-weight:600">' + (r.from_label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px">' + (r.from_channel||'—') + ' → ' + (r.to_channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px">' + (r.sku||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:11px">' + (r.qty||0) + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;color:#c62828;font-weight:700;font-size:11px">' + (r.expected ? formatUSD(r.expected) : '—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;color:var(--muted)">' + (r.subbucket||'—') + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="7" style="text-align:center;padding:28px;color:#888">No pending rows match the current filter</td></tr>';
+
+    var totPend = pendingRows.reduce(function(s, r) { return s + (r.expected||0); }, 0);
+    return '<div>' +
+      u2StatsBar([
+        { v: (pending.count||0),     l: 'No Claim Filed Yet',      c: '#c62828', d: 'Transfers with no case raised' },
+        { v: formatUSD(totPend),     l: 'Recoverable if Claimed',  c: '#c62828', d: 'Money we can still get back' },
+        { v: pendingRows.length + ' shown', l: 'Rows (filtered)',  c: '#1565c0', d: 'After month / channel filter' }
+      ]) +
+      u2FilterBar('pending') +
+      '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + pendingRows.length + ' rows</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#b71c1c,#c62828)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">From Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">SKU</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Qty Short</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">$ At Risk</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Status Note</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+        '<tfoot><tr style="background:rgba(198,40,40,.07);border-top:2px solid var(--border)">' +
+          '<td colspan="5" style="padding:7px 9px;font-weight:700;font-size:11px;color:#c62828">' + pendingRows.length + ' cases</td>' +
+          '<td style="padding:7px 9px;text-align:right;font-weight:700;font-size:11px;color:#c62828">' + formatUSD(totPend) + '</td>' +
+          '<td></td>' +
+        '</tr></tfoot>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  const buildProgressTab = function() {
+    var tRows = progressSorted.map(function(r) {
+      var d    = r.case_raise_date ? _parseDate(r.case_raise_date) : null;
+      var days = d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null;
+      var ageC  = days === null ? '#888' : days >= 90 ? '#c62828' : days >= 30 ? '#e65100' : '#2e7d32';
+      var ageBg = days === null ? ''     : days >= 90 ? '#fce4ec' : days >= 30 ? '#fff3e0' : '#e8f5e9';
+      var chip  = days === null ? '—' :
+        '<span style="background:' + ageBg + ';color:' + ageC + ';padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">' + days + 'd</span>';
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + (r.month||'') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;font-weight:600">' + (r.from_label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px">' + (r.from_channel||'—') + ' → ' + (r.to_channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center">' + chip + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;color:var(--muted)">' + (r.case_raise_date||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;font-size:11px">' + (r.expected ? formatUSD(r.expected) : '—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;color:#2e7d32;font-weight:600;font-size:11px">' + (r.recovered ? formatUSD(r.recovered) : '—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:right;color:#c62828;font-weight:600;font-size:11px">' + (r.pending ? formatUSD(r.pending) : '—') + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:28px;color:#888">No in-progress rows match the current filter</td></tr>';
+
+    var pTotExp = progressRows.reduce(function(s, r) { return s + (r.expected||0); }, 0);
+    var pTotRec = progressRows.reduce(function(s, r) { return s + (r.recovered||0); }, 0);
+    var pStill  = Math.max(0, pTotExp - pTotRec);
+    return '<div>' +
+      u2StatsBar([
+        { v: (progress.count||0),  l: 'Claims Filed',        c: '#e65100', d: 'Submitted, awaiting carrier' },
+        { v: formatUSD(pTotExp),   l: 'Total Claimed',       c: '#e65100', d: 'Amount asked from carrier' },
+        { v: formatUSD(pTotRec),   l: 'Carrier Paid So Far', c: '#2e7d32', d: 'Money received back' },
+        { v: formatUSD(pStill),    l: 'Carrier Still Owes',  c: '#c62828', d: 'Remaining unpaid balance' }
+      ]) +
+      u2FilterBar('progress') +
+      '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressSorted.length + ' rows · sorted oldest case first</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#bf360c,#e65100)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">From Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Days Open</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Case Raised</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Expected</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Received</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Pending</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  const buildTransitTab = function() {
+    var tRows = transitRows.map(function(r) {
+      return '<tr>' +
+        '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + (r.month||'') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;font-weight:600">' + (r.from_label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:11px;color:var(--muted)">' + (r.to_label||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px">' + (r.from_channel||'—') + ' → ' + (r.to_channel||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:10px">' + (r.carrier||'—') + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:11px">' + (r.qty||0) + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px">' + (r.sku||'—') + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="7" style="text-align:center;padding:28px;color:#888">No intransit rows match the current filter</td></tr>';
+
+    var tQty = transitRows.reduce(function(s, r) { return s + (r.qty||0); }, 0);
+    return '<div>' +
+      u2StatsBar([
+        { v: (transit.count||0),        l: 'Shipments En Route',    c: '#1565c0', d: 'Currently being delivered internally' },
+        { v: tQty.toLocaleString(),      l: 'Units En Route',        c: '#1565c0', d: 'Total product units in transit' },
+        { v: transitRows.length + ' shown', l: 'Rows (filtered)',    c: '#888',    d: 'After month / channel filter' }
+      ]) +
+      u2FilterBar('intransit') +
+      '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + transitRows.length + ' rows · monitoring only, no financial claim yet</div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
+        '<thead><tr style="background:linear-gradient(135deg,#0d47a1,#1565c0)">' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">From Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">To Label</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel (From→To)</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Carrier</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Qty</th>' +
+          '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">SKU</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tRows + '</tbody>' +
+      '</table></div>' +
+    '</div>';
+  };
+
+  // ── Tab config ────────────────────────────────────────────────────────────
+  const U2TABS = [
+    { id: 'all',       icon: '📋', label: 'All',         count: totalCount,           grad: 'background:linear-gradient(135deg,#1a2e4a,#1565c0)',  fn: buildAllTab },
+    { id: 'closed',    icon: '✅', label: 'Closed',       count: closed.count||0,      grad: 'background:linear-gradient(135deg,#1b5e20,#2e7d32)',  fn: buildClosedTab },
+    { id: 'pending',   icon: '🔴', label: 'Pending',      count: pending.count||0,     grad: 'background:linear-gradient(135deg,#b71c1c,#c62828)',  fn: buildPendingTab },
+    { id: 'progress',  icon: '⏳', label: 'In Progress',  count: progress.count||0,    grad: 'background:linear-gradient(135deg,#bf360c,#e65100)',  fn: buildProgressTab },
+    { id: 'intransit', icon: '🚚', label: 'Intransit',    count: transit.count||0,     grad: 'background:linear-gradient(135deg,#0d47a1,#1565c0)',  fn: buildTransitTab }
+  ];
+  const activeTab = U2TABS.find(function(t) { return t.id === _u2Tab; }) || U2TABS[0];
+
+  // ── Tab bar HTML ──────────────────────────────────────────────────────────
+  var tabBarHTML = U2TABS.map(function(t) {
+    var active = t.id === activeTab.id;
+    return '<button onclick="_u2Tab=\'' + t.id + '\';renderUS2USTab(_rawData,_lastUpdated)" ' +
+      'style="flex:1;padding:11px 6px;border:none;cursor:pointer;font-size:11px;font-weight:700;' +
+      (active ? t.grad + ';color:#fff;border-bottom:3px solid transparent;margin-bottom:-3px' : 'background:transparent;color:var(--muted);border-bottom:3px solid transparent') + '">' +
+      t.icon + ' ' + t.label + ' <span style="font-size:10px;opacity:.75;margin-left:2px">(' + t.count + ')</span>' +
+    '</button>';
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `<div>
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#1a2e4a,#1565c0,#1976d2);padding:16px 22px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:.3px">🔄 US → US Transfer Recon</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:3px">Internal warehouse-to-warehouse transfers · ${totalCount} shipments tracked</div>
       </div>
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #0277bd;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🚚 Intransit</div>
-        <div style="font-size:32px;font-weight:700;color:#0277bd">${transit.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">transfers en route</div>
-        <div style="font-size:11px;color:#888;margin-top:8px">${(transit.qty||0).toLocaleString()} units moving</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.55)">${lastUpdated}</div>
+    </div>
+
+    <!-- 4 Gradient KPI cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)">
+      <div onclick="_u2Tab='closed';renderUS2USTab(_rawData,_lastUpdated)"
+        style="padding:16px 18px;background:linear-gradient(135deg,#1b5e20,#2e7d32,#43a047);color:#fff;cursor:pointer;transition:opacity .15s;border-right:1px solid rgba(255,255,255,.15)"
+        onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+        <div style="font-size:12px;opacity:.7;margin-bottom:4px">✅ Closed</div>
+        <div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">${closed.count||0}</div>
+        <div style="font-size:10px;opacity:.6;margin-top:5px">transfers settled</div>
+        <div style="font-size:11px;opacity:.8;margin-top:4px;font-variant-numeric:tabular-nums">${formatUSD(closed.recovered||0)} recovered</div>
       </div>
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #c62828;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔴 Pending Action</div>
-        <div style="font-size:32px;font-weight:700;color:#c62828">${pending.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">no case raised yet</div>
-        <div style="font-size:12px;font-weight:600;color:#c62828;margin-top:8px">${formatUSD(pending.expected||0)} at risk</div>
+      <div onclick="_u2Tab='intransit';renderUS2USTab(_rawData,_lastUpdated)"
+        style="padding:16px 18px;background:linear-gradient(135deg,#0d47a1,#1565c0,#1976d2);color:#fff;cursor:pointer;transition:opacity .15s;border-right:1px solid rgba(255,255,255,.15)"
+        onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+        <div style="font-size:12px;opacity:.7;margin-bottom:4px">🚚 Intransit</div>
+        <div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">${transit.count||0}</div>
+        <div style="font-size:10px;opacity:.6;margin-top:5px">transfers en route</div>
+        <div style="font-size:11px;opacity:.8;margin-top:4px;font-variant-numeric:tabular-nums">${(transit.qty||0).toLocaleString()} units moving</div>
       </div>
-      <div style="background:#fff;border-radius:12px;padding:18px;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🟡 Case in Progress</div>
-        <div style="font-size:32px;font-weight:700;color:#e65100">${progress.count||0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">cases raised, pending resolution</div>
-        <div style="font-size:12px;font-weight:600;color:#e65100;margin-top:8px">${formatUSD(progress.expected||0)} expected · ${formatUSD(progress.recovered||0)} received</div>
+      <div onclick="_u2Tab='pending';renderUS2USTab(_rawData,_lastUpdated)"
+        style="padding:16px 18px;background:linear-gradient(135deg,#b71c1c,#c62828,#ef5350);color:#fff;cursor:pointer;transition:opacity .15s;border-right:1px solid rgba(255,255,255,.15)"
+        onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+        <div style="font-size:12px;opacity:.7;margin-bottom:4px">🔴 Pending Action</div>
+        <div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">${pending.count||0}</div>
+        <div style="font-size:10px;opacity:.6;margin-top:5px">no claim raised yet</div>
+        <div style="font-size:11px;opacity:.8;margin-top:4px;font-variant-numeric:tabular-nums">${formatUSD(pending.expected||0)} at risk</div>
+      </div>
+      <div onclick="_u2Tab='progress';renderUS2USTab(_rawData,_lastUpdated)"
+        style="padding:16px 18px;background:linear-gradient(135deg,#bf360c,#e65100,#ff7043);color:#fff;cursor:pointer;transition:opacity .15s"
+        onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+        <div style="font-size:12px;opacity:.7;margin-bottom:4px">⏳ In Progress</div>
+        <div style="font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums">${progress.count||0}</div>
+        <div style="font-size:10px;opacity:.6;margin-top:5px">cases raised</div>
+        <div style="font-size:11px;opacity:.8;margin-top:4px;font-variant-numeric:tabular-nums">${formatUSD(progress.expected||0)} exp · ${formatUSD(progress.recovered||0)} rcvd</div>
       </div>
     </div>
 
-    <!-- Monthly + Summary -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Monthly Breakdown</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#f5f5f5">
-            <th style="text-align:left;padding:6px 8px">Month</th>
-            <th style="text-align:center;padding:6px 8px;color:#2e7d32">Closed</th>
-            <th style="text-align:center;padding:6px 8px;color:#0277bd">Transit</th>
-            <th style="text-align:center;padding:6px 8px;color:#c62828">Pending</th>
-            <th style="text-align:center;padding:6px 8px;color:#e65100">In Prog.</th>
-            <th style="text-align:right;padding:6px 8px">Expected</th>
-            <th style="text-align:right;padding:6px 8px;color:#2e7d32">Recovered</th>
-          </tr></thead>
-          <tbody>${monthlyRows||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#888">No data</td></tr>'}</tbody>
-        </table>
-      </div>
-      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#1b3a2d">Overall Summary</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div style="background:#f9fbe7;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:22px;font-weight:700;color:#558b2f">${rows.length?((closed.count||0)/rows.length*100).toFixed(1):0}%</div>
-            <div style="font-size:11px;color:#666">Close Rate</div>
-          </div>
-          <div style="background:#fce4ec;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:22px;font-weight:700;color:#c62828">${(pending.count||0)+(progress.count||0)}</div>
-            <div style="font-size:11px;color:#666">Action Required</div>
-          </div>
-          <div style="background:#e8f5e9;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:16px;font-weight:700;color:#2e7d32">${formatUSD(closed.recovered||0)}</div>
-            <div style="font-size:11px;color:#666">Total Recovered</div>
-          </div>
-          <div style="background:#fff3e0;border-radius:8px;padding:12px;text-align:center">
-            <div style="font-size:16px;font-weight:700;color:#e65100">${formatUSD((pending.expected||0)+(progress.expected||0))}</div>
-            <div style="font-size:11px;color:#666">Total at Risk</div>
-          </div>
-        </div>
-        <div style="margin-top:12px;font-size:11px;color:#888;border-top:1px solid #f0f0f0;padding-top:10px">
-          Total rows: ${rows.length} &nbsp;|&nbsp; Filtered: ${filtered.length}
-        </div>
-      </div>
-    </div>
+    <!-- Sub-tab bar -->
+    <div style="display:flex;border-bottom:3px solid var(--border);background:var(--surface)">${tabBarHTML}</div>
 
-    <!-- Detail Table -->
-    <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <div style="font-weight:700;font-size:13px;color:#1b3a2d">Transfer Detail</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select onchange="_u2Filter.month=this.value;renderUS2USTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
-            ${ddOpts(uMonths,'month')}
-          </select>
-          <select onchange="_u2Filter.bucket=this.value;renderUS2USTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
-            ${ddOpts(uBuckets,'bucket')}
-          </select>
-          <select onchange="_u2Filter.from_channel=this.value;renderUS2USTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
-            <option value="">From: All</option>${uFromCh.map(v=>`<option value="${v}" ${_u2Filter.from_channel===v?'selected':''}>${v}</option>`).join('')}
-          </select>
-          <select onchange="_u2Filter.to_channel=this.value;renderUS2USTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 8px;border:1px solid #ddd;border-radius:6px">
-            <option value="">To: All</option>${uToCh.map(v=>`<option value="${v}" ${_u2Filter.to_channel===v?'selected':''}>${v}</option>`).join('')}
-          </select>
-          <button onclick="_u2Filter={month:'',bucket:'',from_channel:'',to_channel:''};renderUS2USTab(_rawData,_lastUpdated)"
-            style="font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#f5f5f5">Clear</button>
-        </div>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead><tr style="background:#1b3a2d;color:#fff">
-            <th style="padding:8px 10px;text-align:left">Month</th>
-            <th style="padding:8px 10px;text-align:left">Bucket</th>
-            <th style="padding:8px 10px;text-align:left">Sub Bucket</th>
-            <th style="padding:8px 10px;text-align:center">From</th>
-            <th style="padding:8px 10px;text-align:center">To</th>
-            <th style="padding:8px 10px;text-align:left">From Label</th>
-            <th style="padding:8px 10px;text-align:left">To Label</th>
-            <th style="padding:8px 10px;text-align:left">SKU</th>
-            <th style="padding:8px 10px;text-align:center">Qty</th>
-            <th style="padding:8px 10px;text-align:center">Carrier</th>
-            <th style="padding:8px 10px;text-align:left">Case Raise</th>
-            <th style="padding:8px 10px;text-align:right">Expected</th>
-            <th style="padding:8px 10px;text-align:right">Recovered</th>
-            <th style="padding:8px 10px;text-align:right">Pending</th>
-          </tr></thead>
-          <tbody>${detailRows}</tbody>
-        </table>
-      </div>
-    </div>
+    <!-- Active tab content -->
+    <div style="background:var(--surface)">${activeTab.fn()}</div>
+
   </div>`;
 }
 
