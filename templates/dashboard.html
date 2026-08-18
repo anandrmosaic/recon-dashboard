@@ -2325,13 +2325,13 @@ function renderUS2USTab(data, lastUpdated) {
   const totalExpected  = (pending.expected||0) + (progress.expected||0);
   const totalRecovered = (closed.recovered||0) + (progress.recovered||0);
 
-  // Unique channels for filter dropdown
-  const allChannels = [...new Set(rows.map(r => r.from_channel))].filter(Boolean).sort();
+  // Unique TO channels for filter dropdown (destination = who we raise claim with)
+  const allChannels = [...new Set(rows.map(r => r.to_channel))].filter(Boolean).sort();
 
-  // Base filter (month + channel)
+  // Base filter (month + to_channel)
   const baseFilter = function(r) {
-    return (!_u2Filter.month   || r.month        === _u2Filter.month) &&
-           (!_u2Filter.channel || r.from_channel === _u2Filter.channel);
+    return (!_u2Filter.month   || r.month      === _u2Filter.month) &&
+           (!_u2Filter.channel || r.to_channel === _u2Filter.channel);
   };
 
   // Row sets per bucket
@@ -2379,7 +2379,7 @@ function renderUS2USTab(data, lastUpdated) {
       '</select>' +
       '<select onchange="_u2Filter.channel=this.value;_u2Tab=\'' + tabId + '\';renderUS2USTab(_rawData,_lastUpdated)" ' +
         'style="font-size:11px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">' +
-        '<option value="">All Channels</option>' + fcOpts +
+        '<option value="">All To-Channels</option>' + fcOpts +
       '</select>' +
       '<button onclick="_u2Filter={month:\'\',channel:\'\'};_u2Tab=\'' + tabId + '\';renderUS2USTab(_rawData,_lastUpdated)" ' +
         'style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-weight:600">✕ Clear</button>' +
