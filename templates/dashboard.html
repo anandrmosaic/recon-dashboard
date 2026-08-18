@@ -1171,9 +1171,9 @@ function renderDashboardOverview(data, lastUpdated) {
   iusCBRows.forEach(r => {
     if (!r.case_raise_date) return;
     if (_icIsRec(r)) return;
-    const ms = new Date(r.case_raise_date).getTime();
-    if (isNaN(ms)) return;
-    const days = Math.floor((Date.now() - ms) / 86400000);
+    const _rd = _parseDate(r.case_raise_date);
+    if (!_rd) return;
+    const days = Math.floor((Date.now() - _rd.getTime()) / 86400000);
     if (days >= 90) {
       const lbl = r.label || r.awb || '';
       if (lbl && !_icAgedSet.has(lbl)) {
@@ -1533,11 +1533,14 @@ function renderDashboardOverview(data, lastUpdated) {
 
 function _parseDate(s) {
   if (!s || !s.trim()) return null;
-  const d = new Date(s.trim());
-  if (!isNaN(d)) return d;
-  const p = s.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  s = s.trim();
+  // DD/MM/YYYY or DD-MM-YYYY MUST be checked first — new Date("10/08/2026") wrongly
+  // returns Oct 8 (MM/DD/YYYY), so we intercept before passing to the browser parser.
+  const p = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if (p) return new Date(+p[3], +p[2]-1, +p[1]);
-  return null;
+  // YYYY-MM-DD and other unambiguous formats
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function renderCaseHealth(data, lastUpdated) {
@@ -2542,8 +2545,8 @@ function renderIndiaUSTab(data, lastUpdated) {
   // Helper: days since YYYY-MM-DD string
   const daysSince = (ds) => {
     if (!ds || ds === '—') return null;
-    const d = new Date(ds);
-    return isNaN(d.getTime()) ? null : Math.floor((Date.now() - d.getTime()) / 86400000);
+    const d = _parseDate(ds);
+    return d ? Math.floor((Date.now() - d.getTime()) / 86400000) : null;
   };
 
   // Helper: colour-coded age chip
@@ -2583,8 +2586,8 @@ function renderIndiaUSTab(data, lastUpdated) {
     return !da ? 1 : !db ? -1 : da-db;
   });
   const progressRowsSorted = progressRows.slice().sort((a, b) => {
-    const da = a.case_raise_date ? new Date(a.case_raise_date) : monthToDate(a.month);
-    const db = b.case_raise_date ? new Date(b.case_raise_date) : monthToDate(b.month);
+    const da = a.case_raise_date ? _parseDate(a.case_raise_date) : monthToDate(a.month);
+    const db = b.case_raise_date ? _parseDate(b.case_raise_date) : monthToDate(b.month);
     if (!da && !db) return (b.expected||0)-(a.expected||0);
     return !da ? 1 : !db ? -1 : da-db;
   });
