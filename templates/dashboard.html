@@ -3161,11 +3161,9 @@ function renderIndiaUSTab(data, lastUpdated) {
             '<div style="margin-top:6px;font-size:9px;color:var(--muted)">' +
               '<div style="display:flex;justify-content:space-between">' +
                 '<span>' + pct + '% of cases</span>' +
-                '<span style="color:' + sc + ';font-weight:600">' + formatUSD(v.amount) + ' rcvd</span>' +
+                (k !== 'Damage received' ? '<span style="color:' + sc + ';font-weight:600">' + formatUSD(v.amount) + ' rcvd</span>' : '') +
               '</div>' +
-              '<div style="display:flex;justify-content:flex-end;margin-top:2px">' +
-                '<span>' + formatUSD(v.expected) + ' claimed</span>' +
-              '</div>' +
+              (k !== 'Damage received' ? '<div style="display:flex;justify-content:flex-end;margin-top:2px"><span>' + formatUSD(v.expected) + ' claimed</span></div>' : '') +
             '</div>' +
           '</div>';
         }).join('') +
