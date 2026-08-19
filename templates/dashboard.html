@@ -363,6 +363,28 @@
     .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Dashboard Animations ── */
+    @keyframes iusStatIn  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes iusCardIn  { from { opacity:0; transform:translateY(16px) scale(.95); } to { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes iusTrIn    { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes iusBarGrow { from { width:0; } }
+    @keyframes iusBannerIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes iusFadeIn  { from { opacity:0; } to { opacity:1; } }
+    @keyframes kpiPulse   { 0%,100% { transform:scale(1); } 50% { transform:scale(1.04); } }
+
+    .ius-stat   { animation: iusStatIn .4s ease both; }
+    .ius-card   { animation: iusCardIn .45s cubic-bezier(.22,.61,.36,1) both; cursor:pointer; }
+    .ius-card:hover { transform:translateY(-3px) scale(1.018) !important; box-shadow:0 8px 22px rgba(0,0,0,.13) !important; transition:transform .18s ease, box-shadow .18s ease !important; }
+    .ius-bar    { animation: iusBarGrow .75s cubic-bezier(.22,.61,.36,1) both; }
+    .ius-tr     { animation: iusTrIn .28s ease both; }
+    .ius-tr:hover { background:rgba(46,125,50,.05) !important; transition:background .12s; }
+    .ius-banner { animation: iusBannerIn .45s ease both; }
+    .ius-section { animation: iusFadeIn .5s ease both; }
+    .kpi-card   { transition:transform .15s ease, box-shadow .15s ease; }
+    .kpi-card:hover { transform:translateY(-2px); box-shadow:0 4px 14px rgba(0,0,0,.1); }
+    .nav-tab-btn { transition:background .15s ease, color .15s ease, border-color .15s ease; }
+    .data-row-hover:hover { background:rgba(0,0,0,.03) !important; transition:background .1s; }
+
     /* ── Alert Toast ── */
     .alert-toast {
       position: fixed; top: 20px; right: 20px;
@@ -2561,66 +2583,6 @@ function renderUS2USTab(data, lastUpdated) {
       '</table></div>' +
     '</div>';
 
-    // ── Timeline section: case_raise_date → case_resolve_date ────────────────
-    var tlRows = closedRows
-      .filter(function(r) { return r.case_raise_date && r.case_resolve_date; })
-      .map(function(r) {
-        var rd = _parseDate(r.case_raise_date), cd = _parseDate(r.case_resolve_date);
-        var days = rd && cd ? Math.max(0, Math.floor((cd - rd) / 86400000)) : null;
-        return { r: r, raise_d: rd, close_d: cd, days: days };
-      })
-      .filter(function(x) { return x.days !== null; })
-      .sort(function(a, b) { return (b.days||0) - (a.days||0); })
-      .slice(0, 20);
-
-    var maxDays = tlRows.length > 0 ? Math.max.apply(null, tlRows.map(function(x) { return x.days; })) : 1;
-    var tlHTMLRows = tlRows.map(function(x, idx) {
-      var pct = maxDays > 0 ? Math.round((x.days / maxDays) * 100) : 0;
-      var barC = x.days > 90 ? '#c62828' : x.days > 30 ? '#e65100' : '#2e7d32';
-      var ageBg = x.days > 90 ? '#fce4ec' : x.days > 30 ? '#fff3e0' : '#e8f5e9';
-      return '<tr style="' + (idx % 2 === 1 ? 'background:rgba(0,0,0,.02)' : '') + '">' +
-        '<td style="padding:7px 10px;font-size:10px;font-weight:700;white-space:nowrap">' + (x.r.from_label||'—') + '</td>' +
-        '<td style="padding:7px 8px;font-size:10px;color:var(--muted);white-space:nowrap">' + (x.r.carrier||'—') + '</td>' +
-        '<td style="padding:7px 8px;font-size:10px;white-space:nowrap;color:#1565c0">' + (x.r.case_raise_date||'—') + '</td>' +
-        '<td style="padding:7px 12px;min-width:160px">' +
-          '<div style="display:flex;align-items:center;gap:6px">' +
-            '<div style="flex:1;background:rgba(0,0,0,.07);border-radius:4px;height:7px;overflow:hidden">' +
-              '<div style="height:100%;width:' + pct + '%;background:' + barC + ';border-radius:4px"></div>' +
-            '</div>' +
-          '</div>' +
-        '</td>' +
-        '<td style="padding:7px 8px;font-size:10px;white-space:nowrap;color:#2e7d32">' + (x.r.case_resolve_date||'—') + '</td>' +
-        '<td style="padding:7px 8px;text-align:center">' +
-          '<span style="background:' + ageBg + ';color:' + barC + ';padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">' + x.days + 'd</span>' +
-        '</td>' +
-        '<td style="padding:7px 8px;text-align:right;font-size:10px;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums">' + (x.r.recovered ? formatUSD(x.r.recovered) : '—') + '</td>' +
-      '</tr>';
-    }).join('') || '<tr><td colspan="7" style="padding:20px;text-align:center;color:#888">No rows with both case dates filled</td></tr>';
-
-    var timelineSection = '<div style="margin:0 14px 14px;border:1px solid var(--border);border-radius:10px;overflow:hidden">' +
-      '<div style="padding:9px 13px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#0d47a1,#1565c0);display:flex;justify-content:space-between;align-items:center">' +
-        '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:rgba(255,255,255,.9)">⏱ Timeline — Case Raised → Case Closed</span>' +
-        '<span style="font-size:10px;color:rgba(255,255,255,.6)">' + tlRows.length + ' of ' + closedRows.filter(function(r) { return r.case_raise_date && r.case_resolve_date; }).length + ' cases with dates · bar = relative age</span>' +
-      '</div>' +
-      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:rgba(13,71,161,.07)">' +
-          '<th style="padding:7px 10px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:left">From Label</th>' +
-          '<th style="padding:7px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:left">Carrier</th>' +
-          '<th style="padding:7px 8px;font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;text-align:left">Raised</th>' +
-          '<th style="padding:7px 12px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:left">Duration Bar</th>' +
-          '<th style="padding:7px 8px;font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;text-align:left">Closed</th>' +
-          '<th style="padding:7px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:center">Days</th>' +
-          '<th style="padding:7px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:right">Recovered</th>' +
-        '</tr></thead>' +
-        '<tbody>' + tlHTMLRows + '</tbody>' +
-      '</table></div>' +
-      '<div style="padding:7px 13px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">' +
-        '<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:10px;font-weight:600">Green &lt; 30d</span> &nbsp;' +
-        '<span style="background:#fff3e0;color:#e65100;padding:1px 6px;border-radius:10px;font-weight:600">Orange 30–90d</span> &nbsp;' +
-        '<span style="background:#fce4ec;color:#c62828;padding:1px 6px;border-radius:10px;font-weight:600">Red &gt; 90d</span>' +
-      '</div>' +
-    '</div>';
-
     // ── Detail table ──────────────────────────────────────────────────────────
     var tRows = closedRows.map(function(r) {
       var diffVal = r.diff || 0;
@@ -2655,7 +2617,6 @@ function renderUS2USTab(data, lastUpdated) {
       statsHTML +
       u2ClosedFilterBar() +
       caseClosedSection +
-      timelineSection +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows · full detail table below</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
@@ -3113,10 +3074,12 @@ function renderIndiaUSTab(data, lastUpdated) {
       'New IBR/WRO-Received against old IBR/WRO':     '#7b1fa2',
       'Pending qty inwarded against new IBR/WRO':      '#e65100'
     };
+    // Inline filter options for the Resolution column header
+    const allResOpts = allResolutions.map(r => '<option value="' + r + '" style="background:#1b5e20;color:white"' + (_iusFilter.resolution===r?' selected':'') + '>' + r + '</option>').join('');
 
     // ── Info banner — helps new users understand what they're looking at ────
     const infoBanner =
-      '<div style="padding:10px 16px;background:rgba(21,101,192,.06);border-bottom:1px solid rgba(21,101,192,.18);display:flex;gap:10px;align-items:flex-start">' +
+      '<div class="ius-banner" style="padding:10px 16px;background:rgba(21,101,192,.06);border-bottom:1px solid rgba(21,101,192,.18);display:flex;gap:10px;align-items:flex-start">' +
         '<span style="font-size:15px;flex-shrink:0;line-height:1.5">ℹ️</span>' +
         '<div>' +
           '<div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:3px">About this view — Closed Cases (India → US)</div>' +
@@ -3145,19 +3108,19 @@ function renderIndiaUSTab(data, lastUpdated) {
           '<span style="font-size:10px;color:var(--muted)">' + closedRows.length + ' total · click a card to filter</span>' +
         '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">' +
-        remarkEntries.map(([k, v]) => {
+        remarkEntries.map(([k, v], idx) => {
           const sc = scMap[k] || '#2e7d32';
           const pct = closedRows.length > 0 ? (v.count/closedRows.length*100).toFixed(0) : '0';
           const barW = Math.round(v.count / maxRemark * 100);
           const isActive = _iusFilter.resolution === k;
           const cardBorder = isActive ? '2px solid ' + sc : '1px solid ' + sc + '28';
-          return '<div onclick="_iusFilter.resolution=(_iusFilter.resolution===\'' + k.replace(/'/g,"\\'") + '\'?\'\':' + '\'' + k.replace(/'/g,"\\'") + '\'' + ');_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" ' +
-            'style="border-left:4px solid ' + sc + ';border:' + cardBorder + ';border-left:4px solid ' + sc + ';background:' + sc + (isActive?'18':'0c') + ';border-radius:9px;padding:11px 13px;cursor:pointer;transition:opacity .15s" ' +
+          return '<div class="ius-card" onclick="_iusFilter.resolution=(_iusFilter.resolution===\'' + k.replace(/'/g,"\\'") + '\'?\'\':' + '\'' + k.replace(/'/g,"\\'") + '\'' + ');_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" ' +
+            'style="border-left:4px solid ' + sc + ';border:' + cardBorder + ';border-left:4px solid ' + sc + ';background:' + sc + (isActive?'18':'0c') + ';border-radius:9px;padding:11px 13px;animation-delay:' + (idx*0.08) + 's" ' +
             'title="Click to filter to this resolution type only">' +
             '<div style="font-size:24px;font-weight:800;color:' + sc + ';font-variant-numeric:tabular-nums;line-height:1">' + v.count + '</div>' +
             '<div style="font-size:10px;font-weight:600;color:var(--text);margin-top:5px;line-height:1.45">' + k + '</div>' +
             '<div style="margin-top:8px;background:var(--border);border-radius:3px;height:4px;overflow:hidden">' +
-              '<div style="height:100%;width:' + barW + '%;background:' + sc + ';border-radius:3px"></div>' +
+              '<div class="ius-bar" style="height:100%;width:' + barW + '%;background:' + sc + ';border-radius:3px;animation-delay:' + (idx*0.08 + 0.3) + 's"></div>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--muted)">' +
               '<span>' + pct + '% of cases</span>' +
@@ -3182,7 +3145,7 @@ function renderIndiaUSTab(data, lastUpdated) {
       '</div>';
 
     // ── Detail table rows ────────────────────────────────────────────────────
-    const tRows = closedRows.map(r => {
+    const tRows = closedRows.map((r, idx) => {
       const ch = childrenOf[r.label]||[];
       const pTag = ch.length>0 ? '<span style="font-size:9px;color:#26a69a;display:block;margin-top:2px">↳ ' + ch.length + ' child IBR' + (ch.length>1?'s':'') + '</span>' : '';
       const cTag = r.old_ibr ? '<span style="font-size:9px;color:#ffa726;display:block;margin-top:2px">← ' + r.old_ibr.slice(-10) + '</span>' : '';
@@ -3199,7 +3162,7 @@ function renderIndiaUSTab(data, lastUpdated) {
         if (d1 && d2 && d2 >= d1) { daysNum = Math.floor((d2-d1)/86400000); daysClose = daysNum + 'd'; }
       }
       const daysColor = daysNum === null ? 'var(--muted)' : daysNum >= 60 ? '#c62828' : daysNum >= 30 ? '#e65100' : '#2e7d32';
-      return '<tr style="border-bottom:1px solid var(--border)">' +
+      return '<tr class="ius-tr" style="border-bottom:1px solid var(--border);animation-delay:' + Math.min(idx * 0.022, 0.55) + 's">' +
         '<td style="padding:6px 8px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
         '<td style="padding:6px 8px;font-size:10px;font-weight:600">' + (r.label||'—') + pTag + cTag + '</td>' +
         '<td style="padding:6px 8px">' +
@@ -3237,7 +3200,13 @@ function renderIndiaUSTab(data, lastUpdated) {
         '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Month the shipment was originally sent from India">Month</th>' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="IBR = Inward Box Report / WRO = Warehouse Receiving Order — unique shipment reference ID">IBR / Label</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="How was this discrepancy ultimately resolved? Use the Resolution filter above to focus on a specific type">Resolution Type</th>' +
+          '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;min-width:130px">' +
+            '<div style="margin-bottom:4px;white-space:nowrap;cursor:help" title="How the discrepancy was resolved — use the dropdown to filter">Resolution Type ▾</div>' +
+            '<select onchange="_iusFilter.resolution=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="width:100%;font-size:9px;padding:2px 4px;border:1px solid rgba(255,255,255,.28);border-radius:4px;background:rgba(0,0,0,.32);color:white;cursor:pointer;outline:none">' +
+              '<option value="" style="background:#1b5e20;color:white">All Types</option>' +
+              allResOpts +
+            '</select>' +
+          '</th>' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Sales / fulfilment channel where the shipment arrived (e.g. Amazon US, ShipBob)">Channel</th>' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Product name or SKU included in this shipment">Product</th>' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center;cursor:help" title="Qty = Quantity of units we expected to receive in this shipment">Qty</th>' +
