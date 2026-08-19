@@ -2545,7 +2545,12 @@ function renderUS2USTab(data, lastUpdated) {
   };
 
   const buildClosedTab = function() {
-    var totRec = closedRows.reduce(function(s, r) { return s + (r.recovered||0); }, 0);
+    var totRec = 0, totCarrierRec = 0, totChannelRec = 0, carrierCount = 0, channelCount = 0;
+    closedRows.forEach(function(r) {
+      totRec += r.recovered || 0;
+      if ((r.carrier_recovered||0) > 0) { totCarrierRec += r.carrier_recovered; carrierCount++; }
+      if ((r.channel_recovered||0) > 0) { totChannelRec += r.channel_recovered; channelCount++; }
+    });
 
     // ── Stats bar ─────────────────────────────────────────────────────────────
     var closedWithDates = closedRows.filter(function(r) { return r.case_raise_date && r.case_resolve_date; });
@@ -2613,6 +2618,26 @@ function renderUS2USTab(data, lastUpdated) {
       '</table></div>' +
     '</div>';
 
+    // ── Recovery Source strip (Option C) ─────────────────────────────────────
+    var recoverySourceStrip = (totCarrierRec > 0 || totChannelRec > 0) ?
+      '<div style="padding:10px 16px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.018)">' +
+        '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">💡 Recovery Source — who reimbursed what</div>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+          '<div class="ius-card" style="flex:1;min-width:180px;border-radius:10px;padding:12px 14px;background:linear-gradient(135deg,rgba(21,101,192,.08),rgba(21,101,192,.03));border:1px solid rgba(21,101,192,.2);animation-delay:.00s">' +
+            '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">🏪</span>' +
+            '<div><div style="font-size:16px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + formatUSD(totChannelRec) + '</div>' +
+            '<div style="font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Channel Reimbursed</div>' +
+            '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + channelCount + ' case' + (channelCount !== 1 ? 's' : '') + ' · Amazon / TikTok / ShipBob</div></div></div>' +
+          '</div>' +
+          '<div class="ius-card" style="flex:1;min-width:180px;border-radius:10px;padding:12px 14px;background:linear-gradient(135deg,rgba(46,125,50,.08),rgba(46,125,50,.03));border:1px solid rgba(46,125,50,.2);animation-delay:.08s">' +
+            '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">🚚</span>' +
+            '<div><div style="font-size:16px;font-weight:800;color:#2e7d32;font-variant-numeric:tabular-nums">' + formatUSD(totCarrierRec) + '</div>' +
+            '<div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Carrier Reimbursed</div>' +
+            '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + carrierCount + ' case' + (carrierCount !== 1 ? 's' : '') + ' · UPS / FedEx / DHL</div></div></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' : '';
+
     // ── Detail table ──────────────────────────────────────────────────────────
     var tRows = closedRows.map(function(r) {
       var diffVal = r.diff || 0;
@@ -2623,7 +2648,10 @@ function renderUS2USTab(data, lastUpdated) {
       var days = rd && cd ? Math.max(0, Math.floor((cd - rd) / 86400000)) : null;
       var ageC  = days === null ? '#888' : days > 90 ? '#c62828' : days > 30 ? '#e65100' : '#2e7d32';
       var ageBg = days === null ? 'transparent' : days > 90 ? '#fce4ec' : days > 30 ? '#fff3e0' : '#e8f5e9';
-      return '<tr>' +
+      var rs = r.reimbursement_status || '';
+      var isc = rs.toLowerCase().indexOf('carrier') >= 0;
+      var srcTag = rs ? '<span style="background:' + (isc ? 'rgba(46,125,50,.12)' : 'rgba(21,101,192,.12)') + ';color:' + (isc ? '#2e7d32' : '#1565c0') + ';padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700;white-space:nowrap">' + (isc ? '🚚 Carrier' : '🏪 Channel') + '</span>' : '<span style="color:#ccc;font-size:10px">—</span>';
+      return '<tr style="border-bottom:1px solid var(--border)">' +
         '<td style="padding:6px 8px;font-weight:600;font-size:10px;white-space:nowrap">' + (r.month||'') + '</td>' +
         '<td style="padding:6px 8px;font-size:10px;font-weight:600">' + (r.from_label||'—') + '</td>' +
         '<td style="padding:6px 8px;font-size:10px;color:var(--muted)">' + (r.to_label||'—') + '</td>' +
@@ -2639,14 +2667,16 @@ function renderUS2USTab(data, lastUpdated) {
           (days !== null ? '<span style="background:' + ageBg + ';color:' + ageC + ';padding:2px 6px;border-radius:12px;font-size:9px;font-weight:700">' + days + 'd</span>' : '<span style="color:#ccc">—</span>') +
         '</td>' +
         '<td style="padding:6px 8px;text-align:right;color:#2e7d32;font-weight:700;font-size:10px;font-variant-numeric:tabular-nums">' + (r.recovered ? formatUSD(r.recovered) : '—') + '</td>' +
+        '<td style="padding:6px 8px;text-align:center">' + srcTag + '</td>' +
         '<td style="padding:6px 8px;font-size:9px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.subbucket||'') + '">' + (r.subbucket||'—') + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="14" style="text-align:center;padding:28px;color:#888">No closed rows match the current filter</td></tr>';
+    }).join('') || '<tr><td colspan="15" style="text-align:center;padding:28px;color:#888">No closed rows match the current filter</td></tr>';
 
     return '<div>' +
       statsHTML +
       u2ClosedFilterBar() +
       caseClosedSection +
+      recoverySourceStrip +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows · full detail table below</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
@@ -2663,9 +2693,15 @@ function renderUS2USTab(data, lastUpdated) {
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:left">Case Closed</th>' +
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:center">Days</th>' +
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:right">Recovered</th>' +
+          '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:center;cursor:help" title="Who paid — Channel (Amazon/TikTok/ShipBob) or Carrier (UPS/FedEx/DHL)">Source</th>' +
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:left">Resolution</th>' +
         '</tr></thead>' +
         '<tbody>' + tRows + '</tbody>' +
+        '<tfoot><tr style="background:rgba(27,94,32,.06);border-top:2px solid var(--border)">' +
+          '<td colspan="12" style="padding:7px 9px;font-weight:700;font-size:11px;color:#1b5e20">' + closedRows.length + ' cases total</td>' +
+          '<td style="padding:7px 9px;text-align:right;font-weight:800;font-size:11px;color:#2e7d32;font-variant-numeric:tabular-nums">' + formatUSD(totRec) + '</td>' +
+          '<td colspan="2" style="padding:7px 9px"></td>' +
+        '</tr></tfoot>' +
       '</table></div>' +
     '</div>';
   };
@@ -2737,9 +2773,9 @@ function renderUS2USTab(data, lastUpdated) {
     return '<div>' +
       u2StatsBar([
         { v: progressRows.length,  l: 'Claims Filed (Filtered)', c: '#e65100', d: (progress.count||0) + ' total all-time' },
-        { v: formatUSD(pTotExp),   l: 'Total Claimed',           c: '#e65100', d: 'Amount asked from carrier' },
-        { v: formatUSD(pTotRec),   l: 'Carrier Paid So Far',     c: '#2e7d32', d: 'Money received back' },
-        { v: formatUSD(pStill),    l: 'Carrier Still Owes',      c: '#c62828', d: 'Remaining unpaid balance' }
+        { v: formatUSD(pTotExp),   l: 'Total Claimed',           c: '#e65100', d: 'Amount asked from channel / carrier' },
+        { v: formatUSD(pTotRec),   l: 'Paid So Far',             c: '#2e7d32', d: 'Received from channel / carrier' },
+        { v: formatUSD(pStill),    l: 'Still Owing',             c: '#c62828', d: 'Remaining unpaid balance' }
       ]) +
       u2FilterBar('progress') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressSorted.length + ' rows · sorted oldest case first</div>' +

@@ -588,19 +588,20 @@ def get_us2us_data(creds, sheet_id):
     to_ch_col    = fc('to channel')
     from_lbl_col = fc('from (label')
     to_lbl_col   = fc('to (label')
-    qty_col      = fc('quantity')
-    carrier_col  = fc('carrier')
-    status_col   = fc('channel grn status')
-    bucket_col   = fc('bucket')
-    subbucket_col= fc('subbucket')
-    diff_col     = fc('sum difference')
-    exp_col      = fc('expected reimburs')
-    act_col      = fc('amt recov')
-    raise_col    = fc('case raised date')
-    resolve_col  = fc('case resolve date')
-    freight_col  = fc('freight')
-    grn_col      = fc('inwarded by channel')
-    sku_col      = fc('sku')
+    qty_col       = fc('quantity')
+    carrier_col   = fc('carrier')
+    status_col    = fc('channel grn status')
+    reimb_col     = fc('reimbursement status')
+    bucket_col    = fc('bucket')
+    subbucket_col = fc('subbucket')
+    diff_col      = fc('sum difference')
+    exp_col       = fc('expected reimburs')
+    act_col       = fc('amt recov')
+    raise_col     = fc('case raised date')
+    resolve_col   = fc('case resolve date')
+    freight_col   = fc('freight')
+    grn_col       = fc('inwarded by channel')
+    sku_col       = fc('sku')
 
     print(f"[US2US] Cols — month:{month_col} bucket:{bucket_col} sub:{subbucket_col} "
           f"exp:{exp_col} act:{act_col} from:{from_ch_col} to:{to_ch_col}")
@@ -675,28 +676,33 @@ def get_us2us_data(creds, sheet_id):
         monthly[month]['recovered'] += act
         monthly[month]['qty']       += qty
 
+        reimb_status   = str(g(row, reimb_col)).strip() if reimb_col >= 0 and len(row) > reimb_col else ''
+        is_carrier_pay = 'carrier' in reimb_status.lower()
         rows.append({
-            'row_index':    i + 4,
-            'month':        month,
-            'from_channel': str(g(row, from_ch_col)).strip(),
-            'to_channel':   str(g(row, to_ch_col)).strip(),
-            'from_label':   from_label,
-            'to_label':     str(g(row, to_lbl_col)).strip(),
-            'sku':          str(g(row, sku_col)).strip()[:40],
-            'qty':          int(qty),
-            'grn':          int(safe_float(g(row, grn_col))),
-            'diff':         int(diff),
-            'carrier':      str(g(row, carrier_col)).strip(),
-            'status':       str(g(row, status_col)).strip(),
-            'bucket':       bucket,
-            'subbucket':    subbucket,
-            'bucket_key':   bucket_key,
-            'expected':     round(exp, 2),
-            'recovered':    round(act, 2),
-            'pending':      round(max(0, exp - act), 2),
-            'freight':      round(safe_float(g(row, freight_col)), 2),
-            'case_raise_date':   str(g(row, raise_col)).strip(),
-            'case_resolve_date': str(g(row, resolve_col)).strip(),
+            'row_index':            i + 4,
+            'month':                month,
+            'from_channel':         str(g(row, from_ch_col)).strip(),
+            'to_channel':           str(g(row, to_ch_col)).strip(),
+            'from_label':           from_label,
+            'to_label':             str(g(row, to_lbl_col)).strip(),
+            'sku':                  str(g(row, sku_col)).strip()[:40],
+            'qty':                  int(qty),
+            'grn':                  int(safe_float(g(row, grn_col))),
+            'diff':                 int(diff),
+            'carrier':              str(g(row, carrier_col)).strip(),
+            'status':               str(g(row, status_col)).strip(),
+            'reimbursement_status': reimb_status,
+            'carrier_recovered':    round(act, 2) if is_carrier_pay else 0.0,
+            'channel_recovered':    0.0 if is_carrier_pay else round(act, 2),
+            'bucket':               bucket,
+            'subbucket':            subbucket,
+            'bucket_key':           bucket_key,
+            'expected':             round(exp, 2),
+            'recovered':            round(act, 2),
+            'pending':              round(max(0, exp - act), 2),
+            'freight':              round(safe_float(g(row, freight_col)), 2),
+            'case_raise_date':      str(g(row, raise_col)).strip(),
+            'case_resolve_date':    str(g(row, resolve_col)).strip(),
         })
 
     months_present = sorted(
