@@ -791,12 +791,12 @@ def get_india_us_data(creds, sheet_id):
     if channel_col < 0:
         channel_col = 38  # hardcoded: column AM (39th column, 0-indexed 38)
     transporter_col = fc('transporter')
-    # Exact-match 'remarks' to avoid matching 'sub remark'; fallback to col AJ (idx 35)
+    # Exact-match 'remarks' to avoid matching 'sub remark'; fallback to col AE (idx 30)
     remarks_col     = next((i for i, h in enumerate(headers) if h == 'remarks'), -1)
     if remarks_col < 0:
         remarks_col = next((i for i, h in enumerate(headers) if h == 'remark'), -1)
     if remarks_col < 0:
-        remarks_col = 35  # hardcoded: column AJ (36th column, 0-indexed 35)
+        remarks_col = 30  # hardcoded: column AE (31st column, 0-indexed 30)
 
     print(f"[IndiaUS] Cols — month:{month_col} bucket:{bucket_col} sub:{sub_col} "
           f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col} remarks:{remarks_col}")

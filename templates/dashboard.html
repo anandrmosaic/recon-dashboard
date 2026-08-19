@@ -3298,7 +3298,7 @@ function renderIndiaUSTab(data, lastUpdated) {
         '<td style="padding:6px 8px;text-align:right;font-size:10px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
         '<td style="padding:6px 8px;text-align:right;font-size:11px;color:#2e7d32;font-weight:700">' + (r.actual?formatUSD(r.actual):'—') + '</td>' +
         '<td style="padding:6px 8px;text-align:center">' + (() => { const rs=r.reimbursement_status||''; const isc=rs.toLowerCase().includes('carrier'); return rs?'<span style="background:'+(isc?'rgba(46,125,50,.12)':'rgba(21,101,192,.12)')+';color:'+(isc?'#2e7d32':'#1565c0')+';padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700;white-space:nowrap">'+(isc?'🚚 Carrier':'🏪 Channel')+'</span>':'<span style="color:#ccc;font-size:10px">—</span>'; })() + '</td>' +
-        '<td style="padding:6px 10px;font-size:10px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.remark||'') + '">' + (r.remark || '<span style="color:#ccc">—</span>') + '</td>' +
+        '<td style="padding:6px 10px;font-size:10px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.remarks||'') + '">' + (r.remarks || '<span style="color:#ccc">—</span>') + '</td>' +
       '</tr>';
     }).join('') || '<tr><td colspan="16" style="text-align:center;padding:36px;color:#888"><div style="font-size:20px;margin-bottom:6px">🔍</div><div style="font-size:12px;font-weight:600">No rows match the current filters</div><div style="font-size:11px;margin-top:4px">Try clearing one or more filters above</div></td></tr>';
 
@@ -3406,7 +3406,7 @@ function renderIndiaUSTab(data, lastUpdated) {
         '<td style="padding:7px 9px;text-align:center;font-size:11px">' + qsDisplay + '</td>' +
         '<td style="padding:7px 9px;text-align:center">' + ageChip(days) + '</td>' +
         '<td style="padding:7px 9px;text-align:right;color:#c62828;font-weight:700;font-size:11px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
-        '<td style="padding:7px 9px;font-size:10px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(r.remark||r.sub_remark||'')+'">' + (r.remark||r.sub_remark||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(r.remarks||r.sub_remark||'')+'">' + (r.remarks||r.sub_remark||'—') + '</td>' +
         '</tr>';
     }).join('') || '<tr><td colspan="8" style="text-align:center;padding:28px;color:#888">No pending rows match the current filter</td></tr>';
 
