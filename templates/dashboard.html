@@ -3183,6 +3183,46 @@ function renderIndiaUSTab(data, lastUpdated) {
         '<strong>Days</strong> = Turnaround time' +
       '</div>';
 
+    // ── Totals Summary Strip — always-visible above the table ────────────────
+    const totalsStrip =
+      '<div class="ius-section" style="display:flex;align-items:stretch;border-bottom:2px solid rgba(27,94,32,.22);background:linear-gradient(90deg,rgba(27,94,32,.07),rgba(27,94,32,.03));font-variant-numeric:tabular-nums;flex-wrap:wrap">' +
+        // Cases count
+        '<div style="padding:9px 16px;display:flex;align-items:center;gap:6px;border-right:1px solid rgba(27,94,32,.15)">' +
+          '<span style="font-size:18px;font-weight:800;color:#1b3a2d;line-height:1">' + closedRows.length + '</span>' +
+          '<span style="font-size:10px;color:var(--muted);line-height:1.3">cases<br>total</span>' +
+        '</div>' +
+        // Qty total
+        '<div style="padding:9px 16px;display:flex;align-items:center;gap:6px;border-right:1px solid rgba(27,94,32,.15)">' +
+          '<div>' +
+            '<div style="font-size:10px;color:var(--muted);margin-bottom:1px">Total Qty</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#1b3a2d">' + totQty.toLocaleString() + '</div>' +
+          '</div>' +
+        '</div>' +
+        // Net Diff
+        '<div style="padding:9px 16px;display:flex;align-items:center;gap:6px;border-right:1px solid rgba(27,94,32,.15)">' +
+          '<div>' +
+            '<div style="font-size:10px;color:var(--muted);margin-bottom:1px">Net Diff</div>' +
+            '<div style="font-size:15px;font-weight:800;color:' + diffColor + '">' + diffLabel + '</div>' +
+          '</div>' +
+        '</div>' +
+        // Spacer
+        '<div style="flex:1;min-width:20px"></div>' +
+        // Expected
+        '<div style="padding:9px 16px;display:flex;align-items:center;gap:6px;border-left:1px solid rgba(27,94,32,.15)">' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:10px;color:var(--muted);margin-bottom:1px">Expected</div>' +
+            '<div style="font-size:15px;font-weight:700;color:#e65100">' + formatUSD(totExp) + '</div>' +
+          '</div>' +
+        '</div>' +
+        // Recovered — highlighted
+        '<div style="padding:9px 18px;display:flex;align-items:center;gap:6px;background:rgba(27,94,32,.1);border-left:2px solid rgba(27,94,32,.3)">' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:10px;color:#2e7d32;font-weight:600;margin-bottom:1px">Recovered</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#2e7d32">' + formatUSD(totRec) + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
     // ── Detail table rows ────────────────────────────────────────────────────
     const tRows = closedRows.map((r, idx) => {
       const ch = childrenOf[r.label]||[];
@@ -3238,6 +3278,7 @@ function renderIndiaUSTab(data, lastUpdated) {
       '</div>' +
       caseClosedSection +
       colGuide +
+      totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Month the shipment was originally sent from India">Month</th>' +
