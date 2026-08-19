@@ -3318,22 +3318,23 @@ function renderIndiaUSTab(data, lastUpdated) {
   };
 
   const buildPendingTab = () => {
-    let crit=0, high=0, norm=0, critAmt=0;
-    pendingRows.forEach(r => {
+    let crit=0, high=0, norm=0, critAmt=0, totQtyShort=0, totAtRisk=0;
+    pendingRowsSorted.forEach(r => {
       const d = monthToDate(r.month);
       const days = d ? Math.floor((Date.now()-d.getTime())/86400000) : null;
-      if (days===null){norm++;return;}
-      if (days>=90){crit++;critAmt+=r.expected||0;} else if (days>=30) high++; else norm++;
+      if (days===null){norm++;} else if (days>=90){crit++;critAmt+=r.expected||0;} else if (days>=30) high++; else norm++;
+      totQtyShort += (r.diff||0)>0 ? (r.diff||0) : (r.qty||0);
+      totAtRisk   += r.expected||0;
     });
-    const pendingTotal = pendingRowsSorted.reduce((s,r)=>s+(r.expected||0),0);
 
-    const tRows = pendingRowsSorted.map(r => {
+    const tRows = pendingRowsSorted.map((r, idx) => {
       const d = monthToDate(r.month);
       const days = d ? Math.floor((Date.now()-d.getTime())/86400000) : null;
       const diff = r.diff||0;
       const qsDisplay = diff>0 ? '<span style="color:#c62828;font-weight:700">−'+diff+'</span>' : (r.qty>0?r.qty:'—');
       const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
-      return '<tr>' +
+      const rowAnim = 'animation:iusTrIn .3s cubic-bezier(.22,.61,.36,1) '+Math.min(idx*0.022,0.55).toFixed(3)+'s both';
+      return '<tr class="ius-tr" style="border-bottom:1px solid var(--border);'+rowAnim+'">' +
         '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
         '<td style="padding:7px 9px;font-size:10px;font-weight:600">' + (r.label||'—') + '</td>' +
         '<td style="padding:7px 9px;font-size:11px">' + (r.channel||'—') + '</td>' +
@@ -3341,38 +3342,77 @@ function renderIndiaUSTab(data, lastUpdated) {
         '<td style="padding:7px 9px;text-align:center;font-size:11px">' + qsDisplay + '</td>' +
         '<td style="padding:7px 9px;text-align:center">' + ageChip(days) + '</td>' +
         '<td style="padding:7px 9px;text-align:right;color:#c62828;font-weight:700;font-size:11px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
-        '<td style="padding:7px 9px;font-size:10px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.sub_remark||'—') + '</td>' +
+        '<td style="padding:7px 9px;font-size:10px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(r.remark||r.sub_remark||'')+'">' + (r.remark||r.sub_remark||'—') + '</td>' +
         '</tr>';
     }).join('') || '<tr><td colspan="8" style="text-align:center;padding:28px;color:#888">No pending rows match the current filter</td></tr>';
 
-    const warnBanner = crit>0 ? '<div style="padding:8px 14px;background:#fff5f5;border-bottom:1px solid #ffcdd2;font-size:11px;color:#c62828;font-weight:600">⚠️ ' + crit + ' case' + (crit>1?'s are':' is') + ' 90+ days old — carriers typically close claims after 90 days. ' + formatUSD(critAmt) + ' at immediate risk. File now.</div>' : '';
+    const infoBanner = '<div class="ius-banner ius-section" style="padding:10px 16px;display:flex;align-items:flex-start;gap:10px;background:rgba(198,40,40,.05);border-bottom:1px solid rgba(198,40,40,.15)">' +
+      '<span style="font-size:15px;flex-shrink:0">🔴</span>' +
+      '<div><div style="font-size:11px;font-weight:700;color:#c62828;margin-bottom:2px">No Claim Filed Yet</div>' +
+      '<div style="font-size:10.5px;color:var(--muted);line-height:1.5">These shipments arrived short but no carrier claim has been submitted. <b>Carriers typically close claim windows after 90 days</b> — file immediately for critical cases. Sort by Age to prioritise.</div></div>' +
+    '</div>';
+
+    const warnBanner = crit>0 ? '<div class="ius-banner" style="padding:8px 14px;background:#fff5f5;border-bottom:1px solid #ffcdd2;font-size:11px;color:#c62828;font-weight:600">⚠️ ' + crit + ' case' + (crit>1?'s are':' is') + ' 90+ days old — carriers typically close claims after 90 days. ' + formatUSD(critAmt) + ' at immediate risk. File now.</div>' : '';
+
+    const urgencyCards = '<div class="ius-section" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--border)">' +
+      '<div class="ius-card" style="flex:1;min-width:160px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(198,40,40,.1),rgba(198,40,40,.04));border:1px solid rgba(198,40,40,.22);animation-delay:.00s">' +
+        '<div style="font-size:20px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + crit + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">⚠️ 90+ Days</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Carrier may deny claim — file <b>immediately</b></div>' +
+        (critAmt>0?'<div style="font-size:11px;font-weight:700;color:#c62828;margin-top:6px;border-top:1px solid rgba(198,40,40,.2);padding-top:5px">'+formatUSD(critAmt)+' at risk</div>':'') +
+      '</div>' +
+      '<div class="ius-card" style="flex:1;min-width:160px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(230,81,0,.1),rgba(230,81,0,.04));border:1px solid rgba(230,81,0,.22);animation-delay:.08s">' +
+        '<div style="font-size:20px;font-weight:800;color:#e65100;font-variant-numeric:tabular-nums">' + high + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">⏰ 30–90 Days</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Approaching deadline — file this week</div>' +
+      '</div>' +
+      '<div class="ius-card" style="flex:1;min-width:160px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(46,125,50,.1),rgba(46,125,50,.04));border:1px solid rgba(46,125,50,.22);animation-delay:.16s">' +
+        '<div style="font-size:20px;font-weight:800;color:#2e7d32;font-variant-numeric:tabular-nums">' + norm + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">✅ Under 30 Days</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Within safe claim window — still urgent</div>' +
+      '</div>' +
+    '</div>';
+
+    const colGuide = '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);background:rgba(0,0,0,.015);display:flex;flex-wrap:wrap;gap:10px">' +
+      '<span><b>Month</b> shipment dispatched</span><span>·</span>' +
+      '<span><b>IBR/Label</b> shipment reference</span><span>·</span>' +
+      '<span><b>Qty Short</b> units missing on arrival</span><span>·</span>' +
+      '<span><b>Age</b> days since shipment month</span><span>·</span>' +
+      '<span><b>$ at Risk</b> claimable value — file before 90-day deadline</span>' +
+    '</div>';
+
+    const totalsStrip =
+      '<div class="ius-section" style="display:flex;align-items:stretch;border-bottom:2px solid rgba(198,40,40,.22);background:linear-gradient(90deg,rgba(198,40,40,.07),rgba(198,40,40,.03))">' +
+        '<div style="padding:8px 16px;border-right:1px solid rgba(198,40,40,.15);display:flex;flex-direction:column;justify-content:center">' +
+          '<div style="font-size:11px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + pendingRowsSorted.length + ' cases</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Pending Claim</div>' +
+        '</div>' +
+        '<div style="padding:8px 16px;border-right:1px solid rgba(198,40,40,.15);display:flex;flex-direction:column;justify-content:center">' +
+          '<div style="font-size:11px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">Σ ' + totQtyShort.toLocaleString() + '</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Total Qty Short</div>' +
+        '</div>' +
+        '<div style="flex:1"></div>' +
+        '<div style="padding:8px 16px;background:rgba(198,40,40,.1);border-left:2px solid rgba(198,40,40,.3);display:flex;flex-direction:column;justify-content:center;text-align:right">' +
+          '<div style="font-size:11px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + formatUSD(totAtRisk) + '</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Total $ at Risk</div>' +
+        '</div>' +
+      '</div>';
 
     return '<div>' +
-      '<div style="display:flex;border-bottom:1px solid var(--border)">' +
-        '<div style="flex:2;padding:12px 18px;border-right:1px solid var(--border);display:flex;gap:28px;align-items:center">' +
-          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + (pending.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">No Claim Filed Yet</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Short shipments with no claim submitted</div></div>' +
-          '<div style="width:1px;height:52px;background:var(--border)"></div>' +
-          '<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + formatUSD(pending.expected||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Recoverable if Claimed</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Money we can still get back</div></div>' +
-        '</div>' +
-        '<div style="flex:1;padding:11px 10px;text-align:center;background:#fce4ec;border-right:1px solid var(--border)">' +
-          '<div style="font-size:20px;font-weight:800;color:#c62828">' + crit + '</div>' +
-          '<div style="font-size:10px;color:#c62828;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">⚠️ 90+ Day</div>' +
-          '<div style="font-size:10px;color:#c62828;margin-top:3px;line-height:1.3">File immediately — carrier may deny</div>' +
-        '</div>' +
-        '<div style="flex:1;padding:11px 10px;text-align:center;background:#fff3e0;border-right:1px solid var(--border)">' +
-          '<div style="font-size:20px;font-weight:800;color:#e65100">' + high + '</div>' +
-          '<div style="font-size:10px;color:#e65100;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">⏰ 30–90 Day</div>' +
-          '<div style="font-size:10px;color:#e65100;margin-top:3px;line-height:1.3">Approaching deadline — file soon</div>' +
-        '</div>' +
-        '<div style="flex:1;padding:11px 10px;text-align:center;background:#e8f5e9">' +
-          '<div style="font-size:20px;font-weight:800;color:#2e7d32">' + norm + '</div>' +
-          '<div style="font-size:10px;color:#2e7d32;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">✅ Under 30 Days</div>' +
-          '<div style="font-size:10px;color:#2e7d32;margin-top:3px;line-height:1.3">Within safe claim window</div>' +
-        '</div>' +
-      '</div>' +
-      warnBanner +
+      statsBar([
+        {v:pendingRowsSorted.length, l:'Cases to Claim', c:'#c62828', d:'Shipments with no claim filed'},
+        {v:formatUSD(totAtRisk),     l:'$ at Risk',      c:'#c62828', d:'Claimable value if filed now'},
+        {v:crit,  l:'Critical (90d+)',  c:'#b71c1c', d:'File immediately', bg:'rgba(198,40,40,.07)'},
+        {v:high,  l:'Urgent (30–90d)', c:'#e65100', d:'Approaching deadline'},
+        {v:norm,  l:'Safe (<30d)',      c:'#2e7d32', d:'Within claim window'},
+      ]) +
       filterBar('pending', rows.filter(r=>r.bucket_key==='short_grn_pending')) +
-      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + pendingRowsSorted.length + ' rows · sorted oldest first</div>' +
+      infoBanner +
+      warnBanner +
+      '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + pendingRowsSorted.length + ' rows · sorted oldest first</div>' +
+      urgencyCards +
+      colGuide +
+      totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#b71c1c,#c62828)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
@@ -3386,8 +3426,10 @@ function renderIndiaUSTab(data, lastUpdated) {
         '</tr></thead>' +
         '<tbody>' + tRows + '</tbody>' +
         '<tfoot><tr style="background:rgba(198,40,40,.07);border-top:2px solid var(--border)">' +
-          '<td colspan="6" style="padding:7px 9px;font-weight:700;font-size:11px;color:#c62828">' + pendingRowsSorted.length + ' cases</td>' +
-          '<td style="padding:7px 9px;text-align:right;font-weight:700;font-size:11px;color:#c62828">' + formatUSD(pendingTotal) + '</td>' +
+          '<td colspan="4" style="padding:7px 9px;font-weight:700;font-size:11px;color:#c62828">' + pendingRowsSorted.length + ' cases</td>' +
+          '<td style="padding:7px 9px;text-align:center;font-weight:700;font-size:11px;color:#c62828">' + totQtyShort.toLocaleString() + '</td>' +
+          '<td></td>' +
+          '<td style="padding:7px 9px;text-align:right;font-weight:700;font-size:11px;color:#c62828">' + formatUSD(totAtRisk) + '</td>' +
           '<td></td>' +
         '</tr></tfoot>' +
       '</table></div>' +
@@ -3400,14 +3442,17 @@ function renderIndiaUSTab(data, lastUpdated) {
       act:  progressRowsSorted.reduce((s,r)=>s+(r.actual||0),0),
       pend: progressRowsSorted.reduce((s,r)=>s+(r.pending||0),0)
     };
+    let awaitingIBR=0, claimRaised=0;
+    progressRowsSorted.forEach(r => { if(r.bucket_key==='short_grn_awaiting_ibr') awaitingIBR++; else claimRaised++; });
 
-    const tRows = progressRowsSorted.map(r => {
+    const tRows = progressRowsSorted.map((r, idx) => {
       const days = r.case_raise_date ? daysSince(r.case_raise_date) : null;
       const awbTag = r.bucket_key==='short_grn_awaiting_ibr' ? '<span style="background:#fff3e0;color:#e65100;font-size:9px;padding:1px 5px;border-radius:4px;margin-left:4px">Awaiting IBR</span>' : '';
       const scPMap = {'Claim raised but not received':'#e65100','Pending to claim':'#c62828'};
       const SC = scPMap[r.sub_remark]||'#e65100';
       const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
-      return '<tr>' +
+      const rowAnim = 'animation:iusTrIn .3s cubic-bezier(.22,.61,.36,1) '+Math.min(idx*0.022,0.55).toFixed(3)+'s both';
+      return '<tr class="ius-tr" style="border-bottom:1px solid var(--border);'+rowAnim+'">' +
         '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
         '<td style="padding:7px 9px;font-size:10px;font-weight:600">' + (r.label||'—') + '</td>' +
         '<td style="padding:7px 9px"><span style="background:' + SC + '18;color:' + SC + ';padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600">' + (r.sub_remark||'—') + '</span>' + awbTag + '</td>' +
@@ -3420,6 +3465,59 @@ function renderIndiaUSTab(data, lastUpdated) {
         '</tr>';
     }).join('') || '<tr><td colspan="9" style="text-align:center;padding:28px;color:#888">No in-progress rows match the current filter</td></tr>';
 
+    const infoBanner = '<div class="ius-banner ius-section" style="padding:10px 16px;display:flex;align-items:flex-start;gap:10px;background:rgba(230,81,0,.05);border-bottom:1px solid rgba(230,81,0,.15)">' +
+      '<span style="font-size:15px;flex-shrink:0">⏳</span>' +
+      '<div><div style="font-size:11px;font-weight:700;color:#e65100;margin-bottom:2px">Claim Filed — Awaiting Carrier Response</div>' +
+      '<div style="font-size:10.5px;color:var(--muted);line-height:1.5">These cases have an active claim submitted to the carrier. Track <b>Expected vs Received</b> to measure recovery progress. Follow up on old open cases — carriers may require escalation for overdue payments.</div></div>' +
+    '</div>';
+
+    const statusCards = '<div class="ius-section" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--border)">' +
+      '<div class="ius-card" style="flex:1;min-width:155px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(230,81,0,.1),rgba(230,81,0,.04));border:1px solid rgba(230,81,0,.22);animation-delay:.00s">' +
+        '<div style="font-size:20px;font-weight:800;color:#e65100;font-variant-numeric:tabular-nums">' + claimRaised + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">⏳ Claim Raised</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Submitted to carrier, awaiting payment</div>' +
+      '</div>' +
+      '<div class="ius-card" style="flex:1;min-width:155px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(230,81,0,.08),rgba(255,153,0,.04));border:1px solid rgba(230,81,0,.18);animation-delay:.08s">' +
+        '<div style="font-size:20px;font-weight:800;color:#e65100;font-variant-numeric:tabular-nums">' + awaitingIBR + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">📋 Awaiting IBR</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">IBR/WRO replacement pending before claim</div>' +
+      '</div>' +
+      '<div class="ius-card" style="flex:1;min-width:155px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(46,125,50,.1),rgba(46,125,50,.04));border:1px solid rgba(46,125,50,.22);animation-delay:.16s">' +
+        '<div style="font-size:20px;font-weight:800;color:#2e7d32;font-variant-numeric:tabular-nums">' + formatUSD(pTot.act) + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">💰 Paid So Far</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Received from carrier on open claims</div>' +
+      '</div>' +
+    '</div>';
+
+    const colGuide = '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);background:rgba(0,0,0,.015);display:flex;flex-wrap:wrap;gap:10px">' +
+      '<span><b>Status</b> current sub-status / claim stage</span><span>·</span>' +
+      '<span><b>Days Open</b> since case was raised</span><span>·</span>' +
+      '<span><b>Expected</b> amount claimed from carrier</span><span>·</span>' +
+      '<span><b>Received</b> paid by carrier so far</span><span>·</span>' +
+      '<span><b>Pending</b> still owed by carrier</span>' +
+    '</div>';
+
+    const totalsStrip =
+      '<div class="ius-section" style="display:flex;align-items:stretch;border-bottom:2px solid rgba(230,81,0,.22);background:linear-gradient(90deg,rgba(230,81,0,.07),rgba(230,81,0,.03))">' +
+        '<div style="padding:8px 16px;border-right:1px solid rgba(230,81,0,.15);display:flex;flex-direction:column;justify-content:center">' +
+          '<div style="font-size:11px;font-weight:800;color:#e65100;font-variant-numeric:tabular-nums">' + progressRowsSorted.length + ' cases</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">In Progress</div>' +
+        '</div>' +
+        '<div style="padding:8px 16px;border-right:1px solid rgba(230,81,0,.15);display:flex;flex-direction:column;justify-content:center">' +
+          '<div style="font-size:11px;font-weight:800;color:#e65100;font-variant-numeric:tabular-nums">' + formatUSD(pTot.exp) + '</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Total Claimed</div>' +
+        '</div>' +
+        '<div style="padding:8px 16px;border-right:1px solid rgba(230,81,0,.15);display:flex;flex-direction:column;justify-content:center">' +
+          '<div style="font-size:11px;font-weight:800;color:#2e7d32;font-variant-numeric:tabular-nums">' + formatUSD(pTot.act) + '</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Paid by Carrier</div>' +
+        '</div>' +
+        '<div style="flex:1"></div>' +
+        '<div style="padding:8px 16px;background:rgba(198,40,40,.1);border-left:2px solid rgba(198,40,40,.3);display:flex;flex-direction:column;justify-content:center;text-align:right">' +
+          '<div style="font-size:11px;font-weight:800;color:#c62828;font-variant-numeric:tabular-nums">' + formatUSD(pTot.pend) + '</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Still Owing</div>' +
+        '</div>' +
+      '</div>';
+
     return '<div>' +
       statsBar([
         {v:progress.count||0, l:'Claims Filed', c:'#e65100', d:'Submitted, awaiting carrier response'},
@@ -3428,7 +3526,11 @@ function renderIndiaUSTab(data, lastUpdated) {
         {v:formatUSD(Math.max(0,(progress.expected||0)-(progress.actual||0))), l:'Carrier Still Owes', c:'#c62828', d:'Remaining unpaid balance'},
       ]) +
       filterBar('progress', rows.filter(r=>r.bucket_key==='short_grn_progress'||r.bucket_key==='short_grn_awaiting_ibr')) +
-      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressRowsSorted.length + ' rows · sorted oldest case first</div>' +
+      infoBanner +
+      '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressRowsSorted.length + ' rows · sorted oldest case first</div>' +
+      statusCards +
+      colGuide +
+      totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#bf360c,#e65100)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
@@ -3453,32 +3555,86 @@ function renderIndiaUSTab(data, lastUpdated) {
   };
 
   const buildTransitTab = () => {
-    const tRows = transitRows.map(r => {
+    let longTransit=0;
+    const totQtySent = transitRows.reduce((s,r)=>s+(r.qty||0),0);
+    transitRows.forEach(r => {
       const d = monthToDate(r.month);
       const days = d ? Math.floor((Date.now()-d.getTime())/86400000) : null;
-      const dc = days!==null ? (days>=30 ?
-        '<span style="background:#fff3e0;color:#e65100;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">'+days+'d ⚠️</span>' :
-        '<span style="background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">'+days+'d</span>') : '—';
+      if (days!==null && days>=30) longTransit++;
+    });
+
+    const tRows = transitRows.map((r, idx) => {
+      const d = monthToDate(r.month);
+      const days = d ? Math.floor((Date.now()-d.getTime())/86400000) : null;
       const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
-      return '<tr>' +
+      const rowAnim = 'animation:iusTrIn .3s cubic-bezier(.22,.61,.36,1) '+Math.min(idx*0.022,0.55).toFixed(3)+'s both';
+      return '<tr class="ius-tr" style="border-bottom:1px solid var(--border);'+rowAnim+'">' +
         '<td style="padding:7px 9px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
         '<td style="padding:7px 9px;font-size:10px;font-weight:600">' + (r.label||'—') + '</td>' +
         '<td style="padding:7px 9px;font-size:11px;color:#555">' + (r.awb||'—') + '</td>' +
         '<td style="padding:7px 9px;font-size:11px">' + (r.channel||'—') + '</td>' +
-        '<td style="padding:7px 9px;text-align:center;font-size:11px">' + (r.qty||0).toLocaleString() + '</td>' +
-        '<td style="padding:7px 9px;text-align:center">' + dc + '</td>' +
+        '<td style="padding:7px 9px;text-align:center;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums">' + (r.qty||0).toLocaleString() + '</td>' +
+        '<td style="padding:7px 9px;text-align:center">' + ageChip(days) + '</td>' +
         '<td style="padding:7px 9px;font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.product||'') + '">' + (r.product||'—') + '</td>' +
         '</tr>';
     }).join('') || '<tr><td colspan="7" style="text-align:center;padding:28px;color:#888">No intransit rows match the current filter</td></tr>';
 
-    return '<div>' +
-      '<div style="display:flex;border-bottom:1px solid var(--border)">' +
-        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0">' + (transit.count||0) + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Shipments En Route</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Currently being delivered to US</div></div>' +
-        '<div style="flex:1;padding:11px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:17px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + (transit.qty||0).toLocaleString() + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Units En Route</div><div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.3">Total product units dispatched</div></div>' +
-        '<div style="flex:3;padding:11px 14px;display:flex;align-items:center"><div style="font-size:11px;color:#1565c0;background:#e3f2fd;padding:7px 11px;border-radius:8px;border:1px solid #bbdefb">🚚 Monitoring only — shipments en route. No financial claims raised yet.</div></div>' +
+    const infoBanner = '<div class="ius-banner ius-section" style="padding:10px 16px;display:flex;align-items:flex-start;gap:10px;background:rgba(21,101,192,.05);border-bottom:1px solid rgba(21,101,192,.15)">' +
+      '<span style="font-size:15px;flex-shrink:0">🚚</span>' +
+      '<div><div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:2px">Shipments En Route — Monitoring Only</div>' +
+      '<div style="font-size:10.5px;color:var(--muted);line-height:1.5">These shipments are currently in transit from India to the US. <b>No claim is raised at this stage.</b> Once GRN is completed at the US warehouse, any shortages will move to <b>Pending to Claim</b>. Monitor 30d+ cases and follow up with the carrier.</div></div>' +
+    '</div>';
+
+    const monitorCards = '<div class="ius-section" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--border)">' +
+      '<div class="ius-card" style="flex:1;min-width:155px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(21,101,192,.1),rgba(21,101,192,.04));border:1px solid rgba(21,101,192,.22);animation-delay:.00s">' +
+        '<div style="font-size:20px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + (transit.count||0) + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">🚚 En Route</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Active shipments in transit to the US</div>' +
       '</div>' +
+      '<div class="ius-card" style="flex:1;min-width:155px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(21,101,192,.08),rgba(21,101,192,.03));border:1px solid rgba(21,101,192,.18);animation-delay:.08s">' +
+        '<div style="font-size:20px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + totQtySent.toLocaleString() + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">📦 Units Dispatched</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Total product units currently in transit</div>' +
+      '</div>' +
+      '<div class="ius-card" style="flex:1;min-width:155px;border-radius:11px;padding:14px 16px;background:linear-gradient(135deg,rgba(230,81,0,.08),rgba(230,81,0,.03));border:1px solid rgba(230,81,0,.2);animation-delay:.16s">' +
+        '<div style="font-size:20px;font-weight:800;color:#e65100;font-variant-numeric:tabular-nums">' + longTransit + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">⏰ 30d+ Transit</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4">Long-haul — follow up with carrier</div>' +
+      '</div>' +
+    '</div>';
+
+    const colGuide = '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);background:rgba(0,0,0,.015);display:flex;flex-wrap:wrap;gap:10px">' +
+      '<span><b>AWB</b> Air Waybill tracking number</span><span>·</span>' +
+      '<span><b>Qty Sent</b> units dispatched from India</span><span>·</span>' +
+      '<span><b>Days in Transit</b> estimated since shipment month</span><span>·</span>' +
+      '<span><b>Product</b> shipment SKU / item description</span>' +
+    '</div>';
+
+    const totalsStrip =
+      '<div class="ius-section" style="display:flex;align-items:stretch;border-bottom:2px solid rgba(21,101,192,.22);background:linear-gradient(90deg,rgba(21,101,192,.07),rgba(21,101,192,.03))">' +
+        '<div style="padding:8px 16px;border-right:1px solid rgba(21,101,192,.15);display:flex;flex-direction:column;justify-content:center">' +
+          '<div style="font-size:11px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">' + transitRows.length + ' shipments</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">In Transit</div>' +
+        '</div>' +
+        '<div style="flex:1"></div>' +
+        '<div style="padding:8px 16px;background:rgba(21,101,192,.1);border-left:2px solid rgba(21,101,192,.3);display:flex;flex-direction:column;justify-content:center;text-align:right">' +
+          '<div style="font-size:11px;font-weight:800;color:#1565c0;font-variant-numeric:tabular-nums">Σ ' + totQtySent.toLocaleString() + '</div>' +
+          '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Total Units En Route</div>' +
+        '</div>' +
+      '</div>';
+
+    return '<div>' +
+      statsBar([
+        {v:transit.count||0,            l:'Shipments En Route', c:'#1565c0', d:'Currently being delivered to US'},
+        {v:totQtySent.toLocaleString(), l:'Units Dispatched',   c:'#1565c0', d:'Total product units in transit'},
+        {v:longTransit,                  l:'30d+ Transit',       c:'#e65100', d:'Long transit — follow up with carrier'},
+      ]) +
       filterBar('intransit', rows.filter(r=>r.bucket_key==='intransit')) +
-      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + transitRows.length + ' rows</div>' +
+      infoBanner +
+      '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + transitRows.length + ' rows</div>' +
+      monitorCards +
+      colGuide +
+      totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#0d47a1,#1565c0)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
@@ -3490,6 +3646,11 @@ function renderIndiaUSTab(data, lastUpdated) {
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Product</th>' +
         '</tr></thead>' +
         '<tbody>' + tRows + '</tbody>' +
+        '<tfoot><tr style="background:rgba(21,101,192,.07);border-top:2px solid var(--border)">' +
+          '<td colspan="4" style="padding:7px 9px;font-weight:700;font-size:11px;color:#1565c0">' + transitRows.length + ' shipments</td>' +
+          '<td style="padding:7px 9px;text-align:center;font-weight:700;font-size:11px;color:#1565c0">' + totQtySent.toLocaleString() + '</td>' +
+          '<td colspan="2"></td>' +
+        '</tr></tfoot>' +
       '</table></div>' +
     '</div>';
   };
