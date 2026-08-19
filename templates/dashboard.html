@@ -3582,12 +3582,14 @@ function renderIndiaUSTab(data, lastUpdated) {
         '</div>' +
       '</div>';
 
+    const progTotExp = progressRowsSorted.reduce((s,r)=>s+(r.expected||0),0);
+    const progTotAct = progressRowsSorted.reduce((s,r)=>s+(r.actual||0),0);
     return '<div>' +
       statsBar([
-        {v:progress.count||0, l:'Claims Filed', c:'#e65100', d:'Submitted, awaiting channel / carrier response'},
-        {v:formatUSD(progress.expected||0), l:'Total Claimed', c:'#e65100', d:'Amount asked from channel / carrier'},
-        {v:formatUSD(progress.actual||0), l:'Paid So Far', c:'#2e7d32', d:'Received from channel / carrier'},
-        {v:formatUSD(Math.max(0,(progress.expected||0)-(progress.actual||0))), l:'Still Owing', c:'#c62828', d:'Remaining unpaid balance'},
+        {v:progressRowsSorted.length, l:'Claims Filed', c:'#e65100', d:'Submitted, awaiting channel / carrier response'},
+        {v:formatUSD(progTotExp), l:'Total Claimed', c:'#e65100', d:'Amount asked from channel / carrier'},
+        {v:formatUSD(progTotAct), l:'Paid So Far', c:'#2e7d32', d:'Received from channel / carrier'},
+        {v:formatUSD(Math.max(0,progTotExp-progTotAct)), l:'Still Owing', c:'#c62828', d:'Remaining unpaid balance'},
       ]) +
       filterBar('progress', rows.filter(r=>r.bucket_key==='short_grn_progress'||r.bucket_key==='short_grn_awaiting_ibr')) +
       infoBanner +
