@@ -364,25 +364,55 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ── Dashboard Animations ── */
-    @keyframes iusStatIn  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-    @keyframes iusCardIn  { from { opacity:0; transform:translateY(16px) scale(.95); } to { opacity:1; transform:translateY(0) scale(1); } }
-    @keyframes iusTrIn    { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
-    @keyframes iusBarGrow { from { width:0; } }
-    @keyframes iusBannerIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes iusStatIn  {
+      0%   { opacity:0; transform:translateY(12px); }
+      60%  { opacity:1; transform:translateY(-2px); }
+      100% { opacity:1; transform:translateY(0); }
+    }
+    @keyframes iusCardIn  {
+      0%   { opacity:0; transform:translateY(20px) scale(.93); }
+      70%  { opacity:1; transform:translateY(-3px) scale(1.01); }
+      100% { opacity:1; transform:translateY(0) scale(1); }
+    }
+    @keyframes iusTrIn    {
+      0%   { opacity:0; transform:translateX(-8px); }
+      100% { opacity:1; transform:translateX(0); }
+    }
+    @keyframes iusBarGrow {
+      0%   { width:0; opacity:.5; }
+      100% { opacity:1; }
+    }
+    @keyframes iusBannerIn {
+      0%   { opacity:0; transform:translateY(-10px); }
+      100% { opacity:1; transform:translateY(0); }
+    }
     @keyframes iusFadeIn  { from { opacity:0; } to { opacity:1; } }
-    @keyframes kpiPulse   { 0%,100% { transform:scale(1); } 50% { transform:scale(1.04); } }
+    @keyframes iusFooterIn {
+      0%   { opacity:0; transform:translateY(6px); }
+      100% { opacity:1; transform:translateY(0); }
+    }
+    @keyframes shimmerSlide {
+      0%   { background-position: -200% center; }
+      100% { background-position: 200% center; }
+    }
 
-    .ius-stat   { animation: iusStatIn .4s ease both; }
-    .ius-card   { animation: iusCardIn .45s cubic-bezier(.22,.61,.36,1) both; cursor:pointer; }
-    .ius-card:hover { transform:translateY(-3px) scale(1.018) !important; box-shadow:0 8px 22px rgba(0,0,0,.13) !important; transition:transform .18s ease, box-shadow .18s ease !important; }
-    .ius-bar    { animation: iusBarGrow .75s cubic-bezier(.22,.61,.36,1) both; }
-    .ius-tr     { animation: iusTrIn .28s ease both; }
-    .ius-tr:hover { background:rgba(46,125,50,.05) !important; transition:background .12s; }
-    .ius-banner { animation: iusBannerIn .45s ease both; }
-    .ius-section { animation: iusFadeIn .5s ease both; }
-    .kpi-card   { transition:transform .15s ease, box-shadow .15s ease; }
-    .kpi-card:hover { transform:translateY(-2px); box-shadow:0 4px 14px rgba(0,0,0,.1); }
-    .nav-tab-btn { transition:background .15s ease, color .15s ease, border-color .15s ease; }
+    .ius-stat   { animation: iusStatIn .5s cubic-bezier(.22,.61,.36,1) both; }
+    .ius-card   { animation: iusCardIn .5s cubic-bezier(.22,.61,.36,1) both; cursor:pointer; will-change:transform; }
+    .ius-card:hover {
+      transform: translateY(-4px) scale(1.02) !important;
+      box-shadow: 0 10px 28px rgba(0,0,0,.15) !important;
+      transition: transform .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s ease !important;
+    }
+    .ius-bar    { animation: iusBarGrow .85s cubic-bezier(.22,.61,.36,1) both; }
+    .ius-tr     { animation: iusTrIn .3s cubic-bezier(.22,.61,.36,1) both; }
+    .ius-tr:hover { background:rgba(46,125,50,.06) !important; transition:background .12s ease; }
+    .ius-banner { animation: iusBannerIn .5s cubic-bezier(.22,.61,.36,1) both; }
+    .ius-footer { animation: iusFooterIn .6s cubic-bezier(.22,.61,.36,1) both; animation-delay:.3s; }
+    .ius-section { animation: iusFadeIn .55s ease both; }
+    .kpi-card   { transition:transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s ease; }
+    .kpi-card:hover { transform:translateY(-3px); box-shadow:0 6px 18px rgba(0,0,0,.11); }
+    .nav-tab-btn { transition:background .15s ease, color .15s ease, border-color .15s ease, transform .1s ease; }
+    .nav-tab-btn:hover { transform:translateY(-1px); }
     .data-row-hover:hover { background:rgba(0,0,0,.03) !important; transition:background .1s; }
 
     /* ── Alert Toast ── */
@@ -3054,16 +3084,20 @@ function renderIndiaUSTab(data, lastUpdated) {
 
   const buildClosedTab = () => {
     // ── Filtered stats ───────────────────────────────────────────────────────
-    let totRec = 0, totExp = 0, totDays = 0, daysCount = 0;
+    let totRec = 0, totExp = 0, totDays = 0, daysCount = 0, totQty = 0, totDiff = 0;
     closedRows.forEach(r => {
-      totRec += r.actual || 0;
-      totExp += r.expected || 0;
+      totRec  += r.actual   || 0;
+      totExp  += r.expected || 0;
+      totQty  += r.qty      || 0;
+      totDiff += r.diff     || 0;
       if (r.case_raise_date && r.case_close_date) {
         const d1 = _parseDate(r.case_raise_date), d2 = _parseDate(r.case_close_date);
         if (d1 && d2 && d2 >= d1) { totDays += Math.floor((d2-d1)/86400000); daysCount++; }
       }
     });
     const avgDays = daysCount > 0 ? Math.round(totDays / daysCount) : null;
+    const diffLabel = totDiff > 0 ? '−'+totDiff.toLocaleString() : totDiff < 0 ? '+'+Math.abs(totDiff).toLocaleString() : '0';
+    const diffColor = totDiff > 0 ? '#c62828' : totDiff < 0 ? '#2e7d32' : '#888';
 
     // Resolution → color map (distinct palette so each type reads clearly)
     const scMap = {
@@ -3095,8 +3129,10 @@ function renderIndiaUSTab(data, lastUpdated) {
     const remarkMap = {};
     closedRows.forEach(r => {
       const k = r.sub_remark || 'Unknown';
-      if (!remarkMap[k]) remarkMap[k] = { count:0, amount:0 };
-      remarkMap[k].count++; remarkMap[k].amount += r.actual || 0;
+      if (!remarkMap[k]) remarkMap[k] = { count:0, amount:0, expected:0 };
+      remarkMap[k].count++;
+      remarkMap[k].amount   += r.actual   || 0;
+      remarkMap[k].expected += r.expected || 0;
     });
     const remarkEntries = Object.entries(remarkMap).sort((a,b) => b[1].count - a[1].count);
     const maxRemark = remarkEntries.length > 0 ? remarkEntries[0][1].count : 1;
@@ -3122,9 +3158,14 @@ function renderIndiaUSTab(data, lastUpdated) {
             '<div style="margin-top:8px;background:var(--border);border-radius:3px;height:4px;overflow:hidden">' +
               '<div class="ius-bar" style="height:100%;width:' + barW + '%;background:' + sc + ';border-radius:3px;animation-delay:' + (idx*0.08 + 0.3) + 's"></div>' +
             '</div>' +
-            '<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--muted)">' +
-              '<span>' + pct + '% of cases</span>' +
-              '<span>' + formatUSD(v.amount) + ' recovered</span>' +
+            '<div style="margin-top:6px;font-size:9px;color:var(--muted)">' +
+              '<div style="display:flex;justify-content:space-between">' +
+                '<span>' + pct + '% of cases</span>' +
+                '<span style="color:' + sc + ';font-weight:600">' + formatUSD(v.amount) + ' rcvd</span>' +
+              '</div>' +
+              '<div style="display:flex;justify-content:flex-end;margin-top:2px">' +
+                '<span>' + formatUSD(v.expected) + ' claimed</span>' +
+              '</div>' +
             '</div>' +
           '</div>';
         }).join('') +
@@ -3179,8 +3220,9 @@ function renderIndiaUSTab(data, lastUpdated) {
         '<td style="padding:6px 8px;text-align:center;font-size:10px;font-weight:700;color:' + daysColor + '">' + daysClose + '</td>' +
         '<td style="padding:6px 8px;text-align:right;font-size:10px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
         '<td style="padding:6px 8px;text-align:right;font-size:11px;color:#2e7d32;font-weight:700">' + (r.actual?formatUSD(r.actual):'—') + '</td>' +
+        '<td style="padding:6px 10px;font-size:10px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.remark||'') + '">' + (r.remark || '<span style="color:#ccc">—</span>') + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="14" style="text-align:center;padding:36px;color:#888"><div style="font-size:20px;margin-bottom:6px">🔍</div><div style="font-size:12px;font-weight:600">No rows match the current filters</div><div style="font-size:11px;margin-top:4px">Try clearing one or more filters above</div></td></tr>';
+    }).join('') || '<tr><td colspan="15" style="text-align:center;padding:36px;color:#888"><div style="font-size:20px;margin-bottom:6px">🔍</div><div style="font-size:12px;font-weight:600">No rows match the current filters</div><div style="font-size:11px;margin-top:4px">Try clearing one or more filters above</div></td></tr>';
 
     return '<div>' +
       statsBar([
@@ -3188,6 +3230,8 @@ function renderIndiaUSTab(data, lastUpdated) {
         {v: formatUSD(totRec),                              l:'Money Received Back',   c:'#2e7d32', d:'Actual reimbursement received from carrier'},
         {v: formatUSD(totExp),                              l:'Total Claimed',          c:'#e65100', d:'Amount we asked carrier to reimburse'},
         {v: avgDays !== null ? avgDays + 'd avg' : '—',    l:'Avg. Days to Resolve',  c:'#1565c0', d:'Average days from case filed to settled'},
+        {v: totQty.toLocaleString(),                        l:'Total Units',            c:'#37474f', d:'Sum of expected units across all filtered closed shipments'},
+        {v: diffLabel,                                      l:'Net Unit Variance',      c: diffColor, d:'Total Diff: red = short overall, green = extra overall'},
       ]) +
       iusClosedFilterBar() +
       infoBanner +
@@ -3218,8 +3262,18 @@ function renderIndiaUSTab(data, lastUpdated) {
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center;cursor:help" title="Days taken to resolve: green &lt;30d · orange 30–60d · red 60d+">Days ⏱</th>' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;cursor:help" title="USD amount we claimed from the carrier for this shipment (what we asked for)">Expected $</th>' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;cursor:help" title="USD amount actually received back from the carrier as reimbursement">Recovered $</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Internal remark or note about this case (e.g. expected settlement date, follow-up info)">Remark / Notes</th>' +
         '</tr></thead>' +
         '<tbody>' + tRows + '</tbody>' +
+        '<tfoot><tr style="background:linear-gradient(135deg,rgba(27,94,32,.1),rgba(27,94,32,.06));border-top:2px solid rgba(27,94,32,.3)">' +
+          '<td colspan="5" style="padding:8px 10px;font-weight:700;font-size:11px;color:#1b3a2d">' + closedRows.length + ' cases total</td>' +
+          '<td style="padding:8px 8px;text-align:center;font-weight:800;font-size:12px;color:#1b3a2d;font-variant-numeric:tabular-nums" title="Sum of all Qty">' + totQty.toLocaleString() + '</td>' +
+          '<td style="padding:8px 8px;text-align:center;font-weight:800;font-size:12px;color:' + diffColor + ';font-variant-numeric:tabular-nums" title="Net unit variance">' + diffLabel + '</td>' +
+          '<td colspan="5" style="padding:8px 10px"></td>' +
+          '<td style="padding:8px 8px;text-align:right;font-weight:700;font-size:11px;color:#e65100;font-variant-numeric:tabular-nums">' + formatUSD(totExp) + '</td>' +
+          '<td style="padding:8px 8px;text-align:right;font-weight:800;font-size:11px;color:#2e7d32;font-variant-numeric:tabular-nums">' + formatUSD(totRec) + '</td>' +
+          '<td style="padding:8px 8px"></td>' +
+        '</tr></tfoot>' +
       '</table></div>' +
     '</div>';
   };
