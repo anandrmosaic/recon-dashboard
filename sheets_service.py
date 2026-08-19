@@ -877,29 +877,33 @@ def get_india_us_data(creds, sheet_id):
         monthly[month]['qty']      += qty
 
         old_ibr = str(g(row, old_ibr_col)).strip()
+        reimb_status   = str(g(row, status_col)).strip() if status_col >= 0 and len(row) > status_col else ''
+        is_carrier_pay = 'carrier' in reimb_status.lower()
         rows.append({
-            'row_index':    i + 3,
-            'month':        month,
-            'awb':          str(g(row, awb_col)).strip(),
-            'label':        label,
-            'old_ibr':      old_ibr,                           # parent IBR (child rows only)
-            'product':      str(g(row, child_col)).strip()[:50],
-            'qty':          int(qty),
-            'grn':          int(safe_float(g(row, grn_col))),
-            'diff':         int(safe_float(g(row, diff_col))),
-            'channel':      _norm_channel(str(g(row, channel_col)).strip()),
-            'transporter':  str(g(row, transporter_col)).strip(),
-            'remarks':      str(g(row, remarks_col)).strip(),
-            'status':       str(g(row, status_col)).strip(),
-            'case_raise_date': str(g(row, raise_col)).strip(),
-            'case_close_date': str(g(row, close_col)).strip(),
-            'lost_stock':   int(safe_float(g(row, lost_col))),
-            'expected':     round(exp, 2),
-            'actual':       round(act, 2),
-            'pending':      round(max(0, exp - act), 2),
-            'bucket':       bucket,
-            'sub_remark':   sub,
-            'bucket_key':   bucket_key,
+            'row_index':            i + 3,
+            'month':                month,
+            'awb':                  str(g(row, awb_col)).strip(),
+            'label':                label,
+            'old_ibr':              old_ibr,                           # parent IBR (child rows only)
+            'product':              str(g(row, child_col)).strip()[:50],
+            'qty':                  int(qty),
+            'grn':                  int(safe_float(g(row, grn_col))),
+            'diff':                 int(safe_float(g(row, diff_col))),
+            'channel':              _norm_channel(str(g(row, channel_col)).strip()),
+            'transporter':          str(g(row, transporter_col)).strip(),
+            'remarks':              str(g(row, remarks_col)).strip(),
+            'reimbursement_status': reimb_status,
+            'carrier_recovered':    round(act, 2) if is_carrier_pay else 0.0,
+            'channel_recovered':    0.0 if is_carrier_pay else round(act, 2),
+            'case_raise_date':      str(g(row, raise_col)).strip(),
+            'case_close_date':      str(g(row, close_col)).strip(),
+            'lost_stock':           int(safe_float(g(row, lost_col))),
+            'expected':             round(exp, 2),
+            'actual':               round(act, 2),
+            'pending':              round(max(0, exp - act), 2),
+            'bucket':               bucket,
+            'sub_remark':           sub,
+            'bucket_key':           bucket_key,
         })
 
     months_present = sorted(
