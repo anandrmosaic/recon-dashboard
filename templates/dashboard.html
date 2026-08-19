@@ -2881,7 +2881,7 @@ function renderUS2USTab(data, lastUpdated) {
 }
 
 // ── India → US Tab ─────────────────────────────────────────────────────────
-let _iusFilter = { month: '', bucket: '', channel: '', transporter: '' };
+let _iusFilter = { month: '', bucket: '', channel: '', transporter: '', resolution: '' };
 let _iusTab    = 'all'; // 'all' | 'closed' | 'pending' | 'progress' | 'intransit'
 
 function renderIndiaUSTab(data, lastUpdated) {
@@ -2953,7 +2953,10 @@ function renderIndiaUSTab(data, lastUpdated) {
   // Sub-tab row sets
   const baseClosedRows     = rows.filter(r => r.bucket_key === 'closed' && baseFilter(r));
   const allTransporters    = [...new Set(baseClosedRows.map(r => r.transporter))].filter(Boolean).sort();
-  const closedRows         = baseClosedRows.filter(r => !_iusFilter.transporter || r.transporter === _iusFilter.transporter);
+  const allResolutions     = [...new Set(baseClosedRows.map(r => r.sub_remark))].filter(Boolean).sort();
+  const closedRows         = baseClosedRows.filter(r =>
+    (!_iusFilter.transporter || r.transporter === _iusFilter.transporter) &&
+    (!_iusFilter.resolution  || r.sub_remark  === _iusFilter.resolution));
   const pendingRows        = rows.filter(r => r.bucket_key === 'short_grn_pending' && baseFilter(r));
   const progressRows       = rows.filter(r => (r.bucket_key === 'short_grn_progress' || r.bucket_key === 'short_grn_awaiting_ibr') && baseFilter(r));
   const transitRows        = rows.filter(r => r.bucket_key === 'intransit' && baseFilter(r));
@@ -2987,19 +2990,21 @@ function renderIndiaUSTab(data, lastUpdated) {
     '</div>';
   };
 
-  // Closed-tab specific filter bar (Month + Channel + Carrier)
+  // Closed-tab specific filter bar (Month + Channel + Carrier + Resolution)
   const iusClosedFilterBar = () => {
     const mOpts = [...new Set(baseClosedRows.map(r => r.month))].filter(Boolean).map(m => '<option value="' + m + '"' + (_iusFilter.month===m?' selected':'') + '>' + m + '</option>').join('');
     const cOpts = allChannels.map(c => '<option value="' + c + '"' + (_iusFilter.channel===c?' selected':'') + '>' + c + '</option>').join('');
     const tOpts = allTransporters.map(t => '<option value="' + t + '"' + (_iusFilter.transporter===t?' selected':'') + '>' + t + '</option>').join('');
-    const hasFilter = _iusFilter.month || _iusFilter.channel || _iusFilter.transporter;
+    const rOpts = allResolutions.map(r => '<option value="' + r + '"' + (_iusFilter.resolution===r?' selected':'') + '>' + r + '</option>').join('');
+    const hasFilter = _iusFilter.month || _iusFilter.channel || _iusFilter.transporter || _iusFilter.resolution;
     return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.018);flex-wrap:wrap">' +
       '<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Filter:</span>' +
-      '<select onchange="_iusFilter.month=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"><option value="">All Months</option>' + mOpts + '</select>' +
-      '<select onchange="_iusFilter.channel=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"><option value="">All Channels</option>' + cOpts + '</select>' +
-      '<select onchange="_iusFilter.transporter=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"><option value="">All Carriers</option>' + tOpts + '</select>' +
+      '<select onchange="_iusFilter.month=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)" title="Filter by shipment month"><option value="">All Months</option>' + mOpts + '</select>' +
+      '<select onchange="_iusFilter.channel=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)" title="Filter by destination sales channel"><option value="">All Channels</option>' + cOpts + '</select>' +
+      '<select onchange="_iusFilter.transporter=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)" title="Filter by shipping carrier"><option value="">All Carriers</option>' + tOpts + '</select>' +
+      '<select onchange="_iusFilter.resolution=this.value;_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)" title="Filter by how the case was resolved"><option value="">All Resolution Types</option>' + rOpts + '</select>' +
       (hasFilter ? '<span style="font-size:10px;color:#1565c0;font-weight:700">● Filtered</span>' : '') +
-      '<button onclick="_iusFilter={month:\'\',bucket:\'\',channel:\'\',transporter:\'\'};_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-weight:600">✕ Clear</button>' +
+      '<button onclick="_iusFilter={month:\'\',bucket:\'\',channel:\'\',transporter:\'\',resolution:\'\'};_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" style="font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-weight:600">✕ Clear All</button>' +
     '</div>';
   };
 
@@ -3087,7 +3092,7 @@ function renderIndiaUSTab(data, lastUpdated) {
   };
 
   const buildClosedTab = () => {
-    // Filtered stats
+    // ── Filtered stats ───────────────────────────────────────────────────────
     let totRec = 0, totExp = 0, totDays = 0, daysCount = 0;
     closedRows.forEach(r => {
       totRec += r.actual || 0;
@@ -3099,9 +3104,31 @@ function renderIndiaUSTab(data, lastUpdated) {
     });
     const avgDays = daysCount > 0 ? Math.round(totDays / daysCount) : null;
 
-    const scMap = {'Fully Received':'#2e7d32','Claim raised and Received':'#1b5e20','Excess Received':'#00695c','Damage received':'#78909c','New IBR/WRO-Received against old IBR/WRO':'#26a69a','Pending qty inwarded against new IBR/WRO':'#ffa726'};
+    // Resolution → color map (distinct palette so each type reads clearly)
+    const scMap = {
+      'Fully Received':                                '#2e7d32',
+      'Claim raised and Received':                     '#1565c0',
+      'Excess Received':                               '#00695c',
+      'Damage received':                               '#546e7a',
+      'New IBR/WRO-Received against old IBR/WRO':     '#7b1fa2',
+      'Pending qty inwarded against new IBR/WRO':      '#e65100'
+    };
 
-    // ── Case Closed — Resolution Breakdown ──────────────────────────────────
+    // ── Info banner — helps new users understand what they're looking at ────
+    const infoBanner =
+      '<div style="padding:10px 16px;background:rgba(21,101,192,.06);border-bottom:1px solid rgba(21,101,192,.18);display:flex;gap:10px;align-items:flex-start">' +
+        '<span style="font-size:15px;flex-shrink:0;line-height:1.5">ℹ️</span>' +
+        '<div>' +
+          '<div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:3px">About this view — Closed Cases (India → US)</div>' +
+          '<div style="font-size:10px;color:var(--muted);line-height:1.75">' +
+            'These are shipments where a <strong>quantity discrepancy (short-GRN)</strong> was discovered and the claim was <strong>fully settled</strong> with the carrier. ' +
+            'Use the <strong>4 filters above</strong> to narrow by month, sales channel, carrier, or resolution type. ' +
+            'Hover any column header for a plain-English description of what that column shows.' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // ── Case Closed — Resolution Breakdown (card grid) ──────────────────────
     const remarkMap = {};
     closedRows.forEach(r => {
       const k = r.sub_remark || 'Unknown';
@@ -3110,58 +3137,49 @@ function renderIndiaUSTab(data, lastUpdated) {
     });
     const remarkEntries = Object.entries(remarkMap).sort((a,b) => b[1].count - a[1].count);
     const maxRemark = remarkEntries.length > 0 ? remarkEntries[0][1].count : 1;
+
     const caseClosedSection = remarkEntries.length > 0 ?
       '<div style="padding:14px 16px;border-bottom:1px solid var(--border)">' +
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px">✅ Case Closed — Resolution Breakdown</div>' +
-        '<div style="display:flex;flex-direction:column;gap:7px">' +
+        '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:11px">' +
+          '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">✅ How Were These Cases Closed?</span>' +
+          '<span style="font-size:10px;color:var(--muted)">' + closedRows.length + ' total · click a card to filter</span>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">' +
         remarkEntries.map(([k, v]) => {
           const sc = scMap[k] || '#2e7d32';
           const pct = closedRows.length > 0 ? (v.count/closedRows.length*100).toFixed(0) : '0';
-          const barW = Math.round(v.count/maxRemark*100);
-          return '<div style="display:flex;align-items:center;gap:10px">' +
-            '<div style="width:240px;flex-shrink:0;font-size:10px;font-weight:600;color:' + sc + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + k + '">' + k + '</div>' +
-            '<div style="flex:1;background:var(--border);border-radius:4px;height:14px;overflow:hidden">' +
-              '<div style="height:100%;width:' + barW + '%;background:' + sc + ';border-radius:4px"></div>' +
+          const barW = Math.round(v.count / maxRemark * 100);
+          const isActive = _iusFilter.resolution === k;
+          const cardBorder = isActive ? '2px solid ' + sc : '1px solid ' + sc + '28';
+          return '<div onclick="_iusFilter.resolution=(_iusFilter.resolution===\'' + k.replace(/'/g,"\\'") + '\'?\'\':' + '\'' + k.replace(/'/g,"\\'") + '\'' + ');_iusTab=\'closed\';renderIndiaUSTab(_rawData,_lastUpdated)" ' +
+            'style="border-left:4px solid ' + sc + ';border:' + cardBorder + ';border-left:4px solid ' + sc + ';background:' + sc + (isActive?'18':'0c') + ';border-radius:9px;padding:11px 13px;cursor:pointer;transition:opacity .15s" ' +
+            'title="Click to filter to this resolution type only">' +
+            '<div style="font-size:24px;font-weight:800;color:' + sc + ';font-variant-numeric:tabular-nums;line-height:1">' + v.count + '</div>' +
+            '<div style="font-size:10px;font-weight:600;color:var(--text);margin-top:5px;line-height:1.45">' + k + '</div>' +
+            '<div style="margin-top:8px;background:var(--border);border-radius:3px;height:4px;overflow:hidden">' +
+              '<div style="height:100%;width:' + barW + '%;background:' + sc + ';border-radius:3px"></div>' +
             '</div>' +
-            '<div style="width:28px;text-align:right;font-size:11px;font-weight:700;color:' + sc + '">' + v.count + '</div>' +
-            '<div style="width:38px;text-align:right;font-size:10px;color:var(--muted)">' + pct + '%</div>' +
-            '<div style="width:72px;text-align:right;font-size:10px;color:var(--muted)">' + formatUSD(v.amount) + '</div>' +
+            '<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--muted)">' +
+              '<span>' + pct + '% of cases</span>' +
+              '<span>' + formatUSD(v.amount) + ' recovered</span>' +
+            '</div>' +
           '</div>';
         }).join('') +
         '</div>' +
       '</div>' : '';
 
-    // ── Timeline — Raise → Close ─────────────────────────────────────────────
-    const timedRows = closedRows
-      .filter(r => r.case_raise_date && r.case_close_date)
-      .map(r => {
-        const d1 = _parseDate(r.case_raise_date), d2 = _parseDate(r.case_close_date);
-        const days = (d1 && d2 && d2 >= d1) ? Math.floor((d2-d1)/86400000) : null;
-        return { label:r.label, rd:r.case_raise_date, cd:r.case_close_date, _days:days };
-      })
-      .filter(r => r._days !== null)
-      .sort((a,b) => b._days - a._days)
-      .slice(0, 20);
-    const maxTimeDays = timedRows.length > 0 ? timedRows[0]._days : 1;
-    const timelineSection = timedRows.length > 0 ?
-      '<div style="padding:14px 16px;border-bottom:1px solid var(--border)">' +
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px">⏱️ Timeline — Case Raised → Closed (Top ' + timedRows.length + ' by duration)</div>' +
-        '<div style="display:flex;flex-direction:column;gap:5px">' +
-        timedRows.map(r => {
-          const bc = r._days >= 60 ? '#c62828' : r._days >= 30 ? '#e65100' : r._days >= 14 ? '#ffa726' : '#2e7d32';
-          const bw = Math.max(2, Math.round(r._days / Math.max(maxTimeDays,1) * 100));
-          return '<div style="display:flex;align-items:center;gap:8px">' +
-            '<div style="width:130px;flex-shrink:0;font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.label||'') + '">' + (r.label||'—') + '</div>' +
-            '<div style="width:74px;flex-shrink:0;font-size:9px;color:var(--muted);white-space:nowrap">' + (r.rd||'') + '</div>' +
-            '<div style="flex:1;background:var(--border);border-radius:4px;height:12px;overflow:hidden">' +
-              '<div style="height:100%;width:' + bw + '%;background:' + bc + ';border-radius:4px;opacity:.78"></div>' +
-            '</div>' +
-            '<div style="width:74px;flex-shrink:0;font-size:9px;color:var(--muted);white-space:nowrap">' + (r.cd||'') + '</div>' +
-            '<div style="width:36px;text-align:right;font-size:11px;font-weight:700;color:' + bc + '">' + r._days + 'd</div>' +
-          '</div>';
-        }).join('') +
-        '</div>' +
-      '</div>' : '';
+    // ── Column guide strip (helps everyone in the org) ───────────────────────
+    const colGuide =
+      '<div style="padding:7px 14px;background:rgba(0,0,0,.025);border-bottom:1px solid var(--border);font-size:10px;color:var(--muted);line-height:1.9">' +
+        '<strong style="color:var(--text)">Column Guide: </strong>' +
+        '<strong>IBR / WRO</strong> = Shipment reference number &nbsp;·&nbsp; ' +
+        '<strong>AWB</strong> = Air Waybill / tracking ID &nbsp;·&nbsp; ' +
+        '<strong>Qty</strong> = Units we expected &nbsp;·&nbsp; ' +
+        '<strong>Diff</strong> = Unit variance — 🔴 short / 🟢 extra &nbsp;·&nbsp; ' +
+        '<strong>Case Raised</strong> = Date claim was filed &nbsp;·&nbsp; ' +
+        '<strong>Case Closed</strong> = Date carrier confirmed resolution &nbsp;·&nbsp; ' +
+        '<strong>Days</strong> = Turnaround time' +
+      '</div>';
 
     // ── Detail table rows ────────────────────────────────────────────────────
     const tRows = closedRows.map(r => {
@@ -3170,61 +3188,67 @@ function renderIndiaUSTab(data, lastUpdated) {
       const cTag = r.old_ibr ? '<span style="font-size:9px;color:#ffa726;display:block;margin-top:2px">← ' + r.old_ibr.slice(-10) + '</span>' : '';
       const diff = r.diff || 0;
       const diffDisplay = diff !== 0
-        ? '<span style="color:' + (diff>0?'#c62828':'#2e7d32') + ';font-weight:700;font-size:10px">' + (diff>0?'−'+diff:'+'+Math.abs(diff)) + '</span>'
+        ? '<span style="color:' + (diff>0?'#c62828':'#2e7d32') + ';font-weight:700;font-size:10px" title="' + (diff>0?'Short by '+diff+' units':'Extra '+Math.abs(diff)+' units') + '">' + (diff>0?'−'+diff:'+'+Math.abs(diff)) + '</span>'
         : '<span style="color:var(--muted);font-size:10px">—</span>';
       const qtyDisplay = r.qty > 0 ? String(r.qty) : (r.grn > 0 ? '+'+r.grn+' GRN' : '—');
       const SC = scMap[r.sub_remark] || '#2e7d32';
       const ms = (r.month||'').split(' ')[0].slice(0,3)+' '+((r.month||'').split(' ')[1]||'');
-      let daysClose = '—';
+      let daysClose = '—', daysNum = null;
       if (r.case_raise_date && r.case_close_date) {
         const d1 = _parseDate(r.case_raise_date), d2 = _parseDate(r.case_close_date);
-        if (d1 && d2 && d2 >= d1) daysClose = Math.floor((d2-d1)/86400000) + 'd';
+        if (d1 && d2 && d2 >= d1) { daysNum = Math.floor((d2-d1)/86400000); daysClose = daysNum + 'd'; }
       }
-      return '<tr>' +
+      const daysColor = daysNum === null ? 'var(--muted)' : daysNum >= 60 ? '#c62828' : daysNum >= 30 ? '#e65100' : '#2e7d32';
+      return '<tr style="border-bottom:1px solid var(--border)">' +
         '<td style="padding:6px 8px;font-weight:600;font-size:11px;white-space:nowrap">' + ms + '</td>' +
         '<td style="padding:6px 8px;font-size:10px;font-weight:600">' + (r.label||'—') + pTag + cTag + '</td>' +
-        '<td style="padding:6px 8px"><span style="background:' + SC + '18;color:' + SC + ';padding:2px 6px;border-radius:6px;font-size:9px;font-weight:600;white-space:nowrap">' + (r.sub_remark||'—') + '</span></td>' +
+        '<td style="padding:6px 8px">' +
+          '<span style="background:' + SC + '18;color:' + SC + ';padding:2px 7px;border-radius:6px;font-size:9px;font-weight:600;display:inline-block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.sub_remark||'') + '">' + (r.sub_remark||'—') + '</span>' +
+        '</td>' +
         '<td style="padding:6px 8px;font-size:10px">' + (r.channel||'—') + '</td>' +
         '<td style="padding:6px 8px;font-size:10px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (r.product||'') + '">' + (r.product||'—') + '</td>' +
         '<td style="padding:6px 8px;text-align:center;font-size:11px;font-weight:600">' + qtyDisplay + '</td>' +
         '<td style="padding:6px 8px;text-align:center">' + diffDisplay + '</td>' +
-        '<td style="padding:6px 8px;font-size:10px;color:#666;white-space:nowrap">' + (r.awb||'—') + '</td>' +
+        '<td style="padding:6px 8px;font-size:10px;color:#666;white-space:nowrap;font-family:monospace">' + (r.awb||'—') + '</td>' +
         '<td style="padding:6px 8px;font-size:10px">' + (r.transporter||'—') + '</td>' +
         '<td style="padding:6px 8px;font-size:10px;color:#888;white-space:nowrap">' + (r.case_raise_date||'—') + '</td>' +
         '<td style="padding:6px 8px;font-size:10px;color:#2e7d32;white-space:nowrap">' + (r.case_close_date||'—') + '</td>' +
-        '<td style="padding:6px 8px;text-align:center;font-size:10px;color:var(--muted)">' + daysClose + '</td>' +
+        '<td style="padding:6px 8px;text-align:center;font-size:10px;font-weight:700;color:' + daysColor + '">' + daysClose + '</td>' +
         '<td style="padding:6px 8px;text-align:right;font-size:10px">' + (r.expected?formatUSD(r.expected):'—') + '</td>' +
         '<td style="padding:6px 8px;text-align:right;font-size:11px;color:#2e7d32;font-weight:700">' + (r.actual?formatUSD(r.actual):'—') + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="14" style="text-align:center;padding:28px;color:#888">No closed rows match the current filter</td></tr>';
+    }).join('') || '<tr><td colspan="14" style="text-align:center;padding:36px;color:#888"><div style="font-size:20px;margin-bottom:6px">🔍</div><div style="font-size:12px;font-weight:600">No rows match the current filters</div><div style="font-size:11px;margin-top:4px">Try clearing one or more filters above</div></td></tr>';
 
     return '<div>' +
       statsBar([
-        {v: closedRows.length,                              l:'Resolved Shipments', c:'#2e7d32', d:'Fully settled with carrier'},
-        {v: formatUSD(totRec),                              l:'Money Received Back', c:'#2e7d32', d:'Actual reimbursement received'},
-        {v: formatUSD(totExp),                              l:'Total Claimed',       c:'#e65100', d:'Amount we asked carrier to pay'},
-        {v: avgDays !== null ? avgDays + 'd avg' : '—',    l:'Days to Close',       c:'#1565c0', d:'Average case resolution time'},
+        {v: closedRows.length,                              l:'Resolved Cases',       c:'#2e7d32', d:'Claims fully settled with carrier'},
+        {v: formatUSD(totRec),                              l:'Money Received Back',   c:'#2e7d32', d:'Actual reimbursement received from carrier'},
+        {v: formatUSD(totExp),                              l:'Total Claimed',          c:'#e65100', d:'Amount we asked carrier to reimburse'},
+        {v: avgDays !== null ? avgDays + 'd avg' : '—',    l:'Avg. Days to Resolve',  c:'#1565c0', d:'Average days from case filed to settled'},
       ]) +
       iusClosedFilterBar() +
-      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows' + ((_iusFilter.month||_iusFilter.channel||_iusFilter.transporter) ? ' · filtered' : '') + '</div>' +
+      infoBanner +
+      '<div style="padding:6px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' +
+        closedRows.length + ' rows' + ((_iusFilter.month||_iusFilter.channel||_iusFilter.transporter||_iusFilter.resolution) ? ' · <span style="color:#1565c0;font-weight:600">filters active</span>' : '') +
+      '</div>' +
       caseClosedSection +
-      timelineSection +
+      colGuide +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Resolution</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Product</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Qty</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Diff</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">AWB / Tracking</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Carrier</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Case Raised</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Case Closed</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center">Days</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Expected</th>' +
-          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Recovered</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Month the shipment was originally sent from India">Month</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="IBR = Inward Box Report / WRO = Warehouse Receiving Order — unique shipment reference ID">IBR / Label</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="How was this discrepancy ultimately resolved? Use the Resolution filter above to focus on a specific type">Resolution Type</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Sales / fulfilment channel where the shipment arrived (e.g. Amazon US, ShipBob)">Channel</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Product name or SKU included in this shipment">Product</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center;cursor:help" title="Qty = Quantity of units we expected to receive in this shipment">Qty</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center;cursor:help" title="Diff = Unit variance. Red (−) means we received fewer than expected (short). Green (+) means extra units were received.">Diff</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="AWB = Air Waybill — the carrier\'s tracking / reference number for this shipment">AWB / Tracking</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Shipping carrier who transported this shipment from India to the US warehouse">Carrier</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Date the claim was officially filed with the carrier requesting reimbursement">Case Raised</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Date the carrier confirmed resolution and the case was marked closed">Case Closed</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:center;cursor:help" title="Days taken to resolve: green &lt;30d · orange 30–60d · red 60d+">Days ⏱</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;cursor:help" title="USD amount we claimed from the carrier for this shipment (what we asked for)">Expected $</th>' +
+          '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;cursor:help" title="USD amount actually received back from the carrier as reimbursement">Recovered $</th>' +
         '</tr></thead>' +
         '<tbody>' + tRows + '</tbody>' +
       '</table></div>' +
