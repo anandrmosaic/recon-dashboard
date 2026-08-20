@@ -1170,6 +1170,31 @@ function renderDashboardOverview(data, lastUpdated) {
   const cbTotPend = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).pend ||0), 0);
   const cbGrand   = cbTotRec + cbTotProg + cbTotPend;
 
+  // ── Claims Bucket monthly breakdown (US→US) ───────────────────────────────
+  const u2uCBRows = u2D.rows || [];
+  const u2uCbMths = (u2D.months || []).slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
+  const u2uCbAgg  = {};
+  u2uCBRows.forEach(r => {
+    const m  = r.month;
+    if (!m) return;
+    const sl = ((r.sub_remark || '') + ' ' + (r.remarks || '')).toLowerCase().trim();
+    if (!u2uCbAgg[m]) u2uCbAgg[m] = { rec:0, prog:0, pend:0 };
+    if ((r.recovered || 0) > 0) {
+      u2uCbAgg[m].rec  += r.recovered || 0;
+    } else if (sl.includes('claim raised but not received') || sl.includes('claim raised but pending') ||
+               sl.includes('claim submitted') || sl.includes('claim filed') ||
+               sl.includes('case raised') || sl.includes('under review') ||
+               sl.includes('claim in progress') || sl.includes('raised')) {
+      u2uCbAgg[m].prog += r.expected || 0;
+    } else if ((r.sub_remark || '').trim().toLowerCase() === 'pending to claim') {
+      u2uCbAgg[m].pend += r.expected || 0;
+    }
+  });
+  const u2uCbTotRec  = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).rec  ||0), 0);
+  const u2uCbTotProg = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).prog ||0), 0);
+  const u2uCbTotPend = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).pend ||0), 0);
+  const u2uCbGrand   = u2uCbTotRec + u2uCbTotProg + u2uCbTotPend;
+
   // ── Combined shipment count from both sources (for comparison pill) ─────
   const iusTot  = Object.values(iusD.kpis || {}).reduce((s,v) => s+(v.count||0), 0);
   const u2Tot   = Object.values(u2D.kpis  || {}).reduce((s,v) => s+(v.count||0), 0);
@@ -1455,6 +1480,53 @@ function renderDashboardOverview(data, lastUpdated) {
             <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
             ${cbMths.map(m=>{const t=((cbAgg[m]||{}).rec||0)+((cbAgg[m]||{}).prog||0)+((cbAgg[m]||{}).pend||0)+((cbAgg[m]||{}).dmg||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(cbGrand)}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>` : ''}
+
+    <!-- Claims Bucket (US→US only) -->
+    ${_dashView === 'us2us' && u2uCbMths.length > 0 ? `
+    <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:16px">
+      <div style="padding:13px 18px;border-bottom:1px solid #e9ecef;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-table" style="color:#4a148c"></i> Claims Bucket (Year-to-Date)
+        </div>
+        <span style="font-size:11px;color:#bbb">US → US · ${u2uCbMths.length} months</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:linear-gradient(135deg,#4a148c,#6a1b9a)">
+            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:220px">Claims Bucket</th>
+            ${u2uCbMths.map(m=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`).join('')}
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
+            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">YTD%</th>
+          </tr></thead>
+          <tbody>
+            <tr style="background:#f0fdf4">
+              <td style="padding:9px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px">✅ Claim Raised &amp; Received</td>
+              ${u2uCbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbAgg[m]||{}).rec>0?formatUSD((u2uCbAgg[m]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbTotRec)}</td>
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${u2uCbGrand>0?((u2uCbTotRec/u2uCbGrand)*100).toFixed(2)+'%':'—'}</td>
+            </tr>
+            <tr style="background:#fffbf0">
+              <td style="padding:9px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px">⏳ Claim Raised, Pending Receipt</td>
+              ${u2uCbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbAgg[m]||{}).prog>0?formatUSD((u2uCbAgg[m]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbTotProg)}</td>
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${u2uCbGrand>0?((u2uCbTotProg/u2uCbGrand)*100).toFixed(2)+'%':'—'}</td>
+            </tr>
+            <tr style="background:#fff8f8">
+              <td style="padding:9px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px">📋 Pending to Claim</td>
+              ${u2uCbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbAgg[m]||{}).pend>0?formatUSD((u2uCbAgg[m]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbTotPend)}</td>
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${u2uCbGrand>0?((u2uCbTotPend/u2uCbGrand)*100).toFixed(2)+'%':'—'}</td>
+            </tr>
+          </tbody>
+          <tfoot><tr style="background:#4a148c">
+            <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
+            ${u2uCbMths.map(m=>{const t=((u2uCbAgg[m]||{}).rec||0)+((u2uCbAgg[m]||{}).prog||0)+((u2uCbAgg[m]||{}).pend||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(u2uCbGrand)}</td>
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
         </table>
