@@ -1158,12 +1158,12 @@ function renderDashboardOverview(data, lastUpdated) {
                (sl.includes('raised') && sl.includes('claim'))) {
       cbAgg[m].prog += r.expected || 0;
       window._cbDetail[m].prog.push({ ...det, amt: r.expected||0 });
-    // ── Bucket 3: Pending to claim (no claim filed yet) ──────────────────
-    } else if (sl.includes('pending') || sl.includes('to be claimed')) {
+    // ── Bucket 3: Pending to claim — strict exact match on sub_remark only ──
+    } else if ((r.sub_remark || '').trim().toLowerCase() === 'pending to claim') {
       cbAgg[m].pend += r.expected || 0;
       window._cbDetail[m].pend.push({ ...det, amt: r.expected||0 });
     }
-    // rows matching none of the above are outside claim scope — excluded from table
+    // rows matching none of the above (IBR/WRO etc.) excluded from table
   });
   const cbTotRec  = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).rec  ||0), 0);
   const cbTotProg = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).prog ||0), 0);
@@ -1190,8 +1190,8 @@ function renderDashboardOverview(data, lastUpdated) {
                sl.includes('claim in progress') || sl.includes('raised')) {
       // Bucket 2: claim has been raised (date exists or keyword match) but not yet paid
       u2uCbAgg[m].prog += r.expected || 0;
-    } else if (subExact === 'pending to claim') {
-      // Bucket 3: not yet claimed — only exact sub_remark match
+    } else if ((r.expected || 0) > 0) {
+      // Bucket 3: not yet raised or unclassified — include all remaining expected
       u2uCbAgg[m].pend += r.expected || 0;
     }
   });
@@ -1211,7 +1211,7 @@ function renderDashboardOverview(data, lastUpdated) {
              sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('case raised')||
              sl.includes('under review')||sl.includes('claim in progress')||sl.includes('raised')) {
       cbChAgg[ch].prog += r.expected||0;
-    } else if (sl.includes('pending')||sl.includes('to be claimed')) {
+    } else if ((r.sub_remark||'').trim().toLowerCase()==='pending to claim') {
       cbChAgg[ch].pend += r.expected||0;
     }
   });
@@ -1229,9 +1229,12 @@ function renderDashboardOverview(data, lastUpdated) {
     const subExact = (r.sub_remark||'').trim().toLowerCase();
     if (!u2uCbChAgg[ch]) { u2uCbChAgg[ch]={rec:0,prog:0,pend:0}; u2uCbChArr.push(ch); }
     if ((r.recovered||0)>0) { u2uCbChAgg[ch].rec += r.recovered||0; }
-    else if (r.case_raise_date||r.case_resolve_date||sl.includes('raised')) {
+    else if (r.case_raise_date||r.case_resolve_date||
+             sl.includes('claim raised but not received')||sl.includes('claim raised but pending')||
+             sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('case raised')||
+             sl.includes('under review')||sl.includes('claim in progress')||sl.includes('raised')) {
       u2uCbChAgg[ch].prog += r.expected||0;
-    } else if (subExact==='pending to claim') {
+    } else if ((r.expected||0)>0) {
       u2uCbChAgg[ch].pend += r.expected||0;
     }
   });
