@@ -441,10 +441,17 @@ def get_ups_claims_data(creds, sheet_id):
             try: total_awbs = int(str(master_rows[1][7]).replace(',','').strip())
             except: pass
 
-    # Read UPS Claim tab
+    # Count AWBs with FALSE tracking (col B = FALSE → no claim form received)
+    false_tracking_awbs = []
+    for r in master_rows[1:]:
+        if len(r) >= 2 and str(r[1]).strip().upper() == 'FALSE' and str(r[0]).strip():
+            false_tracking_awbs.append(str(r[0]).strip())
+    false_tracking_count = len(false_tracking_awbs)
+
+    # Read UPS Claim tab — col H = remark/notes
     claim_result = service.spreadsheets().values().get(
         spreadsheetId=sheet_id,
-        range="'UPS Claim'!A1:G500"
+        range="'UPS Claim'!A1:H500"
     ).execute()
     claim_rows = claim_result.get('values', [])
 
@@ -453,7 +460,7 @@ def get_ups_claims_data(creds, sheet_id):
         for row in claim_rows[1:]:
             if not row or not str(row[0]).strip():
                 continue
-            padded = row + [''] * max(0, 7 - len(row))
+            padded = row + [''] * max(0, 8 - len(row))
             parent_awb    = str(padded[0]).strip()
             lost_awb      = str(padded[1]).strip()
             lost_qty      = str(padded[2]).strip()
@@ -461,12 +468,17 @@ def get_ups_claims_data(creds, sheet_id):
             form_received = str(padded[4]).strip()
             approved_date = str(padded[5]).strip()
             settled_date  = str(padded[6]).strip()
+            remark        = str(padded[7]).strip()
 
-            # Determine state
+            remark_lower = remark.lower()
+            # Determine state — declined claims split from filed_pending
             if claim_amount:
                 state = 'amount_received'
             elif form_received:
-                state = 'filed_pending'
+                if 'claim declined' in remark_lower or ('package deliver' in remark_lower and 'ups' in remark_lower):
+                    state = 'declined'
+                else:
+                    state = 'filed_pending'
             else:
                 state = 'not_filed'
 
@@ -478,19 +490,24 @@ def get_ups_claims_data(creds, sheet_id):
                 'form_received': form_received,
                 'approved_date': approved_date,
                 'settled_date':  settled_date,
+                'remark':        remark,
                 'state':         state,
             })
 
     amount_received_count = sum(1 for c in claims if c['state'] == 'amount_received')
     filed_pending_count   = sum(1 for c in claims if c['state'] == 'filed_pending')
+    declined_count        = sum(1 for c in claims if c['state'] == 'declined')
 
     return {
         'summary': {
-            'total_awbs':           total_awbs,
-            'claim_filed':          claim_filed,
-            'not_filed':            not_filed,
+            'total_awbs':            total_awbs,
+            'claim_filed':           claim_filed,
+            'not_filed':             not_filed,
+            'false_tracking_count':  false_tracking_count,
+            'false_tracking_awbs':   false_tracking_awbs,
             'amount_received_count': amount_received_count,
-            'filed_pending_count':  filed_pending_count,
+            'filed_pending_count':   filed_pending_count,
+            'declined_count':        declined_count,
         },
         'claims': claims,
     }

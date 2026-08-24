@@ -1349,6 +1349,51 @@ function renderDashboardOverview(data, lastUpdated) {
     ? 'background:#1b3a2d;color:#fff;border-color:#1b3a2d;box-shadow:0 2px 6px #1b3a2d44'
     : 'background:#fff;color:#555;border-color:#dee2e6';
 
+  // ── UPS monthly settlement (India→US view only) ─────────────────────────
+  const _upsD    = (data.ups_claims) || {};
+  const _upsCl   = (_upsD.claims || []).filter(c => c.state === 'amount_received');
+  const _upsMthA = {}, _upsMthList = [];
+  _upsCl.forEach(c => {
+    const d = _parseUpsDate(c.settled_date); if (!d) return;
+    const key = ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()] + ' ' + d.getFullYear();
+    if (!_upsMthA[key]) { _upsMthA[key]={count:0,amt:0}; _upsMthList.push({key,sort:d.getFullYear()*12+d.getMonth()}); }
+    const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,''));
+    _upsMthA[key].count++; _upsMthA[key].amt += isNaN(v)?0:v;
+  });
+  _upsMthList.sort((a,b)=>a.sort-b.sort);
+  const _upsMthTot = _upsMthList.reduce((s,m)=>s+_upsMthA[m.key].amt,0);
+  const upsIUSTbl = _dashView==='india_us' && _upsMthList.length>0 ? `
+  <div style="background:#fff;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px">
+    <div style="padding:11px 16px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.6px">
+        <i class="fas fa-shipping-fast" style="color:#1a237e"></i>&nbsp; UPS Claims — Monthly Settlement Received
+      </div>
+      <a onclick="switchTab('ups_claims')" style="font-size:11px;color:#1a237e;cursor:pointer;font-weight:600;text-decoration:none">View all UPS Claims →</a>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#1a237e">
+          <th style="padding:8px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:160px">Month (Settled)</th>
+          <th style="padding:8px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">AWBs</th>
+          <th style="padding:8px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Amount Received (₹)</th>
+        </tr></thead>
+        <tbody>
+          ${_upsMthList.map((m,i)=>`
+          <tr style="background:${i%2===0?'#fff':'#f9fafb'}">
+            <td style="padding:8px 16px;font-weight:600;color:#333;border-bottom:1px solid #f0f0f0">${m.key}</td>
+            <td style="padding:8px 14px;text-align:center;color:#555;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${_upsMthA[m.key].count}</td>
+            <td style="padding:8px 16px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">₹${_upsMthA[m.key].amt.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr style="background:#1a237e">
+          <td style="padding:8px 16px;font-weight:700;color:#fff;font-size:12px">TOTAL</td>
+          <td style="padding:8px 14px;text-align:center;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${_upsCl.length}</td>
+          <td style="padding:8px 16px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">₹${_upsMthTot.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+  </div>` : '';
+
   document.getElementById('mainContent').innerHTML = `
   <div style="padding:20px 24px">
 
@@ -1513,6 +1558,8 @@ function renderDashboardOverview(data, lastUpdated) {
       </div>
     </div>
     ` : ''}
+
+    ${upsIUSTbl}
 
     <!-- Claims Bucket (India→US only) -->
     ${_dashView === 'india_us' && cbMths.length > 0 ? `
@@ -4099,6 +4146,17 @@ function renderIndiaUSTab(data, lastUpdated) {
     '</div>';
 }
 
+// ── Shared UPS date parser (used by both UPS tab and India→US overview) ────
+function _parseUpsDate(s) {
+  if (!s || s === '—') return null;
+  let d = new Date(s); if (!isNaN(d)) return d;
+  const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m1) return new Date(+m1[3], +m1[2]-1, +m1[1]);
+  const m2 = s.match(/^(\d{1,2})[\/\-]([A-Za-z]+)[\/\-](\d{4})$/);
+  if (m2) return new Date(m2[2]+' '+m2[1]+', '+m2[3]);
+  return null;
+}
+
 function renderUPSClaimsTab(data, lastUpdated) {
   destroyCharts();
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
@@ -4113,22 +4171,13 @@ function renderUPSClaimsTab(data, lastUpdated) {
   badge.textContent = notFiled;
   badge.style.display = notFiled > 0 ? 'inline' : 'none';
 
-  const amountReceived = claims.filter(c => c.state === 'amount_received');
-  const filedPending   = claims.filter(c => c.state === 'filed_pending');
+  const amountReceived  = claims.filter(c => c.state === 'amount_received');
+  const filedPending    = claims.filter(c => c.state === 'filed_pending');
+  const declinedClaims  = claims.filter(c => c.state === 'declined');
+  const falseTrackCount = summ.false_tracking_count || 0;
 
   // ── Month-wise settlement aggregation ─────────────────────────────────
   const _MO_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  function _parseUpsDate(s) {
-    if (!s || s === '—') return null;
-    let d = new Date(s); if (!isNaN(d)) return d;
-    // DD/MM/YYYY or DD-MM-YYYY
-    const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (m1) return new Date(+m1[3], +m1[2]-1, +m1[1]);
-    // DD-MMM-YYYY
-    const m2 = s.match(/^(\d{1,2})[\/\-]([A-Za-z]+)[\/\-](\d{4})$/);
-    if (m2) return new Date(m2[2]+' '+m2[1]+', '+m2[3]);
-    return null;
-  }
   const upsMthAgg = {}, upsMthArr = [];
   amountReceived.forEach(c => {
     const d = _parseUpsDate(c.settled_date); if (!d) return;
@@ -4176,34 +4225,41 @@ function renderUPSClaimsTab(data, lastUpdated) {
   </div>` : '';
 
   // ── Summary Cards ──────────────────────────────────────────────────
+  const _upsTotRec = amountReceived.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
   const summaryCards = `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:16px 20px 0">
-      <div style="background:#fff5f5;border-radius:12px;padding:16px;border:1px solid #ffcdd2;border-left:5px solid #c62828">
-        <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🔴 Claim Form Awaited</div>
-        <div style="font-size:36px;font-weight:800;color:#c62828;line-height:1">${summ.not_filed || 0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">AWBs — claim form not received from UPS</div>
-        <div style="font-size:11px;color:#c62828;margin-top:8px;font-weight:600">⏳ Waiting on UPS</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px 20px 0">
+      <div style="background:#fff5f5;border-radius:12px;padding:14px;border:1px solid #ffcdd2;border-left:5px solid #c62828">
+        <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🔴 Claim Form Awaited</div>
+        <div style="font-size:32px;font-weight:800;color:#c62828;line-height:1">${summ.not_filed || 0}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">AWBs — form not received from UPS</div>
+        ${falseTrackCount > 0 ? `<div style="font-size:11px;color:#c62828;margin-top:6px;font-weight:600;background:#ffebee;padding:4px 8px;border-radius:6px">⚠️ ${falseTrackCount} tracking ID${falseTrackCount!==1?'s':''} unverified (FALSE)</div>` : ''}
       </div>
-      <div style="background:#fffbf0;border-radius:12px;padding:16px;border:1px solid #ffe0b2;border-left:5px solid #e65100">
-        <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🟡 Form Received — Pending Payment</div>
-        <div style="font-size:36px;font-weight:800;color:#e65100;line-height:1">${filedPending.length}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">UPS sent form · we submitted back · awaiting amount</div>
-        <div style="font-size:11px;color:#e65100;margin-top:8px;font-weight:600">${summ.claim_filed || 0} total forms received</div>
+      <div style="background:#fffbf0;border-radius:12px;padding:14px;border:1px solid #ffe0b2;border-left:5px solid #e65100">
+        <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🟡 Filed — Pending Payment</div>
+        <div style="font-size:32px;font-weight:800;color:#e65100;line-height:1">${filedPending.length}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">Form submitted · awaiting reimbursement</div>
+        <div style="font-size:11px;color:#e65100;margin-top:6px;font-weight:600">${summ.claim_filed || 0} total forms received</div>
       </div>
-      <div style="background:#f0fdf4;border-radius:12px;padding:16px;border:1px solid #c8e6c9;border-left:5px solid #2e7d32">
-        <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">✅ Amount Received</div>
-        <div style="font-size:36px;font-weight:800;color:#2e7d32;line-height:1">${amountReceived.length} <span style="font-size:14px;font-weight:500;color:#888">AWBs</span></div>
-        <div style="font-size:18px;font-weight:700;color:#2e7d32;margin-top:8px">${(() => { const tot = amountReceived.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s + (isNaN(v)?0:v); }, 0); return '₹' + tot.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}); })()}</div>
-        <div style="font-size:10px;color:#888;margin-top:2px">total received from UPS</div>
-        <div style="font-size:11px;color:#2e7d32;margin-top:6px;font-weight:600">${summ.total_awbs || 0} total lost AWBs</div>
+      <div style="background:#fff8f8;border-radius:12px;padding:14px;border:1px solid #ef9a9a;border-left:5px solid #b71c1c">
+        <div style="font-size:10px;font-weight:700;color:#b71c1c;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🚫 Claim Declined</div>
+        <div style="font-size:32px;font-weight:800;color:#b71c1c;line-height:1">${declinedClaims.length}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">Package delivered as per UPS — claim not applicable</div>
+        <div style="font-size:11px;color:#b71c1c;margin-top:6px;font-weight:600">No recovery expected</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:12px;padding:14px;border:1px solid #c8e6c9;border-left:5px solid #2e7d32">
+        <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">✅ Amount Received</div>
+        <div style="font-size:32px;font-weight:800;color:#2e7d32;line-height:1">${amountReceived.length} <span style="font-size:13px;font-weight:500;color:#888">AWBs</span></div>
+        <div style="font-size:16px;font-weight:700;color:#2e7d32;margin-top:6px">₹${_upsTotRec.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        <div style="font-size:10px;color:#888;margin-top:2px">total recovered · ${summ.total_awbs || 0} total lost AWBs</div>
       </div>
     </div>`;
 
   // ── View toggle ────────────────────────────────────────────────────
   const views = [
-    { key: 'all',             label: 'All Claims',           count: claims.length,         col: '#1a237e' },
+    { key: 'all',             label: 'All Claims',           count: claims.length,          col: '#1a237e' },
     { key: 'amount_received', label: '✅ Amount Received',   count: amountReceived.length,  col: '#2e7d32' },
     { key: 'filed_pending',   label: '🟡 Filed / Pending',   count: filedPending.length,    col: '#e65100' },
+    { key: 'declined',        label: '🚫 Declined',          count: declinedClaims.length,  col: '#b71c1c' },
   ];
   let upsView = window._upsView || 'all';
   window._upsView = upsView;
@@ -4215,12 +4271,16 @@ function renderUPSClaimsTab(data, lastUpdated) {
     </button>`;
   }).join('');
 
-  const viewDisp = upsView === 'amount_received' ? amountReceived : upsView === 'filed_pending' ? filedPending : claims;
+  const viewDisp = upsView === 'amount_received' ? amountReceived
+                 : upsView === 'filed_pending'   ? filedPending
+                 : upsView === 'declined'        ? declinedClaims
+                 : claims;
 
   // ── Table ──────────────────────────────────────────────────────────
   const stateTag = s => {
     if (s === 'amount_received') return '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">✅ Received</span>';
     if (s === 'filed_pending')   return '<span style="background:#fff8e1;color:#e65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🟡 Pending</span>';
+    if (s === 'declined')        return '<span style="background:#fce4ec;color:#b71c1c;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🚫 Declined</span>';
     return '<span style="background:#ffebee;color:#c62828;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🔴 Not Filed</span>';
   };
 
@@ -4234,10 +4294,11 @@ function renderUPSClaimsTab(data, lastUpdated) {
       <td style="padding:8px 10px;text-align:center;font-size:11px">${c.approved_date || '—'}</td>
       <td style="padding:8px 10px;text-align:center;font-size:11px">${c.settled_date || '—'}</td>
       <td style="padding:8px 10px;text-align:center">${stateTag(c.state)}</td>
+      <td style="padding:8px 10px;font-size:11px;color:${c.state==='declined'?'#b71c1c':'#777'};max-width:200px;word-break:break-word">${c.remark || '—'}</td>
     </tr>`).join('');
 
   const emptyRow = viewDisp.length === 0
-    ? '<tr><td colspan="8" style="text-align:center;padding:40px;color:#aaa">No records found.</td></tr>' : '';
+    ? '<tr><td colspan="9" style="text-align:center;padding:40px;color:#aaa">No records found.</td></tr>' : '';
 
   document.getElementById('mainContent').innerHTML = `
     ${summaryCards}
@@ -4259,6 +4320,7 @@ function renderUPSClaimsTab(data, lastUpdated) {
               <th style="padding:8px 10px;text-align:center;white-space:nowrap">Approved Date</th>
               <th style="padding:8px 10px;text-align:center;white-space:nowrap">Settled Date</th>
               <th style="padding:8px 10px;text-align:center">Status</th>
+              <th style="padding:8px 10px;text-align:left">Remark / Notes</th>
             </tr></thead>
             <tbody>${tableRows}${emptyRow}</tbody>
           </table>
