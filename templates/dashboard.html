@@ -1204,7 +1204,7 @@ function renderDashboardOverview(data, lastUpdated) {
   // ── Claims Bucket by CHANNEL (India→US) ──────────────────────────────────
   const cbChAgg = {}; const cbChArr = [];
   iusCBRows.forEach(r => {
-    const ch = r.channel || 'Other';
+    const ch = r.channel; if (!ch) return;
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
     if (!cbChAgg[ch]) { cbChAgg[ch]={rec:0,prog:0,pend:0}; cbChArr.push(ch); }
     const cbChSub = (r.sub_remark||'').trim().toLowerCase();
@@ -1225,7 +1225,7 @@ function renderDashboardOverview(data, lastUpdated) {
   // ── Claims Bucket by CHANNEL (US→US, grouped by to_channel) ─────────────
   const u2uCbChAgg = {}; const u2uCbChArr = [];
   u2uCBRows.forEach(r => {
-    const ch = r.to_channel || 'Other';
+    const ch = r.to_channel; if (!ch) return;
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
     const subExact = (r.sub_remark||'').trim().toLowerCase();
     if (!u2uCbChAgg[ch]) { u2uCbChAgg[ch]={rec:0,prog:0,pend:0}; u2uCbChArr.push(ch); }
@@ -1248,7 +1248,7 @@ function renderDashboardOverview(data, lastUpdated) {
   // ── Channel × Month matrix (India→US) ────────────────────────────────────
   const cbChMthAgg = {};
   iusCBRows.forEach(r => {
-    const ch = r.channel || 'Other'; const m = r.month; if (!m) return;
+    const ch = r.channel; const m = r.month; if (!ch || !m) return;
     const subExact = (r.sub_remark||'').trim().toLowerCase();
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
     if (!cbChMthAgg[ch]) cbChMthAgg[ch] = {};
@@ -1261,7 +1261,7 @@ function renderDashboardOverview(data, lastUpdated) {
   // ── Channel × Month matrix (US→US) ───────────────────────────────────────
   const u2uCbChMthAgg = {};
   u2uCBRows.forEach(r => {
-    const ch = r.to_channel || 'Other'; const m = r.month; if (!m) return;
+    const ch = r.to_channel; const m = r.month; if (!ch || !m) return;
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
     if (!u2uCbChMthAgg[ch]) u2uCbChMthAgg[ch] = {};
     if (!u2uCbChMthAgg[ch][m]) u2uCbChMthAgg[ch][m] = {rec:0,prog:0,pend:0};
