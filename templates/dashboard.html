@@ -1141,12 +1141,18 @@ function renderDashboardOverview(data, lastUpdated) {
     const sl = ((r.sub_remark || '') + ' ' + (r.remarks || '')).toLowerCase().trim();
     if (!cbAgg[m])            cbAgg[m]            = { rec:0, prog:0, pend:0 };
     if (!window._cbDetail[m]) window._cbDetail[m]  = { rec:[], prog:[], pend:[] };
-    const det = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'' };
-    // ── Bucket 1: actual > 0 means money was received — use actual regardless of sub_remark ──
+    const det      = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'' };
+    const subExact = (r.sub_remark || '').trim().toLowerCase();
+    // ── Bucket 1: actual > 0 means money was received ──────────────────────
     if ((r.actual || 0) > 0) {
       cbAgg[m].rec  += r.actual || 0;
       window._cbDetail[m].rec.push({ ...det, amt: r.actual||0 });
-    // ── Bucket 2: Claim raised but pending receipt ───────────────────────
+    // ── Bucket 3 (checked BEFORE keyword scan): explicit "Pending to Claim"
+    //    sub_remark wins even if remarks contains the word "raised" ───────────
+    } else if (subExact === 'pending to claim') {
+      cbAgg[m].pend += r.expected || 0;
+      window._cbDetail[m].pend.push({ ...det, amt: r.expected||0 });
+    // ── Bucket 2: Claim raised but not yet received ─────────────────────────
     } else if (sl.includes('claim raised but not received') ||
                sl.includes('claim raised but pending')      ||
                sl.includes('claim submitted')               ||
@@ -1154,14 +1160,9 @@ function renderDashboardOverview(data, lastUpdated) {
                sl.includes('case raised')                   ||
                sl.includes('under review')                  ||
                sl.includes('claim in progress')             ||
-               sl.includes('raised')                        ||
-               (sl.includes('raised') && sl.includes('claim'))) {
+               sl.includes('raised')) {
       cbAgg[m].prog += r.expected || 0;
       window._cbDetail[m].prog.push({ ...det, amt: r.expected||0 });
-    // ── Bucket 3: Pending to claim — strict exact match on sub_remark only ──
-    } else if ((r.sub_remark || '').trim().toLowerCase() === 'pending to claim') {
-      cbAgg[m].pend += r.expected || 0;
-      window._cbDetail[m].pend.push({ ...det, amt: r.expected||0 });
     }
     // rows matching none of the above (IBR/WRO etc.) excluded from table
   });
@@ -1206,13 +1207,13 @@ function renderDashboardOverview(data, lastUpdated) {
     const ch = r.channel || 'Other';
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
     if (!cbChAgg[ch]) { cbChAgg[ch]={rec:0,prog:0,pend:0}; cbChArr.push(ch); }
+    const cbChSub = (r.sub_remark||'').trim().toLowerCase();
     if ((r.actual||0)>0) { cbChAgg[ch].rec += r.actual||0; }
+    else if (cbChSub==='pending to claim') { cbChAgg[ch].pend += r.expected||0; }
     else if (sl.includes('claim raised but not received')||sl.includes('claim raised but pending')||
              sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('case raised')||
              sl.includes('under review')||sl.includes('claim in progress')||sl.includes('raised')) {
       cbChAgg[ch].prog += r.expected||0;
-    } else if ((r.sub_remark||'').trim().toLowerCase()==='pending to claim') {
-      cbChAgg[ch].pend += r.expected||0;
     }
   });
   cbChArr.sort();
