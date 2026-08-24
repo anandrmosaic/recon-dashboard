@@ -1245,6 +1245,31 @@ function renderDashboardOverview(data, lastUpdated) {
   const u2uCbChTotPend = u2uCbChArr.reduce((s,c)=>s+(u2uCbChAgg[c].pend||0),0);
   const u2uCbChGrand   = u2uCbChTotRec + u2uCbChTotProg + u2uCbChTotPend;
 
+  // ── Channel × Month matrix (India→US) ────────────────────────────────────
+  const cbChMthAgg = {};
+  iusCBRows.forEach(r => {
+    const ch = r.channel || 'Other'; const m = r.month; if (!m) return;
+    const subExact = (r.sub_remark||'').trim().toLowerCase();
+    const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
+    if (!cbChMthAgg[ch]) cbChMthAgg[ch] = {};
+    if (!cbChMthAgg[ch][m]) cbChMthAgg[ch][m] = {rec:0,prog:0,pend:0};
+    if ((r.actual||0)>0) { cbChMthAgg[ch][m].rec += r.actual||0; }
+    else if (subExact==='pending to claim') { cbChMthAgg[ch][m].pend += r.expected||0; }
+    else if (sl.includes('raised')||sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('under review')||sl.includes('claim in progress')) { cbChMthAgg[ch][m].prog += r.expected||0; }
+  });
+
+  // ── Channel × Month matrix (US→US) ───────────────────────────────────────
+  const u2uCbChMthAgg = {};
+  u2uCBRows.forEach(r => {
+    const ch = r.to_channel || 'Other'; const m = r.month; if (!m) return;
+    const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
+    if (!u2uCbChMthAgg[ch]) u2uCbChMthAgg[ch] = {};
+    if (!u2uCbChMthAgg[ch][m]) u2uCbChMthAgg[ch][m] = {rec:0,prog:0,pend:0};
+    if ((r.recovered||0)>0) { u2uCbChMthAgg[ch][m].rec += r.recovered||0; }
+    else if (r.case_raise_date||r.case_resolve_date||sl.includes('raised')||sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('under review')||sl.includes('claim in progress')) { u2uCbChMthAgg[ch][m].prog += r.expected||0; }
+    else if ((r.expected||0)>0) { u2uCbChMthAgg[ch][m].pend += r.expected||0; }
+  });
+
   // ── Combined shipment count from both sources (for comparison pill) ─────
   const iusTot  = Object.values(iusD.kpis || {}).reduce((s,v) => s+(v.count||0), 0);
   const u2Tot   = Object.values(u2D.kpis  || {}).reduce((s,v) => s+(v.count||0), 0);
@@ -1541,43 +1566,73 @@ function renderDashboardOverview(data, lastUpdated) {
     <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:16px">
       <div style="padding:13px 18px;border-bottom:1px solid #e9ecef;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
-          <i class="fas fa-layer-group" style="color:#1b3a2d"></i> Claims Bucket by Channel
+          <i class="fas fa-layer-group" style="color:#1b3a2d"></i> Claims Bucket by Channel &amp; Month
         </div>
-        <span style="font-size:11px;color:#bbb">India → US · ${cbChArr.length} channels</span>
+        <span style="font-size:11px;color:#bbb">India → US · ${cbChArr.length} channels · ${cbMths.length} months</span>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:220px">Claims Bucket</th>
+            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:180px">Bucket / Month</th>
             ${cbChArr.map(c=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${c}</th>`).join('')}
             <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">%</th>
+            <th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">%</th>
           </tr></thead>
           <tbody>
+            <tr style="background:#e8f5e9;border-top:2px solid #4caf50">
+              <td colspan="${cbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#1b5e20;font-size:11px;letter-spacing:.5px;text-transform:uppercase">✅ Claim Raised &amp; Received</td>
+            </tr>
+            ${cbMths.filter(m=>cbChArr.some(c=>((cbChMthAgg[c]||{})[m]||{}).rec>0)).map(m=>`
             <tr style="background:#f0fdf4">
-              <td style="padding:9px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px">✅ Claim Raised &amp; Received</td>
-              ${cbChArr.map(c=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(cbChAgg[c]||{}).rec>0?formatUSD((cbChAgg[c]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(cbChTotRec)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${cbChGrand>0?((cbChTotRec/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
+              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
+              ${cbChArr.map(c=>{const v=((cbChMthAgg[c]||{})[m]||{}).rec||0;return`<td style="padding:7px 10px;text-align:right;color:#2e7d32;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
+              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(cbChArr.reduce((s,c)=>s+(((cbChMthAgg[c]||{})[m]||{}).rec||0),0))}</td>
+              <td style="border-bottom:1px solid #f0f0f0"></td>
+            </tr>`).join('')}
+            <tr style="background:#c8e6c9">
+              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#1b5e20;font-size:12px;border-top:1px solid #a5d6a7">Subtotal</td>
+              ${cbChArr.map(c=>{const v=(cbChAgg[c]||{}).rec||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${formatUSD(cbChTotRec)}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;border-top:1px solid #a5d6a7">${cbChGrand>0?((cbChTotRec/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
             </tr>
+            <tr style="background:#fff3e0;border-top:2px solid #ff9800">
+              <td colspan="${cbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#bf360c;font-size:11px;letter-spacing:.5px;text-transform:uppercase">⏳ Claim Raised, Pending Receipt</td>
+            </tr>
+            ${cbMths.filter(m=>cbChArr.some(c=>((cbChMthAgg[c]||{})[m]||{}).prog>0)).map(m=>`
             <tr style="background:#fffbf0">
-              <td style="padding:9px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px">⏳ Claim Raised, Pending Receipt</td>
-              ${cbChArr.map(c=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(cbChAgg[c]||{}).prog>0?formatUSD((cbChAgg[c]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(cbChTotProg)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${cbChGrand>0?((cbChTotProg/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
+              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
+              ${cbChArr.map(c=>{const v=((cbChMthAgg[c]||{})[m]||{}).prog||0;return`<td style="padding:7px 10px;text-align:right;color:#e65100;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
+              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#e65100;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(cbChArr.reduce((s,c)=>s+(((cbChMthAgg[c]||{})[m]||{}).prog||0),0))}</td>
+              <td style="border-bottom:1px solid #f0f0f0"></td>
+            </tr>`).join('')}
+            <tr style="background:#ffe0b2">
+              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#bf360c;font-size:12px;border-top:1px solid #ffb74d">Subtotal</td>
+              ${cbChArr.map(c=>{const v=(cbChAgg[c]||{}).prog||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${formatUSD(cbChTotProg)}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;border-top:1px solid #ffb74d">${cbChGrand>0?((cbChTotProg/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
             </tr>
+            <tr style="background:#fce4ec;border-top:2px solid #e91e63">
+              <td colspan="${cbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#880e4f;font-size:11px;letter-spacing:.5px;text-transform:uppercase">📋 Pending to Claim</td>
+            </tr>
+            ${cbMths.filter(m=>cbChArr.some(c=>((cbChMthAgg[c]||{})[m]||{}).pend>0)).map(m=>`
             <tr style="background:#fff8f8">
-              <td style="padding:9px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px">📋 Pending to Claim</td>
-              ${cbChArr.map(c=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(cbChAgg[c]||{}).pend>0?formatUSD((cbChAgg[c]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(cbChTotPend)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${cbChGrand>0?((cbChTotPend/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
+              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
+              ${cbChArr.map(c=>{const v=((cbChMthAgg[c]||{})[m]||{}).pend||0;return`<td style="padding:7px 10px;text-align:right;color:#c62828;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
+              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(cbChArr.reduce((s,c)=>s+(((cbChMthAgg[c]||{})[m]||{}).pend||0),0))}</td>
+              <td style="border-bottom:1px solid #f0f0f0"></td>
+            </tr>`).join('')}
+            <tr style="background:#f8bbd0">
+              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#880e4f;font-size:12px;border-top:1px solid #f48fb1">Subtotal</td>
+              ${cbChArr.map(c=>{const v=(cbChAgg[c]||{}).pend||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${formatUSD(cbChTotPend)}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;border-top:1px solid #f48fb1">${cbChGrand>0?((cbChTotPend/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
             </tr>
           </tbody>
           <tfoot><tr style="background:#1b3a2d">
             <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
             ${cbChArr.map(c=>{const t=((cbChAgg[c]||{}).rec||0)+((cbChAgg[c]||{}).prog||0)+((cbChAgg[c]||{}).pend||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(cbChGrand)}</td>
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
+            <td style="padding:10px 10px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
         </table>
       </div>
@@ -1635,43 +1690,73 @@ function renderDashboardOverview(data, lastUpdated) {
     <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:16px">
       <div style="padding:13px 18px;border-bottom:1px solid #e9ecef;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
-          <i class="fas fa-layer-group" style="color:#4a148c"></i> Claims Bucket by Channel (To)
+          <i class="fas fa-layer-group" style="color:#4a148c"></i> Claims Bucket by Channel (To) &amp; Month
         </div>
-        <span style="font-size:11px;color:#bbb">US → US · ${u2uCbChArr.length} channels</span>
+        <span style="font-size:11px;color:#bbb">US → US · ${u2uCbChArr.length} channels · ${u2uCbMths.length} months</span>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="background:linear-gradient(135deg,#4a148c,#6a1b9a)">
-            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:220px">Claims Bucket</th>
+            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:180px">Bucket / Month</th>
             ${u2uCbChArr.map(c=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${c}</th>`).join('')}
             <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">%</th>
+            <th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">%</th>
           </tr></thead>
           <tbody>
+            <tr style="background:#e8f5e9;border-top:2px solid #4caf50">
+              <td colspan="${u2uCbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#1b5e20;font-size:11px;letter-spacing:.5px;text-transform:uppercase">✅ Claim Raised &amp; Received</td>
+            </tr>
+            ${u2uCbMths.filter(m=>u2uCbChArr.some(c=>((u2uCbChMthAgg[c]||{})[m]||{}).rec>0)).map(m=>`
             <tr style="background:#f0fdf4">
-              <td style="padding:9px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px">✅ Claim Raised &amp; Received</td>
-              ${u2uCbChArr.map(c=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbChAgg[c]||{}).rec>0?formatUSD((u2uCbChAgg[c]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbChTotRec)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${u2uCbChGrand>0?((u2uCbChTotRec/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
+              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
+              ${u2uCbChArr.map(c=>{const v=((u2uCbChMthAgg[c]||{})[m]||{}).rec||0;return`<td style="padding:7px 10px;text-align:right;color:#2e7d32;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
+              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(u2uCbChArr.reduce((s,c)=>s+(((u2uCbChMthAgg[c]||{})[m]||{}).rec||0),0))}</td>
+              <td style="border-bottom:1px solid #f0f0f0"></td>
+            </tr>`).join('')}
+            <tr style="background:#c8e6c9">
+              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#1b5e20;font-size:12px;border-top:1px solid #a5d6a7">Subtotal</td>
+              ${u2uCbChArr.map(c=>{const v=(u2uCbChAgg[c]||{}).rec||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${formatUSD(u2uCbChTotRec)}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;border-top:1px solid #a5d6a7">${u2uCbChGrand>0?((u2uCbChTotRec/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
             </tr>
+            <tr style="background:#fff3e0;border-top:2px solid #ff9800">
+              <td colspan="${u2uCbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#bf360c;font-size:11px;letter-spacing:.5px;text-transform:uppercase">⏳ Claim Raised, Pending Receipt</td>
+            </tr>
+            ${u2uCbMths.filter(m=>u2uCbChArr.some(c=>((u2uCbChMthAgg[c]||{})[m]||{}).prog>0)).map(m=>`
             <tr style="background:#fffbf0">
-              <td style="padding:9px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px">⏳ Claim Raised, Pending Receipt</td>
-              ${u2uCbChArr.map(c=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbChAgg[c]||{}).prog>0?formatUSD((u2uCbChAgg[c]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbChTotProg)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${u2uCbChGrand>0?((u2uCbChTotProg/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
+              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
+              ${u2uCbChArr.map(c=>{const v=((u2uCbChMthAgg[c]||{})[m]||{}).prog||0;return`<td style="padding:7px 10px;text-align:right;color:#e65100;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
+              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#e65100;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(u2uCbChArr.reduce((s,c)=>s+(((u2uCbChMthAgg[c]||{})[m]||{}).prog||0),0))}</td>
+              <td style="border-bottom:1px solid #f0f0f0"></td>
+            </tr>`).join('')}
+            <tr style="background:#ffe0b2">
+              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#bf360c;font-size:12px;border-top:1px solid #ffb74d">Subtotal</td>
+              ${u2uCbChArr.map(c=>{const v=(u2uCbChAgg[c]||{}).prog||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${formatUSD(u2uCbChTotProg)}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;border-top:1px solid #ffb74d">${u2uCbChGrand>0?((u2uCbChTotProg/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
             </tr>
+            <tr style="background:#fce4ec;border-top:2px solid #e91e63">
+              <td colspan="${u2uCbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#880e4f;font-size:11px;letter-spacing:.5px;text-transform:uppercase">📋 Pending to Claim</td>
+            </tr>
+            ${u2uCbMths.filter(m=>u2uCbChArr.some(c=>((u2uCbChMthAgg[c]||{})[m]||{}).pend>0)).map(m=>`
             <tr style="background:#fff8f8">
-              <td style="padding:9px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px">📋 Pending to Claim</td>
-              ${u2uCbChArr.map(c=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbChAgg[c]||{}).pend>0?formatUSD((u2uCbChAgg[c]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbChTotPend)}</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${u2uCbChGrand>0?((u2uCbChTotPend/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
+              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
+              ${u2uCbChArr.map(c=>{const v=((u2uCbChMthAgg[c]||{})[m]||{}).pend||0;return`<td style="padding:7px 10px;text-align:right;color:#c62828;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
+              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(u2uCbChArr.reduce((s,c)=>s+(((u2uCbChMthAgg[c]||{})[m]||{}).pend||0),0))}</td>
+              <td style="border-bottom:1px solid #f0f0f0"></td>
+            </tr>`).join('')}
+            <tr style="background:#f8bbd0">
+              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#880e4f;font-size:12px;border-top:1px solid #f48fb1">Subtotal</td>
+              ${u2uCbChArr.map(c=>{const v=(u2uCbChAgg[c]||{}).pend||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${formatUSD(u2uCbChTotPend)}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;border-top:1px solid #f48fb1">${u2uCbChGrand>0?((u2uCbChTotPend/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
             </tr>
           </tbody>
           <tfoot><tr style="background:#4a148c">
             <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
             ${u2uCbChArr.map(c=>{const t=((u2uCbChAgg[c]||{}).rec||0)+((u2uCbChAgg[c]||{}).prog||0)+((u2uCbChAgg[c]||{}).pend||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(u2uCbChGrand)}</td>
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
+            <td style="padding:10px 10px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
         </table>
       </div>
