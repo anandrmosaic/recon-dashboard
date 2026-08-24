@@ -471,14 +471,14 @@ def get_ups_claims_data(creds, sheet_id):
             remark        = str(padded[7]).strip()
 
             remark_lower = remark.lower()
-            # Determine state — declined claims split from filed_pending
-            if claim_amount:
+            # Determine state — declined check runs FIRST regardless of amount column
+            if 'claim declined' in remark_lower or \
+               ('package deliver' in remark_lower and 'ups' in remark_lower):
+                state = 'declined'
+            elif claim_amount:
                 state = 'amount_received'
             elif form_received:
-                if 'claim declined' in remark_lower or ('package deliver' in remark_lower and 'ups' in remark_lower):
-                    state = 'declined'
-                else:
-                    state = 'filed_pending'
+                state = 'filed_pending'
             else:
                 state = 'not_filed'
 
