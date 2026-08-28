@@ -1412,7 +1412,7 @@ function renderDashboardOverview(data, lastUpdated) {
 
   // ── UPS monthly settlement (India→US view only) ─────────────────────────
   const _upsD    = (data.ups_claims) || {};
-  const _upsCl   = (_upsD.claims || []).filter(c => c.state === 'amount_received');
+  const _upsCl   = (_upsD.claims || []).filter(c => c.state === 'settled');
   const _upsMthA = {}, _upsMthList = [];
   _upsCl.forEach(c => {
     const d = _parseUpsDate(c.settled_date); if (!d) return;
@@ -4232,15 +4232,16 @@ function renderUPSClaimsTab(data, lastUpdated) {
   badge.textContent = notFiled;
   badge.style.display = notFiled > 0 ? 'inline' : 'none';
 
-  const amountReceived  = claims.filter(c => c.state === 'amount_received');
-  const filedPending    = claims.filter(c => c.state === 'filed_pending');
-  const declinedClaims  = claims.filter(c => c.state === 'declined');
+  const settledClaims        = claims.filter(c => c.state === 'settled');
+  const approvedNotSettled   = claims.filter(c => c.state === 'approved_not_settled');
+  const filedPending         = claims.filter(c => c.state === 'filed_pending');
+  const declinedClaims       = claims.filter(c => c.state === 'declined');
   const falseTrackCount = summ.false_tracking_count || 0;
 
   // ── Month-wise settlement aggregation ─────────────────────────────────
   const _MO_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const upsMthAgg = {}, upsMthArr = [];
-  amountReceived.forEach(c => {
+  settledClaims.forEach(c => {
     const d = _parseUpsDate(c.settled_date); if (!d) return;
     const key = _MO_FULL[d.getMonth()] + ' ' + d.getFullYear();
     if (!upsMthAgg[key]) { upsMthAgg[key]={count:0,amt:0}; upsMthArr.push({key,sort:d.getFullYear()*12+d.getMonth()}); }
@@ -4277,7 +4278,7 @@ function renderUPSClaimsTab(data, lastUpdated) {
           </tbody>
           <tfoot><tr style="background:#1a237e">
             <td style="padding:9px 16px;font-weight:700;color:#fff;font-size:12px">TOTAL</td>
-            <td style="padding:9px 14px;text-align:center;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${amountReceived.length}</td>
+            <td style="padding:9px 14px;text-align:center;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${settledClaims.length}</td>
             <td style="padding:9px 16px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">₹${upsMthTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
           </tr></tfoot>
         </table>
@@ -4286,41 +4287,48 @@ function renderUPSClaimsTab(data, lastUpdated) {
   </div>` : '';
 
   // ── Summary Cards ──────────────────────────────────────────────────
-  const _upsTotRec = amountReceived.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
+  const _upsTotSettled = settledClaims.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
+  const _upsTotApproved = approvedNotSettled.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
   const summaryCards = `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px 20px 0">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:16px 20px 0">
       <div style="background:#fff5f5;border-radius:12px;padding:14px;border:1px solid #ffcdd2;border-left:5px solid #c62828">
-        <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🔴 Claim Form Awaited</div>
+        <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🔴 Form Awaited</div>
         <div style="font-size:32px;font-weight:800;color:#c62828;line-height:1">${summ.not_filed || 0}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">AWBs — form not received from UPS</div>
-        ${falseTrackCount > 0 ? `<div style="font-size:11px;color:#c62828;margin-top:6px;font-weight:600;background:#ffebee;padding:4px 8px;border-radius:6px">⚠️ ${falseTrackCount} tracking ID${falseTrackCount!==1?'s':''} unverified (FALSE)</div>` : ''}
+        <div style="font-size:11px;color:#888;margin-top:4px">AWBs — form not received</div>
+        ${falseTrackCount > 0 ? `<div style="font-size:11px;color:#c62828;margin-top:6px;font-weight:600;background:#ffebee;padding:4px 8px;border-radius:6px">⚠️ ${falseTrackCount} FALSE tracking</div>` : ''}
       </div>
       <div style="background:#fffbf0;border-radius:12px;padding:14px;border:1px solid #ffe0b2;border-left:5px solid #e65100">
-        <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🟡 Filed — Pending Payment</div>
+        <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">📋 Filed — Pending Approval</div>
         <div style="font-size:32px;font-weight:800;color:#e65100;line-height:1">${filedPending.length}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">Form submitted · awaiting reimbursement</div>
-        <div style="font-size:11px;color:#e65100;margin-top:6px;font-weight:600">${summ.claim_filed || 0} total forms received</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">Form received · awaiting UPS decision</div>
+      </div>
+      <div style="background:#fff8e1;border-radius:12px;padding:14px;border:1px solid #ffe082;border-left:5px solid #f9a825">
+        <div style="font-size:10px;font-weight:700;color:#f57f17;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🟡 Approved — Pending Transfer</div>
+        <div style="font-size:32px;font-weight:800;color:#f57f17;line-height:1">${approvedNotSettled.length}</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">Claim approved · UTR not received yet</div>
+        <div style="font-size:13px;font-weight:700;color:#f57f17;margin-top:4px">₹${_upsTotApproved.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:12px;padding:14px;border:1px solid #c8e6c9;border-left:5px solid #2e7d32">
+        <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">✅ Settled — UTR Received</div>
+        <div style="font-size:32px;font-weight:800;color:#2e7d32;line-height:1">${settledClaims.length} <span style="font-size:13px;font-weight:500;color:#888">AWBs</span></div>
+        <div style="font-size:14px;font-weight:700;color:#2e7d32;margin-top:4px">₹${_upsTotSettled.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        <div style="font-size:10px;color:#888;margin-top:2px">SCBLH UTR confirmed · ${summ.total_awbs || 0} total lost</div>
       </div>
       <div style="background:#fff8f8;border-radius:12px;padding:14px;border:1px solid #ef9a9a;border-left:5px solid #b71c1c">
         <div style="font-size:10px;font-weight:700;color:#b71c1c;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🚫 Claim Declined</div>
         <div style="font-size:32px;font-weight:800;color:#b71c1c;line-height:1">${declinedClaims.length}</div>
-        <div style="font-size:11px;color:#888;margin-top:4px">Package delivered as per UPS — claim not applicable</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">Delivered as per UPS — not applicable</div>
         <div style="font-size:11px;color:#b71c1c;margin-top:6px;font-weight:600">No recovery expected</div>
-      </div>
-      <div style="background:#f0fdf4;border-radius:12px;padding:14px;border:1px solid #c8e6c9;border-left:5px solid #2e7d32">
-        <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">✅ Amount Received</div>
-        <div style="font-size:32px;font-weight:800;color:#2e7d32;line-height:1">${amountReceived.length} <span style="font-size:13px;font-weight:500;color:#888">AWBs</span></div>
-        <div style="font-size:16px;font-weight:700;color:#2e7d32;margin-top:6px">₹${_upsTotRec.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-        <div style="font-size:10px;color:#888;margin-top:2px">total recovered · ${summ.total_awbs || 0} total lost AWBs</div>
       </div>
     </div>`;
 
   // ── View toggle ────────────────────────────────────────────────────
   const views = [
-    { key: 'all',             label: 'All Claims',           count: claims.length,          col: '#1a237e' },
-    { key: 'amount_received', label: '✅ Amount Received',   count: amountReceived.length,  col: '#2e7d32' },
-    { key: 'filed_pending',   label: '🟡 Filed / Pending',   count: filedPending.length,    col: '#e65100' },
-    { key: 'declined',        label: '🚫 Declined',          count: declinedClaims.length,  col: '#b71c1c' },
+    { key: 'all',                  label: 'All Claims',                count: claims.length,             col: '#1a237e' },
+    { key: 'settled',              label: '✅ Settled (UTR)',          count: settledClaims.length,      col: '#2e7d32' },
+    { key: 'approved_not_settled', label: '🟡 Approved — Pending',    count: approvedNotSettled.length, col: '#f57f17' },
+    { key: 'filed_pending',        label: '📋 Filed — Pending',       count: filedPending.length,       col: '#e65100' },
+    { key: 'declined',             label: '🚫 Declined',              count: declinedClaims.length,     col: '#b71c1c' },
   ];
   let upsView = window._upsView || 'all';
   window._upsView = upsView;
@@ -4332,16 +4340,18 @@ function renderUPSClaimsTab(data, lastUpdated) {
     </button>`;
   }).join('');
 
-  const viewDisp = upsView === 'amount_received' ? amountReceived
-                 : upsView === 'filed_pending'   ? filedPending
-                 : upsView === 'declined'        ? declinedClaims
+  const viewDisp = upsView === 'settled'              ? settledClaims
+                 : upsView === 'approved_not_settled' ? approvedNotSettled
+                 : upsView === 'filed_pending'        ? filedPending
+                 : upsView === 'declined'             ? declinedClaims
                  : claims;
 
   // ── Table ──────────────────────────────────────────────────────────
   const stateTag = s => {
-    if (s === 'amount_received') return '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">✅ Received</span>';
-    if (s === 'filed_pending')   return '<span style="background:#fff8e1;color:#e65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🟡 Pending</span>';
-    if (s === 'declined')        return '<span style="background:#fce4ec;color:#b71c1c;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🚫 Declined</span>';
+    if (s === 'settled')              return '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">✅ Settled</span>';
+    if (s === 'approved_not_settled') return '<span style="background:#fff8e1;color:#f57f17;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🟡 Approved</span>';
+    if (s === 'filed_pending')        return '<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">📋 Filed</span>';
+    if (s === 'declined')             return '<span style="background:#fce4ec;color:#b71c1c;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🚫 Declined</span>';
     return '<span style="background:#ffebee;color:#c62828;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">🔴 Not Filed</span>';
   };
 
@@ -5282,10 +5292,12 @@ function renderDashboard(data, lastUpdated) {
       const summ   = ups.summary || {};
       const claims = ups.claims  || [];
       if (!claims.length && !summ.total_awbs) return '';
-      const amtRcvd   = claims.filter(c => c.state === 'amount_received');
-      const filedPend = claims.filter(c => c.state === 'filed_pending');
-      const totAmt    = amtRcvd.reduce((s,c) => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
-      const fmtInr    = n => '₹' + n.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const settledCl  = claims.filter(c => c.state === 'settled');
+      const approvedCl = claims.filter(c => c.state === 'approved_not_settled');
+      const filedPend  = claims.filter(c => c.state === 'filed_pending');
+      const fmtInr     = n => '₹' + n.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const totSettled  = settledCl.reduce((s,c)  => { const v=parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
+      const totApproved = approvedCl.reduce((s,c) => { const v=parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return s+(isNaN(v)?0:v); }, 0);
       return `
       <div style="padding:0 20px 10px">
         <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
@@ -5293,21 +5305,26 @@ function renderDashboard(data, lastUpdated) {
           <span style="font-weight:400;color:#bbb;font-size:10px">— ${summ.total_awbs||0} total lost AWBs</span>
           <a onclick="switchTab('ups_claims')" style="margin-left:auto;font-size:10px;color:var(--primary);cursor:pointer;font-weight:600;text-decoration:none">View All →</a>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
           <div style="background:#fff5f5;border-radius:10px;padding:14px;border:1px solid #ffcdd2;border-left:4px solid #c62828">
-            <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔴 Claim Form Awaited</div>
+            <div style="font-size:10px;font-weight:700;color:#c62828;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔴 Form Awaited</div>
             <div style="font-size:28px;font-weight:800;color:#c62828;line-height:1">${summ.not_filed||0}</div>
-            <div style="font-size:11px;color:#888;margin-top:4px">AWBs — waiting on UPS to send form</div>
+            <div style="font-size:11px;color:#888;margin-top:4px">AWBs — form not received</div>
           </div>
           <div style="background:#fffbf0;border-radius:10px;padding:14px;border:1px solid #ffe0b2;border-left:4px solid #e65100">
-            <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🟡 Form Received — Pending Pay</div>
+            <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📋 Filed — Pending</div>
             <div style="font-size:28px;font-weight:800;color:#e65100;line-height:1">${filedPend.length}</div>
-            <div style="font-size:11px;color:#888;margin-top:4px">Submitted to UPS · awaiting payment</div>
+            <div style="font-size:11px;color:#888;margin-top:4px">Form received · awaiting approval</div>
+          </div>
+          <div style="background:#fff8e1;border-radius:10px;padding:14px;border:1px solid #ffe082;border-left:4px solid #f9a825">
+            <div style="font-size:10px;font-weight:700;color:#f57f17;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🟡 Approved — Pending UTR</div>
+            <div style="font-size:28px;font-weight:800;color:#f57f17;line-height:1">${approvedCl.length}</div>
+            <div style="font-size:12px;font-weight:700;color:#f57f17;margin-top:4px">${fmtInr(totApproved)}</div>
           </div>
           <div style="background:#f0fdf4;border-radius:10px;padding:14px;border:1px solid #c8e6c9;border-left:4px solid #2e7d32">
-            <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Amount Received</div>
-            <div style="font-size:28px;font-weight:800;color:#2e7d32;line-height:1">${amtRcvd.length} <span style="font-size:13px;font-weight:500;color:#888">AWBs</span></div>
-            <div style="font-size:14px;font-weight:700;color:#2e7d32;margin-top:4px">${fmtInr(totAmt)}</div>
+            <div style="font-size:10px;font-weight:700;color:#2e7d32;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Settled — UTR Rcvd</div>
+            <div style="font-size:28px;font-weight:800;color:#2e7d32;line-height:1">${settledCl.length}</div>
+            <div style="font-size:12px;font-weight:700;color:#2e7d32;margin-top:4px">${fmtInr(totSettled)}</div>
           </div>
         </div>
       </div>`;

@@ -471,12 +471,19 @@ def get_ups_claims_data(creds, sheet_id):
             remark        = str(padded[7]).strip()
 
             remark_lower = remark.lower()
-            # Determine state — declined check runs FIRST regardless of amount column
+            # Determine state — priority order is critical
+            # 1. Declined first (remark is definitive, regardless of claim_amount)
+            # 2. Settled = claim_amount AND UTR (SCBLH prefix) present in remark
+            # 3. Approved-not-settled = claim_amount BUT no UTR received yet
+            # 4. Filed pending = form received, no amount yet
+            # 5. Not filed
             if 'claim declined' in remark_lower or \
                ('package deliver' in remark_lower and 'ups' in remark_lower):
                 state = 'declined'
+            elif claim_amount and 'scblh' in remark_lower:
+                state = 'settled'               # UTR in remark = money transferred
             elif claim_amount:
-                state = 'amount_received'
+                state = 'approved_not_settled'  # approved but awaiting bank credit
             elif form_received:
                 state = 'filed_pending'
             else:
@@ -494,20 +501,22 @@ def get_ups_claims_data(creds, sheet_id):
                 'state':         state,
             })
 
-    amount_received_count = sum(1 for c in claims if c['state'] == 'amount_received')
-    filed_pending_count   = sum(1 for c in claims if c['state'] == 'filed_pending')
-    declined_count        = sum(1 for c in claims if c['state'] == 'declined')
+    settled_count              = sum(1 for c in claims if c['state'] == 'settled')
+    approved_not_settled_count = sum(1 for c in claims if c['state'] == 'approved_not_settled')
+    filed_pending_count        = sum(1 for c in claims if c['state'] == 'filed_pending')
+    declined_count             = sum(1 for c in claims if c['state'] == 'declined')
 
     return {
         'summary': {
-            'total_awbs':            total_awbs,
-            'claim_filed':           claim_filed,
-            'not_filed':             not_filed,
-            'false_tracking_count':  false_tracking_count,
-            'false_tracking_awbs':   false_tracking_awbs,
-            'amount_received_count': amount_received_count,
-            'filed_pending_count':   filed_pending_count,
-            'declined_count':        declined_count,
+            'total_awbs':                  total_awbs,
+            'claim_filed':                 claim_filed,
+            'not_filed':                   not_filed,
+            'false_tracking_count':        false_tracking_count,
+            'false_tracking_awbs':         false_tracking_awbs,
+            'settled_count':               settled_count,
+            'approved_not_settled_count':  approved_not_settled_count,
+            'filed_pending_count':         filed_pending_count,
+            'declined_count':              declined_count,
         },
         'claims': claims,
     }
