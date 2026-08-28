@@ -1166,6 +1166,22 @@ function renderDashboardOverview(data, lastUpdated) {
     }
     // rows matching none of the above (IBR/WRO etc.) excluded from table
   });
+
+  // ── Hardcoded Jan/Feb/Mar — source: Inward_Claims_Recon_Jan_May_2026_v2.xlsx ──
+  // These months are fully settled; verified numbers override live-sheet values.
+  const IUS_HIST = {
+    'January':  { rec: 886.85,   prog: 2.96,    pend: 0 },
+    'February': { rec: 2127.78,  prog: 1099.02, pend: 0 },
+    'March':    { rec: 2014.10,  prog: 63.82,   pend: 0 },
+  };
+  Object.entries(IUS_HIST).forEach(([m, v]) => {
+    cbAgg[m] = v;
+    if (!cbMths.includes(m)) cbMths.push(m);
+    // Clear drill-down detail for hardcoded months (no row-level data here)
+    window._cbDetail[m] = { rec: [], prog: [], pend: [] };
+  });
+  cbMths.sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
+
   const cbTotRec  = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).rec  ||0), 0);
   const cbTotProg = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).prog ||0), 0);
   const cbTotPend = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).pend ||0), 0);
