@@ -1410,46 +1410,80 @@ function renderDashboardOverview(data, lastUpdated) {
     ? 'background:#1b3a2d;color:#fff;border-color:#1b3a2d;box-shadow:0 2px 6px #1b3a2d44'
     : 'background:#fff;color:#555;border-color:#dee2e6';
 
-  // ── UPS monthly settlement (India→US view only) ─────────────────────────
+  // ── UPS Claims: bucket × month table (Dashboard India→US view) ──────────
   const _upsD    = (data.ups_claims) || {};
-  const _upsCl   = (_upsD.claims || []).filter(c => c.state === 'settled');
-  const _upsMthA = {}, _upsMthList = [];
-  _upsCl.forEach(c => {
-    const d = _parseUpsDate(c.settled_date); if (!d) return;
-    const key = ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()] + ' ' + d.getFullYear();
-    if (!_upsMthA[key]) { _upsMthA[key]={count:0,amt:0}; _upsMthList.push({key,sort:d.getFullYear()*12+d.getMonth()}); }
-    const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,''));
-    _upsMthA[key].count++; _upsMthA[key].amt += isNaN(v)?0:v;
+  const _upsAll  = _upsD.claims || [];
+  const _UMO     = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const _upsBkt  = {};   // mthKey → {sort, filed, approved:{c,a}, settled:{c,a}, declined}
+  const _upsBKs  = [];   // sorted month keys
+  const _upsGD   = c => {
+    if (c.state === 'settled')              return _parseUpsDate(c.settled_date);
+    if (c.state === 'approved_not_settled') return _parseUpsDate(c.approved_date) || _parseUpsDate(c.form_received);
+    return _parseUpsDate(c.form_received);
+  };
+  _upsAll.forEach(c => {
+    if (c.state === 'not_filed') return;
+    const d = _upsGD(c); if (!d) return;
+    const key = _UMO[d.getMonth()] + ' ' + d.getFullYear(), sort = d.getFullYear()*12+d.getMonth();
+    if (!_upsBkt[key]) { _upsBkt[key]={sort,filed:0,approved:{c:0,a:0},settled:{c:0,a:0},declined:0}; _upsBKs.push({key,sort}); }
+    const v=parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')), amt=isNaN(v)?0:v;
+    if      (c.state==='filed_pending')        { _upsBkt[key].filed++; }
+    else if (c.state==='approved_not_settled') { _upsBkt[key].approved.c++; _upsBkt[key].approved.a+=amt; }
+    else if (c.state==='settled')              { _upsBkt[key].settled.c++;  _upsBkt[key].settled.a +=amt; }
+    else if (c.state==='declined')             { _upsBkt[key].declined++; }
   });
-  _upsMthList.sort((a,b)=>a.sort-b.sort);
-  const _upsMthTot = _upsMthList.reduce((s,m)=>s+_upsMthA[m.key].amt,0);
-  const upsIUSTbl = _dashView==='india_us' && _upsMthList.length>0 ? `
-  <div style="background:#fff;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px">
-    <div style="padding:11px 16px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">
-      <div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.6px">
-        <i class="fas fa-shipping-fast" style="color:#1a237e"></i>&nbsp; UPS Claims — Monthly Settlement Received
+  _upsBKs.sort((a,b)=>a.sort-b.sort);
+  // Grand totals (match KPI cards on UPS tab)
+  const _upsNF     = _upsAll.filter(c=>c.state==='not_filed').length;
+  const _upsFld    = _upsAll.filter(c=>c.state==='filed_pending').length;
+  const _upsAppAll = _upsAll.filter(c=>c.state==='approved_not_settled');
+  const _upsAppAmt = _upsAppAll.reduce((s,c)=>{const v=parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,''));return s+(isNaN(v)?0:v);},0);
+  const _upsStAll  = _upsAll.filter(c=>c.state==='settled');
+  const _upsStAmt  = _upsStAll.reduce((s,c)=>{const v=parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,''));return s+(isNaN(v)?0:v);},0);
+  const _upsDecl   = _upsAll.filter(c=>c.state==='declined').length;
+  const _fmtI      = n=>'₹'+n.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const upsIUSTbl  = _dashView==='india_us' && _upsAll.length>0 ? `
+  <div style="background:#fff;border:1px solid #e0e0e0;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07);margin-bottom:16px">
+    <div style="padding:12px 18px;background:linear-gradient(135deg,#1a237e,#283593);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px;font-weight:700;color:#fff;letter-spacing:.4px;display:flex;align-items:center;gap:8px">
+        <i class="fas fa-shipping-fast"></i> UPS Claims — Bucket × Month
       </div>
-      <a onclick="switchTab('ups_claims')" style="font-size:11px;color:#1a237e;cursor:pointer;font-weight:600;text-decoration:none">View all UPS Claims →</a>
+      <a onclick="switchTab('ups_claims')" style="font-size:11px;color:rgba(255,255,255,.85);cursor:pointer;font-weight:600;text-decoration:none;background:rgba(255,255,255,.15);padding:4px 13px;border-radius:20px">Full Detail →</a>
     </div>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#1a237e">
-          <th style="padding:8px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:160px">Month (Settled)</th>
-          <th style="padding:8px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">AWBs</th>
-          <th style="padding:8px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Amount Received (₹)</th>
+        <thead><tr style="background:#f5f6fa;border-bottom:2px solid #e8eaf6">
+          <th style="padding:9px 16px;font-size:11px;font-weight:700;color:#555;text-align:left;white-space:nowrap">Month</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#c62828;text-align:center;white-space:nowrap">🔴 Form Awaited</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#e65100;text-align:center;white-space:nowrap">📋 Filed</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#f57f17;text-align:center;white-space:nowrap">🟡 Approved (₹)</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#2e7d32;text-align:right;white-space:nowrap">✅ Settled (₹)</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#b71c1c;text-align:center;white-space:nowrap">🚫 Declined</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#555;text-align:center;white-space:nowrap">Total</th>
         </tr></thead>
         <tbody>
-          ${_upsMthList.map((m,i)=>`
-          <tr style="background:${i%2===0?'#fff':'#f9fafb'}">
-            <td style="padding:8px 16px;font-weight:600;color:#333;border-bottom:1px solid #f0f0f0">${m.key}</td>
-            <td style="padding:8px 14px;text-align:center;color:#555;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${_upsMthA[m.key].count}</td>
-            <td style="padding:8px 16px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">₹${_upsMthA[m.key].amt.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-          </tr>`).join('')}
+          ${_upsBKs.map((m,i)=>{
+            const r=_upsBkt[m.key], tot=r.filed+r.approved.c+r.settled.c+r.declined;
+            const bg=i%2===0?'#fff':'#fafbff';
+            return `<tr style="background:${bg}" onmouseover="this.style.background='#f0f2ff'" onmouseout="this.style.background='${bg}'">
+              <td style="padding:9px 16px;font-weight:600;color:#333;border-bottom:1px solid #f0f0f0;white-space:nowrap">${m.key}</td>
+              <td style="padding:9px 13px;text-align:center;border-bottom:1px solid #f0f0f0"><span style="color:#e0e0e0;font-size:11px">—</span></td>
+              <td style="padding:9px 13px;text-align:center;border-bottom:1px solid #f0f0f0;color:#e65100;font-weight:700;font-variant-numeric:tabular-nums">${r.filed>0?r.filed:'<span style="color:#e0e0e0">—</span>'}</td>
+              <td style="padding:9px 13px;text-align:center;border-bottom:1px solid #f0f0f0;font-variant-numeric:tabular-nums">${r.approved.c>0?`<span style="color:#f57f17;font-weight:700">${r.approved.c}</span><br><span style="font-size:10px;color:#f57f17">${_fmtI(r.approved.a)}</span>`:'<span style="color:#e0e0e0">—</span>'}</td>
+              <td style="padding:9px 13px;text-align:right;border-bottom:1px solid #f0f0f0;font-variant-numeric:tabular-nums">${r.settled.c>0?`<span style="color:#2e7d32;font-weight:700">${r.settled.c} AWBs</span><br><span style="font-size:10px;color:#2e7d32">${_fmtI(r.settled.a)}</span>`:'<span style="color:#e0e0e0">—</span>'}</td>
+              <td style="padding:9px 13px;text-align:center;border-bottom:1px solid #f0f0f0;color:#b71c1c;font-weight:700;font-variant-numeric:tabular-nums">${r.declined>0?r.declined:'<span style="color:#e0e0e0">—</span>'}</td>
+              <td style="padding:9px 13px;text-align:center;border-bottom:1px solid #f0f0f0;font-weight:700;color:#555;font-variant-numeric:tabular-nums">${tot}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
         <tfoot><tr style="background:#1a237e">
-          <td style="padding:8px 16px;font-weight:700;color:#fff;font-size:12px">TOTAL</td>
-          <td style="padding:8px 14px;text-align:center;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${_upsCl.length}</td>
-          <td style="padding:8px 16px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">₹${_upsMthTot.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">TOTAL</td>
+          <td style="padding:10px 13px;text-align:center;font-weight:700;color:#ef9a9a;font-variant-numeric:tabular-nums">${_upsNF}</td>
+          <td style="padding:10px 13px;text-align:center;font-weight:700;color:#ffcc80;font-variant-numeric:tabular-nums">${_upsFld}</td>
+          <td style="padding:10px 13px;text-align:center;font-variant-numeric:tabular-nums"><span style="font-weight:700;color:#ffe082">${_upsAppAll.length}</span><br><span style="font-size:10px;color:#ffe082">${_fmtI(_upsAppAmt)}</span></td>
+          <td style="padding:10px 13px;text-align:right;font-variant-numeric:tabular-nums"><span style="font-weight:700;color:#a5d6a7">${_upsStAll.length} AWBs</span><br><span style="font-size:10px;color:#a5d6a7">${_fmtI(_upsStAmt)}</span></td>
+          <td style="padding:10px 13px;text-align:center;font-weight:700;color:#ef9a9a;font-variant-numeric:tabular-nums">${_upsDecl}</td>
+          <td style="padding:10px 13px;text-align:center;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${_upsAll.length}</td>
         </tr></tfoot>
       </table>
     </div>
