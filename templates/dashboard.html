@@ -1064,6 +1064,21 @@ function renderDashboardOverview(data, lastUpdated) {
   const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const sortedMonths = months.slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
 
+  // ── Hardcode Jan/Feb/Mar into monthly data (India→US charts) ─────────────
+  // Source: Inward_Claims_Recon_Jan_May_2026_v2.xlsx
+  if (_dashView === 'india_us') {
+    const _IUS_HIST_M = {
+      'January':  { closed:6,  intransit:0, short_grn_pending:0, short_grn_progress:1,  expected:772,  actual:887  },
+      'February': { closed:4,  intransit:0, short_grn_pending:0, short_grn_progress:12, expected:6384, actual:5175 },
+      'March':    { closed:17, intransit:0, short_grn_pending:0, short_grn_progress:16, expected:737,  actual:3636 },
+    };
+    ['January','February','March'].forEach(m => {
+      monthly[m] = _IUS_HIST_M[m];                                   // override / add
+      if (!sortedMonths.includes(m)) sortedMonths.push(m);
+    });
+    sortedMonths.sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
+  }
+
   // ── Compute totals ──────────────────────────────────────────────────────
   let totalShipments, totalExpected, totalRecovered, buckets, actKey, bkKeys, bkLabels;
 
@@ -1233,6 +1248,21 @@ function renderDashboardOverview(data, lastUpdated) {
     }
   });
   cbChArr.sort();
+  // ── Add Jan/Feb/Mar historical totals per channel (India→US) ─────────────
+  {
+    const _CH_HIST_TOT = {
+      'Amazon':  { rec: 2406.70, prog: 145.86, pend: 0 },   // Jan+Feb+Mar combined
+      'Shipbob': { rec: 2622.03, prog: 951.58, pend: 0 },
+      'TikTok':  { rec: 0,       prog: 68.36,  pend: 0 },
+    };
+    Object.entries(_CH_HIST_TOT).forEach(([ch, v]) => {
+      if (!cbChAgg[ch]) { cbChAgg[ch] = {rec:0,prog:0,pend:0}; cbChArr.push(ch); }
+      cbChAgg[ch].rec  += v.rec;
+      cbChAgg[ch].prog += v.prog;
+      cbChAgg[ch].pend += v.pend;
+    });
+    cbChArr.sort();
+  }
   const cbChTotRec  = cbChArr.reduce((s,c)=>s+(cbChAgg[c].rec||0),0);
   const cbChTotProg = cbChArr.reduce((s,c)=>s+(cbChAgg[c].prog||0),0);
   const cbChTotPend = cbChArr.reduce((s,c)=>s+(cbChAgg[c].pend||0),0);
@@ -1273,6 +1303,21 @@ function renderDashboardOverview(data, lastUpdated) {
     else if (subExact==='pending to claim') { cbChMthAgg[ch][m].pend += r.expected||0; }
     else if (sl.includes('raised')||sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('under review')||sl.includes('claim in progress')) { cbChMthAgg[ch][m].prog += r.expected||0; }
   });
+
+  // ── Inject Jan/Feb/Mar into Channel × Month (India→US) ──────────────────
+  {
+    const _IUS_HIST_CH = {
+      'January':  { 'Amazon':{rec:886.85,prog:0,     pend:0}, 'TikTok':{rec:0,prog:2.96,  pend:0} },
+      'February': { 'Amazon':{rec:0,     prog:144.44,pend:0}, 'Shipbob':{rec:2127.78,prog:951.58,pend:0}, 'TikTok':{rec:0,prog:3.00,pend:0} },
+      'March':    { 'Amazon':{rec:1519.85,prog:1.42, pend:0}, 'Shipbob':{rec:494.25, prog:0,     pend:0}, 'TikTok':{rec:0,prog:62.40,pend:0} },
+    };
+    Object.entries(_IUS_HIST_CH).forEach(([m, chData]) => {
+      Object.entries(chData).forEach(([ch, v]) => {
+        if (!cbChMthAgg[ch]) cbChMthAgg[ch] = {};
+        cbChMthAgg[ch][m] = v;
+      });
+    });
+  }
 
   // ── Channel × Month matrix (US→US) ───────────────────────────────────────
   const u2uCbChMthAgg = {};
