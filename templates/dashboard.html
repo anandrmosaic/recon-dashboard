@@ -322,6 +322,86 @@
     }
     .btn-export:hover { background: var(--primary); color: #fff; box-shadow: 0 2px 8px rgba(27,58,45,0.2); }
 
+    /* ─────────────────────────────────────────────────────────────────
+       ANIMATIONS  — professional micro-interactions
+    ───────────────────────────────────────────────────────────────── */
+    @keyframes _fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0);    }
+    }
+    @keyframes _fadePop {
+      0%   { opacity: 0; transform: scale(0.90) translateY(14px); }
+      65%  { transform: scale(1.02) translateY(-2px); }
+      100% { opacity: 1; transform: scale(1)    translateY(0);    }
+    }
+    @keyframes _spin { to { transform: rotate(360deg); } }
+
+    /* Tab-content wrapper entrance (toggled by JS MutationObserver) */
+    #mainContent.tab-enter { animation: _fadeUp 0.30s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+    /* KPI cards — staggered pop-in */
+    .kpi-card {
+      animation: _fadePop 0.40s cubic-bezier(0.22, 1, 0.36, 1) both;
+      will-change: transform, opacity;
+    }
+    .kpi-card:nth-child(1) { animation-delay:  40ms; }
+    .kpi-card:nth-child(2) { animation-delay:  90ms; }
+    .kpi-card:nth-child(3) { animation-delay: 140ms; }
+    .kpi-card:nth-child(4) { animation-delay: 190ms; }
+    .kpi-card:nth-child(5) { animation-delay: 240ms; }
+    .kpi-card:nth-child(6) { animation-delay: 290ms; }
+
+    /* White panels gentle rise */
+    .panel-rise {
+      animation: _fadeUp 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    /* Hover lift on white panels */
+    .hover-lift { transition: transform 0.20s ease, box-shadow 0.20s ease !important; }
+    .hover-lift:hover { transform: translateY(-3px) !important; box-shadow: 0 10px 28px rgba(0,0,0,.10) !important; }
+
+    /* Refresh icon spin while loading */
+    .btn-refresh.refreshing i { animation: _spin 0.75s linear infinite; }
+
+    /* ── Standardise ALL table headers to brand green ──────────────────
+       Overrides any inline background on thead tr so every tab looks
+       consistent — orange/red accent stays only on tfoot (totals row).
+    ────────────────────────────────────────────────────────────────── */
+    #mainContent table thead tr {
+      background: linear-gradient(135deg, #1b3a2d 0%, #2d5a3d 100%) !important;
+    }
+    #mainContent table thead th {
+      color: rgba(255,255,255,0.90) !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+      white-space: nowrap;
+    }
+
+    /* Smooth table-row hover everywhere */
+    #mainContent table tbody tr { transition: background 0.13s ease; }
+
+    /* Sub-tab nav — consistent across Case Health and any future tab */
+    .sub-nav {
+      display: flex; gap: 0; border-bottom: 2px solid var(--border);
+      margin-bottom: 22px; overflow-x: auto;
+    }
+    .sub-nav-btn {
+      padding: 10px 20px; border: none; background: none; cursor: pointer;
+      font-size: 12px; font-family: inherit; white-space: nowrap;
+      border-bottom: 3px solid transparent; margin-bottom: -2px;
+      color: var(--text-muted); font-weight: 500;
+      transition: color 0.16s ease, border-color 0.16s ease;
+    }
+    .sub-nav-btn:hover:not(.active) { color: var(--text); background: var(--surface-2); border-radius: 6px 6px 0 0; }
+    .sub-nav-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+    .sub-nav-badge {
+      display: inline-block; font-size: 11px; border-radius: 10px;
+      padding: 1px 7px; margin-left: 4px;
+      background: var(--surface-3); color: var(--text-muted);
+      transition: background 0.16s, color 0.16s;
+    }
+    .sub-nav-btn.active .sub-nav-badge { background: var(--primary); color: #fff; }
+
     /* ── Discrepancy Tab ── */
     .disc-summary { display: flex; gap: 12px; padding: 16px 24px 0; flex-wrap: wrap; }
     .disc-channel-card {
@@ -1014,6 +1094,64 @@ function switchTab(tab) {
   document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
   applyAndRender();
 }
+
+// ── Professional animation engine ──────────────────────────────────────────
+// Fires on every innerHTML swap inside #mainContent — no changes needed
+// inside individual render functions.
+(function _initAnimations() {
+  let _timer;
+
+  function _runEnter() {
+    const mc = document.getElementById('mainContent');
+    if (!mc) return;
+
+    // 1. Tab-content fade-up entrance
+    mc.classList.remove('tab-enter');
+    void mc.offsetWidth;                   // force reflow to re-trigger
+    mc.classList.add('tab-enter');
+
+    // 2. Staggered KPI card pop-in (reset + replay)
+    mc.querySelectorAll('.kpi-card').forEach((card, i) => {
+      card.style.animation = 'none';
+      void card.offsetWidth;
+      card.style.animation = '';
+      card.style.animationDelay = (40 + i * 52) + 'ms';
+    });
+
+    // 3. Integer count-up on simple .kpi-value nodes
+    mc.querySelectorAll('.kpi-value').forEach((el, idx) => {
+      if (el.children.length > 0) return;            // skip HTML-children (spans)
+      const raw = el.textContent.trim();
+      const m = raw.match(/^([^0-9]*)(\d[\d,]*)([^0-9%.]*)$/);  // integers only
+      if (!m) return;
+      const target = parseInt(m[2].replace(/,/g, ''), 10);
+      if (!target || target < 2) return;
+      const pre = m[1], suf = m[3];
+      el.textContent = pre + '0' + suf;
+      const delay = Math.min(80 + idx * 52, 380);
+      setTimeout(() => {
+        const t0 = performance.now(), dur = 620;
+        (function tick(now) {
+          const p = Math.min((now - t0) / dur, 1);
+          const ease = 1 - Math.pow(1 - p, 3);       // cubic ease-out
+          el.textContent = pre + Math.round(target * ease).toLocaleString() + suf;
+          if (p < 1) requestAnimationFrame(tick);
+        })(performance.now());
+      }, delay);
+    });
+  }
+
+  // Wire up after DOM ready
+  document.addEventListener('DOMContentLoaded', () => {
+    const mc = document.getElementById('mainContent');
+    if (!mc) return;
+    const obs = new MutationObserver(() => {
+      clearTimeout(_timer);
+      _timer = setTimeout(_runEnter, 14);            // debounce rapid mutations
+    });
+    obs.observe(mc, { childList: true });
+  });
+})();
 
 function updateHeroStats(kpis) {
   const heroEl = document.getElementById('heroStats');
@@ -2119,16 +2257,7 @@ function renderCaseHealth(data, lastUpdated) {
     ? `<span style="background:#fff8e1;color:#f57f17;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🟡 Raise Soon</span>`
     : `<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🟢 In Window</span>`;
 
-  // ── Sub-tab nav ───────────────────────────────────────────────────────
-  const stTab = (key, label, count, ac) => {
-    const active = _caseSubView === key;
-    return `<button onclick="_caseSubView='${key}';renderCaseHealth(_rawData,_lastUpdated)"
-      style="padding:10px 20px;border:none;background:none;cursor:pointer;font-size:12px;white-space:nowrap;
-             border-bottom:3px solid ${active?ac:'transparent'};
-             color:${active?ac:'#888'};font-weight:${active?700:500};margin-bottom:-2px;transition:all .15s">
-      ${label}${count!==null?` <span style="font-size:11px;background:${active?ac:'#eee'};color:${active?'#fff':'#888'};border-radius:10px;padding:1px 7px;margin-left:3px">${count}</span>`:''}
-    </button>`;
-  };
+  // (sub-tab nav uses .sub-nav / .sub-nav-btn CSS classes — no JS helper needed)
 
   // ── Aging card factory (generic, takes total param) ───────────────────
   const agCrd = (label, arr, color, tot, amtField='expected') =>
@@ -2161,10 +2290,21 @@ function renderCaseHealth(data, lastUpdated) {
     </div>
 
     <!-- Sub-tab nav -->
-    <div style="display:flex;gap:0;margin-bottom:22px;border-bottom:2px solid #e9ecef;overflow-x:auto">
-      ${stTab('overview',      '🏥 Case Overview', null,          '#1b3a2d')}
-      ${stTab('pending_receipt','⏳ Claim Raised — Pending Receipt', progR.length, '#e65100')}
-      ${stTab('pending_claim', '📋 Pending to Claim', pendR.length, '#c62828')}
+    <div class="sub-nav">
+      <button class="sub-nav-btn${_caseSubView==='overview'?' active':''}"
+        onclick="_caseSubView='overview';renderCaseHealth(_rawData,_lastUpdated)">
+        🏥 Case Overview
+      </button>
+      <button class="sub-nav-btn${_caseSubView==='pending_receipt'?' active':''}"
+        onclick="_caseSubView='pending_receipt';renderCaseHealth(_rawData,_lastUpdated)">
+        ⏳ Claim Raised — Pending Receipt
+        <span class="sub-nav-badge">${progR.length}</span>
+      </button>
+      <button class="sub-nav-btn${_caseSubView==='pending_claim'?' active':''}"
+        onclick="_caseSubView='pending_claim';renderCaseHealth(_rawData,_lastUpdated)">
+        📋 Pending to Claim
+        <span class="sub-nav-badge">${pendR.length}</span>
+      </button>
     </div>
 
   ${_caseSubView === 'overview' ? `
@@ -5996,9 +6136,12 @@ async function loadData() {
 }
 
 async function refreshData() {
+  const btn = document.querySelector('.btn-refresh');
+  if (btn) btn.classList.add('refreshing');
   showToast('Refreshing data...', 'success');
   await fetch('/api/refresh');
   await loadData();
+  if (btn) btn.classList.remove('refreshing');
   showToast('Data refreshed!', 'success');
 }
 
