@@ -1248,7 +1248,7 @@ function renderDashboardOverview(data, lastUpdated) {
   {
     const _CH_HIST_TOT = {
       'Amazon':  { rec: 2406.70, prog: 145.86, pend: 0 },   // Jan+Feb+Mar combined
-      'Shipbob': { rec: 2622.03, prog: 951.58, pend: 0 },
+      'ShipBob': { rec: 2622.03, prog: 951.58, pend: 0 },
       'TikTok':  { rec: 0,       prog: 68.36,  pend: 0 },
     };
     Object.entries(_CH_HIST_TOT).forEach(([ch, v]) => {
@@ -1304,8 +1304,8 @@ function renderDashboardOverview(data, lastUpdated) {
   {
     const _IUS_HIST_CH = {
       'January':  { 'Amazon':{rec:886.85,prog:0,     pend:0}, 'TikTok':{rec:0,prog:2.96,  pend:0} },
-      'February': { 'Amazon':{rec:0,     prog:144.44,pend:0}, 'Shipbob':{rec:2127.78,prog:951.58,pend:0}, 'TikTok':{rec:0,prog:3.00,pend:0} },
-      'March':    { 'Amazon':{rec:1519.85,prog:1.42, pend:0}, 'Shipbob':{rec:494.25, prog:0,     pend:0}, 'TikTok':{rec:0,prog:62.40,pend:0} },
+      'February': { 'Amazon':{rec:0,     prog:144.44,pend:0}, 'ShipBob':{rec:2127.78,prog:951.58,pend:0}, 'TikTok':{rec:0,prog:3.00,pend:0} },
+      'March':    { 'Amazon':{rec:1519.85,prog:1.42, pend:0}, 'ShipBob':{rec:494.25, prog:0,     pend:0}, 'TikTok':{rec:0,prog:62.40,pend:0} },
     };
     Object.entries(_IUS_HIST_CH).forEach(([m, chData]) => {
       Object.entries(chData).forEach(([ch, v]) => {
@@ -4749,7 +4749,7 @@ function renderDiscrepancyTab(data, lastUpdated) {
   // Per-channel counts
   const channelColors = {
     Amazon: { border: '#1565c0', icon: 'blue', fa: 'fa-amazon' },
-    Shipbob: { border: '#2e7d32', icon: 'green', fa: 'fa-box' },
+    ShipBob: { border: '#2e7d32', icon: 'green', fa: 'fa-box' },
     TikTok: { border: '#ad1457', icon: 'pink', fa: 'fa-music' },
     Sky2C: { border: '#6a1b9a', icon: 'purple', fa: 'fa-globe' },
     Other: { border: '#757575', icon: 'grey', fa: 'fa-ellipsis-h' },
@@ -5067,7 +5067,7 @@ function renderDashboard(data, lastUpdated) {
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
 
   const colors = {
-    Amazon: '#2563eb', Shipbob: '#1b3a2d', TikTok: '#c0392b',
+    Amazon: '#2563eb', ShipBob: '#1b3a2d', TikTok: '#c0392b',
     DHL: '#d97706', Freightzen: '#7c3aed', UPS: '#0891b2',
     'Xindus Air': '#b45309', 'Xindus Air + Sea': '#0f766e', 'Channel Freight': '#4d7c0f',
     Sky2C: '#6b7280', Other: '#9e9890'
