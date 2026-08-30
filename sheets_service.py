@@ -196,7 +196,7 @@ def parse_awb_data(values, remarks=None, data_since=None):
         lost_stock      = safe_float(row[lost_stock_col] if len(row) > lost_stock_col else 0)
         expected        = safe_float(row[expected_col]   if len(row) > expected_col   else 0)
         actual          = safe_float(row[actual_col]     if len(row) > actual_col     else 0)
-        channel         = str(row[channel_col]).strip()      if len(row) > channel_col      else ''
+        channel         = _norm_channel(str(row[channel_col]).strip()) if len(row) > channel_col else ''
         transporter     = str(row[transporter_col]).strip()  if len(row) > transporter_col  else ''
         platform_label  = str(row[platform_col]).strip()     if len(row) > platform_col     else ''
         # Build full AWB→transporter map — normalize newlines/spaces for reliable matching
@@ -383,7 +383,7 @@ def parse_remarks(values, start):
             continue
         cell = str(row[0]).strip()
         if cell.lower() in ['tiktok', 'shipbob', 'amazon']:
-            current_channel = 'TikTok' if cell.lower() == 'tiktok' else cell
+            current_channel = _norm_channel(cell)
             remarks.setdefault(current_channel, {})
         elif cell in months:
             current_month = cell
