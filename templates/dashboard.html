@@ -740,11 +740,11 @@ function showCBDrill(month, bucket) {
       </div>
       <div style="overflow-y:auto;flex:1">
         <table style="width:100%;border-collapse:collapse">
-          <thead><tr style="background:#f5f7fa;position:sticky;top:0;z-index:1">
-            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Sheet Row</th>
-            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px">IBR / Label</th>
-            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px">Sub Remark</th>
-            <th style="padding:9px 14px;text-align:right;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.6px">${amtLabel}</th>
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d);position:sticky;top:0;z-index:1">
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Sheet Row</th>
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">IBR / Label</th>
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">Sub Remark</th>
+            <th style="padding:9px 14px;text-align:right;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">${amtLabel}</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
           <tfoot><tr style="background:#1b3a2d">
@@ -1371,8 +1371,12 @@ function renderDashboardOverview(data, lastUpdated) {
   const u2uCbGrand   = u2uCbTotRec + u2uCbTotProg + u2uCbTotPend;
 
   // ── Claims Bucket by CHANNEL (India→US) ──────────────────────────────────
+  // Jan/Feb/Mar are covered by _CH_HIST_TOT (added below); skip them in the
+  // live loop to avoid double-counting (same pattern as IUS_HIST overwriting cbAgg).
+  const _IUS_HIST_MONTHS = new Set(['January','February','March']);
   const cbChAgg = {}; const cbChArr = [];
   iusCBRows.forEach(r => {
+    if (_IUS_HIST_MONTHS.has(r.month)) return;          // covered by hardcoded block
     const ch = r.channel; if (!ch) return;
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
     if (!cbChAgg[ch]) { cbChAgg[ch]={rec:0,prog:0,pend:0}; cbChArr.push(ch); }
@@ -1590,14 +1594,14 @@ function renderDashboardOverview(data, lastUpdated) {
     </div>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#f5f6fa;border-bottom:2px solid #e8eaf6">
-          <th style="padding:9px 16px;font-size:11px;font-weight:700;color:#555;text-align:left;white-space:nowrap">Month</th>
-          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#c62828;text-align:center;white-space:nowrap">🔴 Form Awaited</th>
-          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#e65100;text-align:center;white-space:nowrap">📋 Filed</th>
-          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#f57f17;text-align:center;white-space:nowrap">🟡 Approved (₹)</th>
-          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#2e7d32;text-align:right;white-space:nowrap">✅ Settled (₹)</th>
-          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#b71c1c;text-align:center;white-space:nowrap">🚫 Declined</th>
-          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:#555;text-align:center;white-space:nowrap">Total</th>
+        <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
+          <th style="padding:9px 16px;font-size:11px;font-weight:700;color:rgba(255,255,255,.90);text-align:left;white-space:nowrap">Month</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:rgba(255,255,255,.90);text-align:center;white-space:nowrap">🔴 Form Awaited</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:rgba(255,255,255,.90);text-align:center;white-space:nowrap">📋 Filed</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:rgba(255,255,255,.90);text-align:center;white-space:nowrap">🟡 Approved (₹)</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:rgba(255,255,255,.90);text-align:right;white-space:nowrap">✅ Settled (₹)</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:rgba(255,255,255,.90);text-align:center;white-space:nowrap">🚫 Declined</th>
+          <th style="padding:9px 13px;font-size:11px;font-weight:700;color:rgba(255,255,255,.90);text-align:center;white-space:nowrap">Total</th>
         </tr></thead>
         <tbody>
           ${_upsBKs.map((m,i)=>{
@@ -1837,7 +1841,7 @@ function renderDashboardOverview(data, lastUpdated) {
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:linear-gradient(135deg,#4a148c,#6a1b9a)">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
             <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:220px">Claims Bucket</th>
             ${u2uCbMths.map(m=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`).join('')}
             <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
@@ -1884,7 +1888,7 @@ function renderDashboardOverview(data, lastUpdated) {
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:linear-gradient(135deg,#4a148c,#6a1b9a)">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
             <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:180px">Bucket / Month</th>
             ${u2uCbChArr.map(c=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${c}</th>`).join('')}
             <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
@@ -2451,7 +2455,7 @@ function renderCaseHealth(data, lastUpdated) {
         <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-calendar-alt','By Shipment Month')}</div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:#e65100">
+            <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
               <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Expected $</th>
@@ -2485,7 +2489,7 @@ function renderCaseHealth(data, lastUpdated) {
         <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-layer-group','By Channel')}</div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:#e65100">
+            <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>
               <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Expected $</th>
@@ -2511,7 +2515,7 @@ function renderCaseHealth(data, lastUpdated) {
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#e65100">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
             <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
             <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Label / AWB</th>
             ${isIUS?`<th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>`:''}
@@ -2586,7 +2590,7 @@ function renderCaseHealth(data, lastUpdated) {
         <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-calendar-alt','By Shipment Month — Oldest = Most Urgent')}</div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:#c62828">
+            <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
               <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Potential $</th>
@@ -2620,7 +2624,7 @@ function renderCaseHealth(data, lastUpdated) {
         <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-layer-group','By Channel')}</div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:#c62828">
+            <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>
               <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
               <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Potential $</th>
@@ -2646,7 +2650,7 @@ function renderCaseHealth(data, lastUpdated) {
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#c62828">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
             <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
             <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Label / AWB</th>
             ${isIUS?`<th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>`:''}
@@ -3209,7 +3213,7 @@ function renderWeeklyReview(data, lastUpdated) {
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
-          <thead><tr style="background:linear-gradient(135deg,#4a148c,#6a1b9a)">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
             <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Month</th>
             <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Label / IBR</th>
             <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Raised On</th>
@@ -3403,7 +3407,7 @@ function renderUS2USTab(data, lastUpdated) {
           '<span style="font-size:10px;color:var(--muted)">' + displayMonths.length + ' of ' + sortedMonths.length + ' months · ' + rows.length + ' total rows</span>' +
         '</div>' +
         '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-          '<thead><tr style="background:linear-gradient(135deg,#1a2e4a,#1565c0)">' +
+          '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
             '<th style="padding:7px 12px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:left">Month</th>' +
             '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">✅ Closed</th>' +
             '<th style="padding:7px 8px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center">🚚 Transit</th>' +
@@ -3487,7 +3491,7 @@ function renderUS2USTab(data, lastUpdated) {
         '<span style="font-size:10px;color:rgba(255,255,255,.6)">' + closedRows.length + ' cases · ' + subEntries.length + ' resolution types</span>' +
       '</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:rgba(27,94,32,.07)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 12px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:left">Resolution Type</th>' +
           '<th style="padding:7px 12px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:center">Cases</th>' +
           '<th style="padding:7px 12px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:right">Recovered</th>' +
@@ -3564,7 +3568,7 @@ function renderUS2USTab(data, lastUpdated) {
       recoverySourceStrip +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + closedRows.length + ' rows · full detail table below</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:left">Month</th>' +
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:left">From Label</th>' +
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:600;text-align:left">To Label</th>' +
@@ -3613,7 +3617,7 @@ function renderUS2USTab(data, lastUpdated) {
       u2FilterBar('pending') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + pendingRows.length + ' rows</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#b71c1c,#c62828)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">To Label</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
@@ -3665,7 +3669,7 @@ function renderUS2USTab(data, lastUpdated) {
       u2FilterBar('progress') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + progressSorted.length + ' rows · sorted oldest case first</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#bf360c,#e65100)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">To Label</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
@@ -3702,7 +3706,7 @@ function renderUS2USTab(data, lastUpdated) {
       u2FilterBar('intransit') +
       '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + transitRows.length + ' rows · monitoring only, no financial claim yet</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#0d47a1,#1565c0)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">From Label</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">To Label</th>' +
@@ -4227,7 +4231,7 @@ function renderIndiaUSTab(data, lastUpdated) {
       colGuide +
       totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="Month the shipment was originally sent from India">Month</th>' +
           '<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;cursor:help" title="IBR = Inward Box Report / WRO = Warehouse Receiving Order — unique shipment reference ID">IBR / Label</th>' +
           '<th style="padding:6px 8px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;min-width:130px">' +
@@ -4363,7 +4367,7 @@ function renderIndiaUSTab(data, lastUpdated) {
       colGuide +
       totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#b71c1c,#c62828)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
@@ -4483,7 +4487,7 @@ function renderIndiaUSTab(data, lastUpdated) {
       colGuide +
       totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#bf360c,#e65100)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Status</th>' +
@@ -4587,7 +4591,7 @@ function renderIndiaUSTab(data, lastUpdated) {
       colGuide +
       totalsStrip +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#0d47a1,#1565c0)">' +
+        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">IBR / Label</th>' +
           '<th style="padding:7px 9px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">AWB</th>' +
@@ -4739,7 +4743,7 @@ function renderUPSClaimsTab(data, lastUpdated) {
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#1a237e">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
             <th style="padding:9px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:160px">Month</th>
             <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">AWBs Settled</th>
             <th style="padding:9px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Amount Received (₹)</th>
@@ -4858,7 +4862,7 @@ function renderUPSClaimsTab(data, lastUpdated) {
         </div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:#1a237e;color:#fff">
+            <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
               <th style="padding:8px 10px;text-align:left;white-space:nowrap">Parent AWB</th>
               <th style="padding:8px 10px;text-align:left;white-space:nowrap">Lost AWB</th>
               <th style="padding:8px 10px;text-align:center">Lost Qty</th>
@@ -5794,7 +5798,7 @@ function renderDashboard(data, lastUpdated) {
           </div>
           <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead><tr style="background:#1a237e">
+              <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
                 <th style="padding:9px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Month (Settled)</th>
                 <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">AWBs</th>
                 <th style="padding:9px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Amount Received (₹)</th>
