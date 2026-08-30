@@ -557,6 +557,7 @@ let _activeTab = 'dashboard';
 let chartInstances = {};
 let _dashView    = 'india_us';
 let _caseView    = 'india_us';
+let _caseSubView = 'overview'; // 'overview' | 'pending_receipt' | 'pending_claim'
 let _weeklyView  = 'india_us';
 let _weekIdx     = 0;
 let _weekOptions = [];
@@ -1954,6 +1955,7 @@ function renderCaseHealth(data, lastUpdated) {
   const sortedMonths = months.slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
   const closeKey = _caseView === 'india_us' ? 'case_close_date' : 'case_resolve_date';
   const today = new Date();
+  const isIUS = _caseView === 'india_us';
 
   // ── Case metrics ──────────────────────────────────────────────────────
   const casedRows   = rows.filter(r => r.case_raise_date && r.case_raise_date.trim());
@@ -1971,7 +1973,7 @@ function renderCaseHealth(data, lastUpdated) {
   const openAmt    = openCases.reduce((s,r) => s+(r.expected||0), 0);
   const closedAmt  = closedCases.reduce((s,r) => s+(r.actual||r.recovered||0), 0);
 
-  // ── Aging open cases ──────────────────────────────────────────────────
+  // ── Aging open cases (Overview) ───────────────────────────────────────
   const aging = { '0-30':[], '31-60':[], '61-90':[], '90+':[] };
   openCases.forEach(r => {
     const rd = _parseDate(r.case_raise_date);
@@ -1983,7 +1985,7 @@ function renderCaseHealth(data, lastUpdated) {
     else                  aging['90+'].push({...r,days});
   });
 
-  // ── Monthly case trend ────────────────────────────────────────────────
+  // ── Monthly case trend (Overview) ─────────────────────────────────────
   const mOpened = {}, mClosed = {};
   casedRows.forEach(r => {
     if (!r.month) return;
@@ -1991,199 +1993,579 @@ function renderCaseHealth(data, lastUpdated) {
     if (r[closeKey] && r[closeKey].trim()) mClosed[r.month] = (mClosed[r.month]||0) + 1;
   });
 
-  // ── Top open cases (oldest first) ────────────────────────────────────
+  // ── Top open cases (Overview, oldest first) ────────────────────────────
   const topOpen = openCases
     .map(r => { const rd = _parseDate(r.case_raise_date); return {...r, days: rd ? Math.round((today-rd)/86400000) : 0}; })
     .filter(r => r.days >= 0)
     .sort((a,b) => b.days - a.days)
     .slice(0, 20);
 
-  // ── Aging card builder ────────────────────────────────────────────────
-  const agTot = openCases.length || 1;
-  const agCard = (label, arr, color, bg) => `
-    <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e9ecef;border-top:4px solid ${color};box-shadow:0 2px 8px rgba(0,0,0,.04)">
-      <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">${label}</div>
-      <div style="font-size:36px;font-weight:800;color:${color};line-height:1;font-family:'Plus Jakarta Sans',sans-serif">${arr.length}</div>
-      <div style="font-size:10px;color:#888;margin-top:5px">${((arr.length/agTot)*100).toFixed(1)}% of open</div>
-      <div style="margin-top:8px;background:#f0f0f0;border-radius:4px;height:4px;overflow:hidden">
-        <div style="height:100%;background:${color};width:${((arr.length/agTot)*100).toFixed(1)}%"></div>
-      </div>
-      <div style="font-size:10px;color:#888;margin-top:6px;font-weight:600">${formatUSD(arr.reduce((s,r)=>s+(r.expected||0),0))} at risk</div>
-    </div>`;
+  // ══════════════════════════════════════════════════════════════════════
+  // PROG ROWS — Claim Raised but Not Yet Received
+  // India→US: openCases (have raise date, no close date)
+  // US→US:    rows with bucket_key === 'in_progress'
+  // ══════════════════════════════════════════════════════════════════════
+  const progR = isIUS
+    ? openCases
+    : rows.filter(r => r.bucket_key === 'in_progress');
 
-  // ── Open case table rows ──────────────────────────────────────────────
-  const openRows = topOpen.map((r,i) => {
-    const ag = r.days<=30?'#2e7d32':r.days<=60?'#e65100':r.days<=90?'#c62828':'#7b1fa2';
-    return `<tr style="${i%2===0?'background:#fafafa':''}">
-      <td style="padding:8px 12px;font-size:11px;color:#555">${r.month||'—'}</td>
-      <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#1b3a2d">${r.label||r.from_label||'—'}</td>
-      <td style="padding:8px 12px;font-size:11px;color:#888">${r.case_raise_date||'—'}</td>
-      <td style="padding:8px 12px;text-align:center">
-        <span style="background:${ag}18;color:${ag};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap">${r.days}d</span>
-      </td>
-      <td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;color:#c62828">${formatUSD(r.expected||0)}</td>
-      <td style="padding:8px 12px;font-size:10px;color:#777;max-width:180px;word-break:break-word">${r.sub_remark||r.status||r.subbucket||'—'}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa">No open cases with raise date</td></tr>`;
+  const progAmt = progR.reduce((s,r) => s+(r.expected||r.pending||0), 0);
 
+  // Aging for prog (use case_raise_date; fallback to month start for US→US)
+  const _mthStart = m => {
+    if (!m) return null;
+    const p = m.split(' '), mi = MO.indexOf(p[0]), yr = p[1] ? parseInt(p[1]) : 2026;
+    return mi >= 0 ? new Date(yr, mi, 1) : null;
+  };
+  const progAging = { '0-30':[], '31-60':[], '61-90':[], '90+':[] };
+  progR.forEach(r => {
+    let rd = _parseDate(r.case_raise_date);
+    if (!rd) rd = _mthStart(r.month);
+    const days = rd ? Math.round((today - rd) / 86400000) : 0;
+    const row = {...r, days};
+    if (days <= 30)       progAging['0-30'].push(row);
+    else if (days <= 60)  progAging['31-60'].push(row);
+    else if (days <= 90)  progAging['61-90'].push(row);
+    else                  progAging['90+'].push(row);
+  });
+  const progAvgAge = progR.length ? Math.round(progAging['0-30'].concat(progAging['31-60'],progAging['61-90'],progAging['90+']).reduce((s,r)=>s+r.days,0)/progR.length) : 0;
+  const progOldest = progAging['90+'].concat(progAging['61-90']).reduce((mx,r)=>r.days>mx?r.days:mx, 0) || progAvgAge;
+
+  // By-month for prog
+  const progByMth = {};
+  progR.forEach(r => {
+    if (!r.month) return;
+    if (!progByMth[r.month]) progByMth[r.month] = {count:0,amt:0,ages:[]};
+    progByMth[r.month].count++;
+    progByMth[r.month].amt += r.expected||r.pending||0;
+    let rd = _parseDate(r.case_raise_date); if (!rd) rd = _mthStart(r.month);
+    if (rd) progByMth[r.month].ages.push(Math.round((today-rd)/86400000));
+  });
+
+  // By-channel for prog (India→US only)
+  const progByCh = {};
+  if (isIUS) progR.forEach(r => {
+    const ch = r.channel||'Unknown';
+    if (!progByCh[ch]) progByCh[ch]={count:0,amt:0};
+    progByCh[ch].count++; progByCh[ch].amt += r.expected||0;
+  });
+
+  // Full prog list sorted oldest first
+  const progSorted = progAging['90+'].concat(progAging['61-90'],progAging['31-60'],progAging['0-30'])
+    .sort((a,b) => b.days - a.days);
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PEND ROWS — Pending to Claim (not yet raised)
+  // India→US: sub_remark==='pending to claim' OR (no raise date + expected>0 + no claim keywords)
+  // US→US:    bucket_key === 'pending'
+  // ══════════════════════════════════════════════════════════════════════
+  const pendR = isIUS
+    ? rows.filter(r => {
+        if ((r.actual||0) > 0) return false;
+        const subExact = (r.sub_remark||'').trim().toLowerCase();
+        if (subExact === 'pending to claim') return true;
+        const hasRaise = !!(r.case_raise_date && r.case_raise_date.trim());
+        const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase();
+        const hasKw = sl.includes('raised')||sl.includes('claim')||sl.includes('progress')||sl.includes('filed')||sl.includes('submitted');
+        return !hasRaise && !hasKw && (r.expected||0) > 0;
+      })
+    : rows.filter(r => r.bucket_key === 'pending');
+
+  const pendAmt = pendR.reduce((s,r) => s+(r.expected||0), 0);
+
+  // Pend with age (days since month start — these have no raise date)
+  const pendWithAge = pendR.map(r => {
+    const ms = _mthStart(r.month||'');
+    return {...r, days: ms ? Math.round((today-ms)/86400000) : 0};
+  });
+  const pendOverdue = pendWithAge.filter(r => r.days > 90);
+  const pendUrgent  = pendWithAge.filter(r => r.days > 60 && r.days <= 90);
+  const pendSorted  = pendWithAge.slice().sort((a,b) => b.days - a.days);
+
+  // By-month for pend
+  const pendByMth = {};
+  pendWithAge.forEach(r => {
+    if (!r.month) return;
+    if (!pendByMth[r.month]) pendByMth[r.month] = {count:0,amt:0,days:0};
+    pendByMth[r.month].count++;
+    pendByMth[r.month].amt += r.expected||0;
+    if (r.days > pendByMth[r.month].days) pendByMth[r.month].days = r.days;
+  });
+
+  // By-channel for pend (India→US only)
+  const pendByCh = {};
+  if (isIUS) pendWithAge.forEach(r => {
+    const ch = r.channel||'Unknown';
+    if (!pendByCh[ch]) pendByCh[ch]={count:0,amt:0};
+    pendByCh[ch].count++; pendByCh[ch].amt += r.expected||0;
+  });
+
+  // ── Shared helpers ────────────────────────────────────────────────────
   const iusTot = Object.values(iusD.kpis||{}).reduce((s,v)=>s+(v.count||0),0);
   const u2Tot  = Object.values(u2D.kpis ||{}).reduce((s,v)=>s+(v.count||0),0);
   const tgl2 = (a) => a
     ? 'background:#1b3a2d;color:#fff;border-color:#1b3a2d;box-shadow:0 2px 6px #1b3a2d44'
     : 'background:#fff;color:#555;border-color:#dee2e6';
+  const secHdr = (icon, txt, right='') =>
+    `<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <i class="fas ${icon}" style="color:#1b3a2d"></i>${txt}
+      ${right?`<span style="margin-left:auto;font-size:10px;color:#ccc;font-weight:400">${right}</span>`:''}
+    </div>`;
+  const priTag = d => d>90
+    ? `<span style="background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🔴 Overdue</span>`
+    : d>60
+    ? `<span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🟠 Urgent</span>`
+    : d>30
+    ? `<span style="background:#fff8e1;color:#f57f17;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🟡 Raise Soon</span>`
+    : `<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🟢 In Window</span>`;
 
+  // ── Sub-tab nav ───────────────────────────────────────────────────────
+  const stTab = (key, label, count, ac) => {
+    const active = _caseSubView === key;
+    return `<button onclick="_caseSubView='${key}';renderCaseHealth(_rawData,_lastUpdated)"
+      style="padding:10px 20px;border:none;background:none;cursor:pointer;font-size:12px;white-space:nowrap;
+             border-bottom:3px solid ${active?ac:'transparent'};
+             color:${active?ac:'#888'};font-weight:${active?700:500};margin-bottom:-2px;transition:all .15s">
+      ${label}${count!==null?` <span style="font-size:11px;background:${active?ac:'#eee'};color:${active?'#fff':'#888'};border-radius:10px;padding:1px 7px;margin-left:3px">${count}</span>`:''}
+    </button>`;
+  };
+
+  // ── Aging card factory (generic, takes total param) ───────────────────
+  const agCrd = (label, arr, color, tot, amtField='expected') =>
+    `<div style="border-radius:12px;padding:16px;border:1px solid #e9ecef;border-top:4px solid ${color};background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.04)">
+      <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">${label}</div>
+      <div style="font-size:36px;font-weight:800;color:${color};line-height:1">${arr.length}</div>
+      <div style="font-size:10px;color:#888;margin-top:4px">${tot>0?((arr.length/tot)*100).toFixed(1)+'%':'—'} of cases</div>
+      <div style="margin-top:8px;background:#f0f0f0;border-radius:4px;height:4px;overflow:hidden">
+        <div style="height:100%;background:${color};width:${tot>0?((arr.length/tot)*100).toFixed(1):0}%"></div>
+      </div>
+      <div style="font-size:11px;color:${color};margin-top:8px;font-weight:700">${formatUSD(arr.reduce((s,r)=>s+(r[amtField]||r.expected||r.pending||0),0))}</div>
+      <div style="font-size:10px;color:#888">at risk</div>
+    </div>`;
+
+  // ── Build HTML ────────────────────────────────────────────────────────
   document.getElementById('mainContent').innerHTML = `
   <div style="padding:20px 24px">
 
-    <!-- Toggle -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:wrap">
+    <!-- Route toggle -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
       <span style="font-size:11px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.8px">Case Health:</span>
-      <button onclick="_caseView='india_us';renderCaseHealth(_rawData,_lastUpdated)"
+      <button onclick="_caseView='india_us';_caseSubView='overview';renderCaseHealth(_rawData,_lastUpdated)"
         style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${tgl2(_caseView==='india_us')}">
         ✈️ India → US <span style="opacity:.7;font-weight:400">(${iusTot})</span>
       </button>
-      <button onclick="_caseView='us2us';renderCaseHealth(_rawData,_lastUpdated)"
+      <button onclick="_caseView='us2us';_caseSubView='overview';renderCaseHealth(_rawData,_lastUpdated)"
         style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${tgl2(_caseView==='us2us')}">
         🔄 US 2 US <span style="opacity:.7;font-weight:400">(${u2Tot})</span>
       </button>
     </div>
 
-    <!-- KPI row -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
+    <!-- Sub-tab nav -->
+    <div style="display:flex;gap:0;margin-bottom:22px;border-bottom:2px solid #e9ecef;overflow-x:auto">
+      ${stTab('overview',      '🏥 Case Overview', null,          '#1b3a2d')}
+      ${stTab('pending_receipt','⏳ Claim Raised — Pending Receipt', progR.length, '#e65100')}
+      ${stTab('pending_claim', '📋 Pending to Claim', pendR.length, '#c62828')}
+    </div>
 
+  ${_caseSubView === 'overview' ? `
+
+    <!-- ═══ OVERVIEW ═══ -->
+
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
       <div class="kpi-card blue">
         <div class="kpi-icon"><i class="fas fa-folder-open"></i></div>
         <div class="kpi-value">${casedRows.length}</div>
         <div class="kpi-label">Total Cases</div>
         <div class="kpi-sub">cases raised to date</div>
       </div>
-
       <div class="kpi-card" style="background:linear-gradient(135deg,#b71c1c,#c62828,#ef5350)">
         <div class="kpi-icon"><i class="fas fa-exclamation-circle"></i></div>
         <div class="kpi-value">${openCases.length}</div>
         <div class="kpi-label">Open Cases</div>
         <div class="kpi-sub">${formatUSD(openAmt)} pending</div>
       </div>
-
       <div class="kpi-card green">
         <div class="kpi-icon"><i class="fas fa-check-circle"></i></div>
         <div class="kpi-value">${closedCases.length}</div>
         <div class="kpi-label">Closed Cases</div>
         <div class="kpi-sub">${formatUSD(closedAmt)} recovered</div>
       </div>
-
       <div class="kpi-card" style="background:linear-gradient(135deg,#00695c,#00897b,#26a69a)">
         <div class="kpi-icon"><i class="fas fa-percentage"></i></div>
         <div class="kpi-value">${closeRate}%</div>
         <div class="kpi-label">Close Rate</div>
         <div class="kpi-sub">${closedCases.length} of ${casedRows.length} resolved</div>
       </div>
-
       <div class="kpi-card amber">
         <div class="kpi-icon"><i class="fas fa-hourglass-half"></i></div>
         <div class="kpi-value">${avgDTC}<span style="font-size:14px;font-weight:500">d</span></div>
         <div class="kpi-label">Avg Days to Close</div>
-        <div class="kpi-sub">median ${medDTC}d · from ${daysToClose.length} closed</div>
+        <div class="kpi-sub">median ${medDTC}d · ${daysToClose.length} closed</div>
       </div>
-
     </div>
 
-    <!-- Aging + Case trend -->
     <div style="display:grid;grid-template-columns:5fr 4fr;gap:14px;margin-bottom:16px">
-
       <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
-        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
-          <i class="fas fa-stopwatch" style="color:#c62828"></i> Open Case Aging
-          <span style="margin-left:auto;font-size:10px;color:#ccc;font-weight:400">${openCases.length} open cases</span>
-        </div>
+        ${secHdr('fa-stopwatch','Open Case Aging', openCases.length+' open cases')}
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
-          ${agCard('0–30 Days',  aging['0-30'],  '#2e7d32','#e8f5e9')}
-          ${agCard('31–60 Days', aging['31-60'], '#e65100','#fff3e0')}
-          ${agCard('61–90 Days', aging['61-90'], '#c62828','#fce4ec')}
-          ${agCard('90+ Days',   aging['90+'],   '#7b1fa2','#f3e5f5')}
+          ${agCrd('0–30 Days',  aging['0-30'],  '#2e7d32', openCases.length)}
+          ${agCrd('31–60 Days', aging['31-60'], '#e65100', openCases.length)}
+          ${agCrd('61–90 Days', aging['61-90'], '#c62828', openCases.length)}
+          ${agCrd('90+ Days',   aging['90+'],   '#7b1fa2', openCases.length)}
         </div>
       </div>
-
       <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
-        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
-          <i class="fas fa-chart-line" style="color:#1b3a2d"></i> Monthly Case Trend
-        </div>
+        ${secHdr('fa-chart-line','Monthly Case Trend')}
         <div style="position:relative;height:195px"><canvas id="caseTrendChart"></canvas></div>
       </div>
-
     </div>
 
-    <!-- Open cases table -->
     <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
       <div style="padding:14px 18px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:7px">
-          <i class="fas fa-clock" style="color:#c62828"></i> Open Cases — Oldest First
-        </div>
+        ${secHdr('fa-clock','Open Cases — Oldest First')}
         <span style="font-size:11px;color:#aaa">top ${topOpen.length} of ${openCases.length}</span>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
           <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Month</th>
-            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Label / IBR</th>
-            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Raised On</th>
-            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:center">Days Open</th>
-            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:right">Expected</th>
-            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-weight:600;font-size:11px;text-align:left">Status / Remark</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Month</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Label / IBR</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Raised On</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">Days Open</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Expected</th>
+            <th style="padding:9px 12px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left">Status / Remark</th>
           </tr></thead>
-          <tbody>${openRows}</tbody>
+          <tbody>
+            ${topOpen.map((r,i) => {
+              const ag = r.days<=30?'#2e7d32':r.days<=60?'#e65100':r.days<=90?'#c62828':'#7b1fa2';
+              return `<tr style="${i%2===0?'background:#fafafa':''}">
+                <td style="padding:8px 12px;font-size:11px;color:#555">${r.month||'—'}</td>
+                <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#1b3a2d">${r.label||r.from_label||'—'}</td>
+                <td style="padding:8px 12px;font-size:11px;color:#888">${r.case_raise_date||'—'}</td>
+                <td style="padding:8px 12px;text-align:center"><span style="background:${ag}18;color:${ag};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap">${r.days}d</span></td>
+                <td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;color:#c62828">${formatUSD(r.expected||0)}</td>
+                <td style="padding:8px 12px;font-size:10px;color:#777;max-width:180px;word-break:break-word">${r.sub_remark||r.status||r.subbucket||'—'}</td>
+              </tr>`;
+            }).join('') || `<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa">No open cases with raise date</td></tr>`}
+          </tbody>
         </table>
       </div>
     </div>
 
+  ` : _caseSubView === 'pending_receipt' ? `
+
+    <!-- ═══ CLAIM RAISED — PENDING RECEIPT ═══ -->
+
+    <!-- KPI cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+      <div class="kpi-card" style="background:linear-gradient(135deg,#bf360c,#e65100,#ff7043)">
+        <div class="kpi-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+        <div class="kpi-value">${progR.length}</div>
+        <div class="kpi-label">Claims In Progress</div>
+        <div class="kpi-sub">${formatUSD(progAmt)} expected recovery</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#7b1fa2,#8e24aa,#ab47bc)">
+        <div class="kpi-icon"><i class="fas fa-stopwatch"></i></div>
+        <div class="kpi-value">${progAvgAge}<span style="font-size:14px;font-weight:400">d</span></div>
+        <div class="kpi-label">Avg Claim Age</div>
+        <div class="kpi-sub">oldest: ${progOldest}d since raised</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#b71c1c,#c62828,#ef5350)">
+        <div class="kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="kpi-value">${progAging['90+'].length}</div>
+        <div class="kpi-label">90+ Day Cases</div>
+        <div class="kpi-sub">${formatUSD(progAging['90+'].reduce((s,r)=>s+(r.expected||r.pending||0),0))} · escalate now</div>
+        ${progAging['90+'].length>0?`<div style="font-size:11px;font-weight:700;margin-top:6px;padding:2px 8px;border-radius:20px;background:rgba(244,67,54,.3);display:inline-block">⚠️ Needs Escalation</div>`:''}
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d,#4a7c59)">
+        <div class="kpi-icon"><i class="fas fa-dollar-sign"></i></div>
+        <div class="kpi-value" style="font-size:20px">${formatUSD(progAging['90+'].reduce((s,r)=>s+(r.expected||r.pending||0),0)+progAging['61-90'].reduce((s,r)=>s+(r.expected||r.pending||0),0))}</div>
+        <div class="kpi-label">60d+ At-Risk Amount</div>
+        <div class="kpi-sub">${progAging['90+'].length+progAging['61-90'].length} overdue claims</div>
+      </div>
+    </div>
+
+    <!-- Aging breakdown -->
+    <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #f0f0f0;margin-bottom:16px">
+      ${secHdr('fa-stopwatch','Claim Age Breakdown', progR.length+' claims in progress')}
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        ${agCrd('0–30 Days',  progAging['0-30'],  '#2e7d32', progR.length)}
+        ${agCrd('31–60 Days', progAging['31-60'], '#e65100', progR.length)}
+        ${agCrd('61–90 Days', progAging['61-90'], '#c62828', progR.length)}
+        ${agCrd('90+ Days',   progAging['90+'],   '#7b1fa2', progR.length)}
+      </div>
+    </div>
+
+    <!-- By Month + By Channel -->
+    <div style="display:grid;grid-template-columns:${isIUS?'3fr 2fr':'1fr'};gap:14px;margin-bottom:16px">
+
+      <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-calendar-alt','By Shipment Month')}</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:#e65100">
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
+              <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Expected $</th>
+              <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Avg Age</th>
+            </tr></thead>
+            <tbody>
+              ${sortedMonths.filter(m=>progByMth[m]).map((m,i)=>{
+                const v=progByMth[m], avg=v.ages.length?Math.round(v.ages.reduce((a,b)=>a+b,0)/v.ages.length):0;
+                const ac=avg>90?'#7b1fa2':avg>60?'#c62828':avg>30?'#e65100':'#2e7d32';
+                return `<tr style="background:${i%2===0?'#fff':'#fafbff'}">
+                  <td style="padding:8px 14px;font-weight:600;color:#333;border-bottom:1px solid #f8f8f8">${m}</td>
+                  <td style="padding:8px 12px;text-align:center;font-weight:700;color:#e65100;border-bottom:1px solid #f8f8f8">${v.count}</td>
+                  <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f8f8f8">${formatUSD(v.amt)}</td>
+                  <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f8f8f8"><span style="background:${ac}18;color:${ac};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${avg}d</span></td>
+                </tr>`;
+              }).join('')||`<tr><td colspan="4" style="text-align:center;padding:20px;color:#aaa">No data</td></tr>`}
+            </tbody>
+            <tfoot><tr style="background:#e65100">
+              <td style="padding:8px 14px;font-weight:700;color:#fff">TOTAL</td>
+              <td style="padding:8px 12px;text-align:center;font-weight:700;color:#fff">${progR.length}</td>
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(progAmt)}</td>
+              <td style="padding:8px 12px;text-align:center;font-weight:700;color:#fff">${progAvgAge}d avg</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      ${isIUS ? `
+      <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-layer-group','By Channel')}</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:#e65100">
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>
+              <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Expected $</th>
+            </tr></thead>
+            <tbody>
+              ${Object.entries(progByCh).sort((a,b)=>b[1].amt-a[1].amt).map(([ch,v],i)=>`
+              <tr style="background:${i%2===0?'#fff':'#fafbff'}">
+                <td style="padding:8px 14px;font-weight:600;color:#333;border-bottom:1px solid #f8f8f8">${ch}</td>
+                <td style="padding:8px 12px;text-align:center;font-weight:700;color:#e65100;border-bottom:1px solid #f8f8f8">${v.count}</td>
+                <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f8f8f8">${formatUSD(v.amt)}</td>
+              </tr>`).join('')||`<tr><td colspan="3" style="text-align:center;padding:20px;color:#aaa">No data</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
+    </div>
+
+    <!-- Full claim list -->
+    <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+      <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
+        ${secHdr('fa-list','All In-Progress Claims — Oldest First')}
+        <span style="font-size:11px;color:#aaa">top ${Math.min(50,progSorted.length)} of ${progR.length}</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#e65100">
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Label / AWB</th>
+            ${isIUS?`<th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>`:''}
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Raised On</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Age</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:right">Expected $</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Status</th>
+          </tr></thead>
+          <tbody>
+            ${progSorted.slice(0,50).map((r,i) => {
+              const ag=r.days<=30?'#2e7d32':r.days<=60?'#e65100':r.days<=90?'#c62828':'#7b1fa2';
+              return `<tr style="background:${i%2===0?'#fff':'#fafbff'}">
+                <td style="padding:8px 12px;font-size:11px;color:#555">${r.month||'—'}</td>
+                <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#1b3a2d">${r.label||r.from_label||'—'}</td>
+                ${isIUS?`<td style="padding:8px 12px;font-size:11px;color:#555">${r.channel||'—'}</td>`:''}
+                <td style="padding:8px 12px;font-size:11px;color:#888;white-space:nowrap">${r.case_raise_date||'—'}</td>
+                <td style="padding:8px 12px;text-align:center"><span style="background:${ag}18;color:${ag};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap">${r.days}d</span></td>
+                <td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums">${formatUSD(r.expected||r.pending||0)}</td>
+                <td style="padding:8px 12px;font-size:10px;color:#777;max-width:180px;word-break:break-word">${r.sub_remark||r.subbucket||r.status||'—'}</td>
+              </tr>`;
+            }).join('')||`<tr><td colspan="${isIUS?7:6}" style="text-align:center;padding:24px;color:#aaa">No claims in progress</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  ` : `
+
+    <!-- ═══ PENDING TO CLAIM ═══ -->
+
+    <!-- KPI cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+      <div class="kpi-card" style="background:linear-gradient(135deg,#b71c1c,#c62828,#ef5350)">
+        <div class="kpi-icon"><i class="fas fa-exclamation-circle"></i></div>
+        <div class="kpi-value">${pendR.length}</div>
+        <div class="kpi-label">Unclaimed Cases</div>
+        <div class="kpi-sub">${formatUSD(pendAmt)} potential recovery</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#7b1fa2,#8e24aa,#ab47bc)">
+        <div class="kpi-icon"><i class="fas fa-fire"></i></div>
+        <div class="kpi-value">${pendOverdue.length}</div>
+        <div class="kpi-label">🔴 Overdue (90d+)</div>
+        <div class="kpi-sub">${formatUSD(pendOverdue.reduce((s,r)=>s+(r.expected||0),0))} · claim window expiring</div>
+        ${pendOverdue.length>0?`<div style="font-size:11px;font-weight:700;margin-top:6px;padding:2px 8px;border-radius:20px;background:rgba(244,67,54,.3);display:inline-block">⚠️ Raise Immediately</div>`:''}
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#bf360c,#e65100,#ff7043)">
+        <div class="kpi-icon"><i class="fas fa-clock"></i></div>
+        <div class="kpi-value">${pendUrgent.length}</div>
+        <div class="kpi-label">🟠 Urgent (60–90d)</div>
+        <div class="kpi-sub">${formatUSD(pendUrgent.reduce((s,r)=>s+(r.expected||0),0))} · raise within 30d</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d,#4a7c59)">
+        <div class="kpi-icon"><i class="fas fa-dollar-sign"></i></div>
+        <div class="kpi-value" style="font-size:20px">${formatUSD(pendOverdue.reduce((s,r)=>s+(r.expected||0),0)+pendUrgent.reduce((s,r)=>s+(r.expected||0),0))}</div>
+        <div class="kpi-label">Expiry Risk $</div>
+        <div class="kpi-sub">60d+ unclaimed · act now</div>
+      </div>
+    </div>
+
+    <!-- By Month + By Channel -->
+    <div style="display:grid;grid-template-columns:${isIUS?'3fr 2fr':'1fr'};gap:14px;margin-bottom:16px">
+
+      <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-calendar-alt','By Shipment Month — Oldest = Most Urgent')}</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:#c62828">
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
+              <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Potential $</th>
+              <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Days Old</th>
+              <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Priority</th>
+            </tr></thead>
+            <tbody>
+              ${sortedMonths.filter(m=>pendByMth[m]).map((m,i)=>{
+                const v=pendByMth[m];
+                return `<tr style="background:${v.days>90?'#fff5f5':v.days>60?'#fff8f0':i%2===0?'#fff':'#fafbff'}">
+                  <td style="padding:8px 14px;font-weight:600;color:#333;border-bottom:1px solid #f8f8f8">${m}</td>
+                  <td style="padding:8px 12px;text-align:center;font-weight:700;color:#c62828;border-bottom:1px solid #f8f8f8">${v.count}</td>
+                  <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f8f8f8">${formatUSD(v.amt)}</td>
+                  <td style="padding:8px 12px;text-align:center;font-weight:600;color:#666;font-variant-numeric:tabular-nums;border-bottom:1px solid #f8f8f8">${v.days}d</td>
+                  <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f8f8f8">${priTag(v.days)}</td>
+                </tr>`;
+              }).join('')||`<tr><td colspan="5" style="text-align:center;padding:20px;color:#aaa">No pending claims found</td></tr>`}
+            </tbody>
+            <tfoot><tr style="background:#c62828">
+              <td style="padding:8px 14px;font-weight:700;color:#fff">TOTAL</td>
+              <td style="padding:8px 12px;text-align:center;font-weight:700;color:#fff">${pendR.length}</td>
+              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(pendAmt)}</td>
+              <td colspan="2" style="padding:8px 12px;text-align:center;color:rgba(255,255,255,.8);font-size:11px">${pendOverdue.length} overdue · ${pendUrgent.length} urgent</td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      ${isIUS ? `
+      <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0">${secHdr('fa-layer-group','By Channel')}</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:#c62828">
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>
+              <th style="padding:8px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Cases</th>
+              <th style="padding:8px 14px;color:#fff;font-size:11px;font-weight:600;text-align:right">Potential $</th>
+            </tr></thead>
+            <tbody>
+              ${Object.entries(pendByCh).sort((a,b)=>b[1].amt-a[1].amt).map(([ch,v],i)=>`
+              <tr style="background:${i%2===0?'#fff':'#fafbff'}">
+                <td style="padding:8px 14px;font-weight:600;color:#333;border-bottom:1px solid #f8f8f8">${ch}</td>
+                <td style="padding:8px 12px;text-align:center;font-weight:700;color:#c62828;border-bottom:1px solid #f8f8f8">${v.count}</td>
+                <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f8f8f8">${formatUSD(v.amt)}</td>
+              </tr>`).join('')||`<tr><td colspan="3" style="text-align:center;padding:20px;color:#aaa">No data</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
+    </div>
+
+    <!-- Full unclaimed list -->
+    <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+      <div style="padding:13px 18px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
+        ${secHdr('fa-list','All Unclaimed — Oldest Month First')}
+        <span style="font-size:11px;color:#aaa">top ${Math.min(50,pendSorted.length)} of ${pendR.length}</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#c62828">
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Month</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Label / AWB</th>
+            ${isIUS?`<th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Channel</th>`:''}
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:right">Expected $</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Days Since Month</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:center">Priority</th>
+            <th style="padding:9px 12px;color:#fff;font-size:11px;font-weight:600;text-align:left">Notes</th>
+          </tr></thead>
+          <tbody>
+            ${pendSorted.slice(0,50).map((r,i)=>`
+            <tr style="background:${r.days>90?'#fff5f5':r.days>60?'#fff8f0':i%2===0?'#fff':'#fafbff'}">
+              <td style="padding:8px 12px;font-size:11px;color:#555;white-space:nowrap">${r.month||'—'}</td>
+              <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#1b3a2d">${r.label||r.from_label||'—'}</td>
+              ${isIUS?`<td style="padding:8px 12px;font-size:11px;color:#555">${r.channel||'—'}</td>`:''}
+              <td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums">${formatUSD(r.expected||0)}</td>
+              <td style="padding:8px 12px;text-align:center;font-size:11px;color:#666;font-variant-numeric:tabular-nums">${r.days}d</td>
+              <td style="padding:8px 12px;text-align:center">${priTag(r.days)}</td>
+              <td style="padding:8px 12px;font-size:10px;color:#777;max-width:160px;word-break:break-word">${r.sub_remark||r.subbucket||'—'}</td>
+            </tr>`).join('')||`<tr><td colspan="${isIUS?7:6}" style="text-align:center;padding:24px;color:#aaa">No pending claims found</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  `}
+
   </div>`;
 
-  // ── Case trend chart ──────────────────────────────────────────────────
-  const caseCtx = document.getElementById('caseTrendChart');
-  if (caseCtx) {
-    chartInstances.caseTrend = new Chart(caseCtx.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: sortedMonths.map(m => m.slice(0,3)),
-        datasets: [
-          {
-            label: 'Raised',
-            data: sortedMonths.map(m => mOpened[m]||0),
-            backgroundColor: '#ef535066',
-            borderColor: '#c62828',
-            borderWidth: 1.5,
-            borderRadius: 4,
-            order: 2,
-          },
-          {
-            label: 'Closed',
-            type: 'line',
-            data: sortedMonths.map(m => mClosed[m]||0),
-            borderColor: '#4caf50',
-            backgroundColor: '#4caf5015',
-            borderWidth: 2.5,
-            fill: false,
-            tension: 0.4,
-            order: 1,
-            pointRadius: 5,
-            pointBackgroundColor: '#4caf50',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2.5,
-          }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position:'top', labels:{ font:{size:10}, boxWidth:10, padding:8 } },
-          tooltip: { mode:'index', intersect:false }
+  // ── Case trend chart (Overview only) ─────────────────────────────────
+  if (_caseSubView === 'overview') {
+    const caseCtx = document.getElementById('caseTrendChart');
+    if (caseCtx) {
+      chartInstances.caseTrend = new Chart(caseCtx.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: sortedMonths.map(m => m.slice(0,3)),
+          datasets: [
+            {
+              label: 'Raised',
+              data: sortedMonths.map(m => mOpened[m]||0),
+              backgroundColor: '#ef535066',
+              borderColor: '#c62828',
+              borderWidth: 1.5,
+              borderRadius: 4,
+              order: 2,
+            },
+            {
+              label: 'Closed',
+              type: 'line',
+              data: sortedMonths.map(m => mClosed[m]||0),
+              borderColor: '#4caf50',
+              backgroundColor: '#4caf5015',
+              borderWidth: 2.5,
+              fill: false,
+              tension: 0.4,
+              order: 1,
+              pointRadius: 5,
+              pointBackgroundColor: '#4caf50',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2.5,
+            }
+          ]
         },
-        scales: {
-          x: { grid:{display:false}, ticks:{font:{size:11}} },
-          y: { grid:{color:'#f5f5f5'}, ticks:{font:{size:10},precision:0}, beginAtZero:true }
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position:'top', labels:{ font:{size:10}, boxWidth:10, padding:8 } },
+            tooltip: { mode:'index', intersect:false }
+          },
+          scales: {
+            x: { grid:{display:false}, ticks:{font:{size:11}} },
+            y: { grid:{color:'#f5f5f5'}, ticks:{font:{size:10},precision:0}, beginAtZero:true }
+          }
         }
-      }
-    });
+      });
+    }
   }
 }
 
