@@ -1209,20 +1209,18 @@ function renderDashboardOverview(data, lastUpdated) {
   u2uCBRows.forEach(r => {
     const m  = r.month;
     if (!m) return;
-    // Mirror sheets_service.py: classify using r.bucket / r.subbucket columns (not sub_remark)
-    const bl = (r.bucket    || '').toLowerCase();
-    const sl = (r.subbucket || '').toLowerCase();
+    // Use r.bucket_key — set by sheets_service.py from col W (Bucket) & X (Sub Bucket)
+    // Values: 'closed' | 'intransit' | 'in_progress' | 'pending' | 'other'
+    const bk = r.bucket_key || '';
     if (!u2uCbAgg[m]) u2uCbAgg[m] = { rec:0, prog:0, pend:0 };
-    if (bl.includes('closed') || bl.includes('resolved') || bl.includes('received')) {
-      // Bucket 1: closed — actual recovered amount
-      u2uCbAgg[m].rec += r.recovered || 0;
-    } else if (bl.includes('progress') || sl.includes('progress') || sl.includes('raised')) {
-      // Bucket 2: in progress — claim raised, awaiting payment
-      u2uCbAgg[m].prog += r.expected || 0;
-    } else if ((r.expected || 0) > 0) {
-      // Bucket 3: pending to claim — not yet raised
-      u2uCbAgg[m].pend += r.expected || 0;
+    if (bk === 'closed') {
+      u2uCbAgg[m].rec  += r.recovered || 0;
+    } else if (bk === 'in_progress') {
+      u2uCbAgg[m].prog += r.expected  || 0;
+    } else if (bk === 'pending') {
+      u2uCbAgg[m].pend += r.expected  || 0;
     }
+    // 'intransit' and 'other' excluded from Claims Bucket (no $ value expected)
   });
   const u2uCbTotRec  = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).rec  ||0), 0);
   const u2uCbTotProg = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).prog ||0), 0);
