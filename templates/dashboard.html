@@ -1209,21 +1209,18 @@ function renderDashboardOverview(data, lastUpdated) {
   u2uCBRows.forEach(r => {
     const m  = r.month;
     if (!m) return;
-    const sl = ((r.sub_remark || '') + ' ' + (r.remarks || '')).toLowerCase().trim();
-    const subExact = (r.sub_remark || '').trim().toLowerCase();
+    // Mirror sheets_service.py: classify using r.bucket / r.subbucket columns (not sub_remark)
+    const bl = (r.bucket    || '').toLowerCase();
+    const sl = (r.subbucket || '').toLowerCase();
     if (!u2uCbAgg[m]) u2uCbAgg[m] = { rec:0, prog:0, pend:0 };
-    if ((r.recovered || 0) > 0) {
-      // Bucket 1: money received
+    if (bl.includes('closed') || bl.includes('resolved') || bl.includes('received')) {
+      // Bucket 1: closed — actual recovered amount
       u2uCbAgg[m].rec += r.recovered || 0;
-    } else if (r.case_raise_date || r.case_resolve_date ||
-               sl.includes('claim raised but not received') || sl.includes('claim raised but pending') ||
-               sl.includes('claim submitted') || sl.includes('claim filed') ||
-               sl.includes('case raised') || sl.includes('under review') ||
-               sl.includes('claim in progress') || sl.includes('raised')) {
-      // Bucket 2: claim has been raised (date exists or keyword match) but not yet paid
+    } else if (bl.includes('progress') || sl.includes('progress') || sl.includes('raised')) {
+      // Bucket 2: in progress — claim raised, awaiting payment
       u2uCbAgg[m].prog += r.expected || 0;
     } else if ((r.expected || 0) > 0) {
-      // Bucket 3: not yet raised or unclassified — include all remaining expected
+      // Bucket 3: pending to claim — not yet raised
       u2uCbAgg[m].pend += r.expected || 0;
     }
   });
