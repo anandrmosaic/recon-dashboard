@@ -1349,13 +1349,17 @@ function renderDashboardOverview(data, lastUpdated) {
     const m  = r.month;
     if (!m) return;
     // Use r.bucket_key — set by sheets_service.py from col W (Bucket) & X (Sub Bucket)
-    // Values: 'closed' | 'intransit' | 'in_progress' | 'pending' | 'other'
+    // Values: 'closed' | 'intransit' | 'in_progress' | 'partial' | 'pending' | 'other'
     const bk = r.bucket_key || '';
     if (!u2uCbAgg[m]) u2uCbAgg[m] = { rec:0, prog:0, pend:0 };
     if (bk === 'closed') {
       u2uCbAgg[m].rec  += r.recovered || 0;
     } else if (bk === 'in_progress') {
       u2uCbAgg[m].prog += r.expected  || 0;
+    } else if (bk === 'partial') {
+      // Partial: split — received portion → rec, remaining balance → prog
+      u2uCbAgg[m].rec  += r.recovered || 0;
+      u2uCbAgg[m].prog += r.pending   || 0;   // pending = expected - recovered
     } else if (bk === 'pending') {
       u2uCbAgg[m].pend += r.expected  || 0;
     }
@@ -2145,9 +2149,11 @@ function renderCaseHealth(data, lastUpdated) {
   // ══════════════════════════════════════════════════════════════════════
   const progR = isIUS
     ? openCases
-    : rows.filter(r => r.bucket_key === 'in_progress');
+    : rows.filter(r => r.bucket_key === 'in_progress' || r.bucket_key === 'partial');
 
-  const progAmt = progR.reduce((s,r) => s+(r.expected||r.pending||0), 0);
+  // For partial rows use r.pending (remaining balance), not r.expected (total incl. received)
+  const progAmt = progR.reduce((s,r) =>
+    s + (r.bucket_key === 'partial' ? (r.pending||0) : (r.expected||r.pending||0)), 0);
 
   // Aging for prog (use case_raise_date; fallback to month start for US→US)
   const _mthStart = m => {
@@ -2173,9 +2179,11 @@ function renderCaseHealth(data, lastUpdated) {
   const progByMth = {};
   progR.forEach(r => {
     if (!r.month) return;
-    if (!progByMth[r.month]) progByMth[r.month] = {count:0,amt:0,ages:[]};
+    if (!progByMth[r.month]) progByMth[r.month] = {count:0,amt:0,partial:0,ages:[]};
     progByMth[r.month].count++;
-    progByMth[r.month].amt += r.expected||r.pending||0;
+    // Partial rows: use remaining balance (pending), not full expected
+    progByMth[r.month].amt += r.bucket_key === 'partial' ? (r.pending||0) : (r.expected||r.pending||0);
+    if (r.bucket_key === 'partial') progByMth[r.month].partial++;
     let rd = _parseDate(r.case_raise_date); if (!rd) rd = _mthStart(r.month);
     if (rd) progByMth[r.month].ages.push(Math.round((today-rd)/86400000));
   });
@@ -2453,8 +2461,9 @@ function renderCaseHealth(data, lastUpdated) {
               ${sortedMonths.filter(m=>progByMth[m]).map((m,i)=>{
                 const v=progByMth[m], avg=v.ages.length?Math.round(v.ages.reduce((a,b)=>a+b,0)/v.ages.length):0;
                 const ac=avg>90?'#7b1fa2':avg>60?'#c62828':avg>30?'#e65100':'#2e7d32';
+                const partialNote = v.partial>0 ? `<span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px">✓ ${v.partial} partial</span>` : '';
                 return `<tr style="background:${i%2===0?'#fff':'#fafbff'}">
-                  <td style="padding:8px 14px;font-weight:600;color:#333;border-bottom:1px solid #f8f8f8">${m}</td>
+                  <td style="padding:8px 14px;font-weight:600;color:#333;border-bottom:1px solid #f8f8f8">${m}${partialNote}</td>
                   <td style="padding:8px 12px;text-align:center;font-weight:700;color:#e65100;border-bottom:1px solid #f8f8f8">${v.count}</td>
                   <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f8f8f8">${formatUSD(v.amt)}</td>
                   <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f8f8f8"><span style="background:${ac}18;color:${ac};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${avg}d</span></td>
@@ -2514,13 +2523,21 @@ function renderCaseHealth(data, lastUpdated) {
           <tbody>
             ${progSorted.slice(0,50).map((r,i) => {
               const ag=r.days<=30?'#2e7d32':r.days<=60?'#e65100':r.days<=90?'#c62828':'#7b1fa2';
-              return `<tr style="background:${i%2===0?'#fff':'#fafbff'}">
+              const isPartial = r.bucket_key === 'partial';
+              const dispAmt = isPartial ? (r.pending||0) : (r.expected||r.pending||0);
+              const partialBadge = isPartial
+                ? `<span style="background:#e8f5e9;color:#2e7d32;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;margin-left:4px">✓ Partial ${formatUSD(r.recovered||0)}</span>`
+                : '';
+              return `<tr style="background:${isPartial?'#f0fff4':i%2===0?'#fff':'#fafbff'}">
                 <td style="padding:8px 12px;font-size:11px;color:#555">${r.month||'—'}</td>
-                <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#1b3a2d">${r.label||r.from_label||'—'}</td>
+                <td style="padding:8px 12px;font-size:11px;font-weight:600;color:#1b3a2d;white-space:nowrap">${r.label||r.from_label||'—'}${partialBadge}</td>
                 ${isIUS?`<td style="padding:8px 12px;font-size:11px;color:#555">${r.channel||'—'}</td>`:''}
                 <td style="padding:8px 12px;font-size:11px;color:#888;white-space:nowrap">${r.case_raise_date||'—'}</td>
                 <td style="padding:8px 12px;text-align:center"><span style="background:${ag}18;color:${ag};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap">${r.days}d</span></td>
-                <td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums">${formatUSD(r.expected||r.pending||0)}</td>
+                <td style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;color:${isPartial?'#e65100':'#c62828'};font-variant-numeric:tabular-nums">
+                  ${formatUSD(dispAmt)}
+                  ${isPartial?`<div style="font-size:10px;color:#2e7d32;font-weight:600">of ${formatUSD(r.expected||0)} total</div>`:''}
+                </td>
                 <td style="padding:8px 12px;font-size:10px;color:#777;max-width:180px;word-break:break-word">${r.sub_remark||r.subbucket||r.status||'—'}</td>
               </tr>`;
             }).join('')||`<tr><td colspan="${isIUS?7:6}" style="text-align:center;padding:24px;color:#aaa">No claims in progress</td></tr>`}

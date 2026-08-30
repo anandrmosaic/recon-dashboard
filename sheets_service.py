@@ -688,7 +688,13 @@ def get_us2us_data(creds, sheet_id):
             kpis['in_progress']['qty']       += qty
             kpis['in_progress']['expected']  += exp
             kpis['in_progress']['recovered'] += act
-            bucket_key = 'in_progress'
+            # Partial reimbursement: claim in progress but some $ already received
+            if act > 0 and exp > 0 and act < exp:
+                bucket_key = 'partial'   # ← partial: claim raised, balance still pending
+            elif act >= exp and exp > 0:
+                bucket_key = 'closed'    # ← fully recovered despite label; treat as closed
+            else:
+                bucket_key = 'in_progress'
         elif diff != 0 or exp > 0:
             _seen_us['pending'].add(from_label)
             _monthly_seen_us[month]['pending'].add(from_label)
