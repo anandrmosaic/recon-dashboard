@@ -18,7 +18,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data
+from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -65,6 +65,15 @@ def refresh_data():
         except Exception as e:
             print(f"[Data] UPS claims failed: {e}")
             data['ups_claims'] = {'summary': {}, 'claims': []}
+
+        # ── ShipBob D2C Claims ────────────────────────────────────────────────
+        try:
+            d2c_tab = CONFIG.get('shipbob_d2c_tab', 'ShipBob D2C Claims')
+            data['shipbob_d2c'] = get_shipbob_d2c_data(creds, RECON_ID, d2c_tab)
+            print(f"[Data] ShipBob D2C loaded: {len(data['shipbob_d2c'].get('rows', []))} rows")
+        except Exception as e:
+            print(f"[Data] ShipBob D2C failed: {e}")
+            data['shipbob_d2c'] = {'rows': [], 'monthly': {}, 'kpis': {}, 'months': [], 'channels': {}}
 
         _cache['data'] = None
         gc.collect()

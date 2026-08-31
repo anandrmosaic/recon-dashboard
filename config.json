@@ -22,5 +22,6 @@
   "credentials_file": "C:/Users/Admin/gcp-oauth.keys.json",
   "token_file": "C:/Users/Admin/recon-token.json",
   "dashboard_url": "https://recon-dashboard.onrender.com",
-  "outward_loss_sheet_id": "1Jmz65AFJ8QTvai6c4jHdk67mv-WBAwTesC6iv6Sm114"
+  "outward_loss_sheet_id": "1Jmz65AFJ8QTvai6c4jHdk67mv-WBAwTesC6iv6Sm114",
+  "shipbob_d2c_tab": "ShipBob D2C Claims"
 }

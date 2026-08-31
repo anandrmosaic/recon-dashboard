@@ -988,3 +988,145 @@ def get_outward_loss_data(creds, sheet_id):
     if not values:
         return {'headers': [], 'rows': []}
     return {'headers': values[0], 'rows': values[1:]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ShipBob D2C Claims tab
+# Expected Google Sheet columns (row 1 = header):
+#   A: Month | B: Shipment ID | C: Channel | D: SKU | E: Sub Bucket
+#   F: Claim Status | G: Amt (actual $) | H: Expected ($) | I: Remark | J: Carrier
+# ─────────────────────────────────────────────────────────────────────────────
+def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
+    """Read ShipBob D2C claim rows from a Google Sheet tab.
+
+    The tab contains only the ~200 'Under Dispute' rows from the weekly
+    ShipBob dump — one row per shipment that has a claim action.
+    """
+    service = build('sheets', 'v4', credentials=creds)
+
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=f"'{tab_name}'!A1:J5000"
+        ).execute()
+    except Exception as e:
+        print(f"[ShipBob D2C] Sheet read failed ({tab_name}): {e}")
+        return _empty_d2c()
+
+    values = result.get('values', [])
+    if len(values) < 2:
+        return _empty_d2c()
+
+    # Normalise bucket label → key
+    BUCKET_MAP = {
+        'claim raised and received':     'rec',
+        'claim raised but not received': 'prog',
+        'pending to claim':              'pend',
+        'claim window expired':          'expired',
+        'rto':                           'rto',
+        'cancelled':                     'cancelled',
+    }
+
+    rows          = []
+    monthly       = {}   # month → {rec, prog, pend, expired}
+    ch_agg        = {}   # channel → {rec, prog, pend}
+    kpis          = {
+        'rec':     {'count': 0, 'amt': 0.0},
+        'prog':    {'count': 0, 'exp': 0.0},
+        'pend':    {'count': 0, 'exp': 0.0},
+        'expired': {'count': 0, 'exp': 0.0},
+    }
+
+    for raw in values[1:]:
+        if not any(raw):
+            continue
+
+        def g(i):
+            return str(raw[i]).strip() if i < len(raw) and raw[i] is not None else ''
+
+        month       = g(0)
+        shipment_id = g(1)
+        channel     = g(2)
+        sku         = g(3)
+        sub_bucket  = g(4)
+        claim_status = g(5)
+        amt         = safe_float(g(6))
+        exp         = safe_float(g(7))
+        remark      = g(8)
+        carrier     = g(9)
+
+        bk = BUCKET_MAP.get(sub_bucket.strip().lower(), 'other')
+
+        row = {
+            'month':        month,
+            'shipment_id':  shipment_id,
+            'channel':      channel,
+            'sku':          sku,
+            'sub_bucket':   sub_bucket,
+            'bucket_key':   bk,
+            'claim_status': claim_status,
+            'amt':          round(amt, 2),
+            'exp':          round(exp, 2),
+            'remark':       remark,
+            'carrier':      carrier,
+        }
+        rows.append(row)
+
+        # ── Monthly aggregation ──
+        if month:
+            if month not in monthly:
+                monthly[month] = {'rec': 0.0, 'prog': 0.0, 'pend': 0.0, 'expired': 0.0}
+            if bk == 'rec':
+                monthly[month]['rec']     += amt
+            elif bk == 'prog':
+                monthly[month]['prog']    += exp
+            elif bk == 'pend':
+                monthly[month]['pend']    += exp
+            elif bk == 'expired':
+                monthly[month]['expired'] += exp
+
+        # ── KPI aggregation ──
+        if bk in kpis:
+            kpis[bk]['count'] += 1
+            if bk == 'rec':
+                kpis[bk]['amt'] += amt
+            else:
+                kpis[bk]['exp'] += exp
+
+        # ── Channel aggregation ──
+        if channel:
+            if channel not in ch_agg:
+                ch_agg[channel] = {'rec': 0.0, 'prog': 0.0, 'pend': 0.0}
+            if bk == 'rec':
+                ch_agg[channel]['rec'] += amt
+            elif bk == 'prog':
+                ch_agg[channel]['prog'] += exp
+            elif bk == 'pend':
+                ch_agg[channel]['pend'] += exp
+
+    months = sorted(monthly.keys(),
+                    key=lambda m: MONTH_ORDER.index(m) if m in MONTH_ORDER else 99)
+
+    # Round all monthly values
+    for m in monthly:
+        for k in monthly[m]:
+            monthly[m][k] = round(monthly[m][k], 2)
+    for ch in ch_agg:
+        for k in ch_agg[ch]:
+            ch_agg[ch][k] = round(ch_agg[ch][k], 2)
+    for bk in kpis:
+        for k in kpis[bk]:
+            if isinstance(kpis[bk][k], float):
+                kpis[bk][k] = round(kpis[bk][k], 2)
+
+    return {
+        'rows':     rows,
+        'monthly':  monthly,
+        'months':   months,
+        'kpis':     kpis,
+        'channels': ch_agg,
+    }
+
+
+def _empty_d2c():
+    return {'rows': [], 'monthly': {}, 'months': [], 'kpis': {}, 'channels': {}}
