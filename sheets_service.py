@@ -992,22 +992,26 @@ def get_outward_loss_data(creds, sheet_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ShipBob D2C Claims tab
-# Expected Google Sheet columns (row 1 = header):
-#   A: Month | B: Shipment ID | C: Channel | D: SKU | E: Sub Bucket
-#   F: Claim Status | G: Amt (actual $) | H: Expected ($) | I: Remark | J: Carrier
+# Reads by column HEADER NAME — paste any set of columns in any order.
+# Recognised headers (case-insensitive, partial match):
+#   month, shipment id, sales channel / channel / ingestion channel,
+#   sku, sub bucket, claim status, amt, expected claim amount / expected,
+#   claims remark / remark, carrier, main bucket, row status
 # ─────────────────────────────────────────────────────────────────────────────
 def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     """Read ShipBob D2C claim rows from a Google Sheet tab.
 
-    The tab contains only the ~200 'Under Dispute' rows from the weekly
-    ShipBob dump — one row per shipment that has a claim action.
+    Column order does not matter — columns are matched by header name so the
+    user can paste the full Dump sheet (or a subset) without reordering.
+    Only rows where Main Bucket = 'Under Dispute' (or Sub Bucket is a known
+    claim bucket) are aggregated; purely Delivered/Intransit rows are ignored.
     """
     service = build('sheets', 'v4', credentials=creds)
 
     try:
         result = service.spreadsheets().values().get(
             spreadsheetId=sheet_id,
-            range=f"'{tab_name}'!A1:J5000"
+            range=f"'{tab_name}'!A1:BZ10000"
         ).execute()
     except Exception as e:
         print(f"[ShipBob D2C] Sheet read failed ({tab_name}): {e}")
@@ -1017,6 +1021,41 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     if len(values) < 2:
         return _empty_d2c()
 
+    # ── Build header → column-index map (case-insensitive) ───────────────────
+    raw_hdrs = [str(h).strip().lower() if h else '' for h in values[0]]
+
+    def _find(candidates):
+        """Return index of first header that contains any candidate string."""
+        for h in candidates:
+            for i, rh in enumerate(raw_hdrs):
+                if h in rh:
+                    return i
+        return None
+
+    ci_month      = _find(['month'])
+    ci_ship_id    = _find(['shipment id'])
+    ci_channel    = _find(['sales channel', 'ingestion channel store', 'channel'])
+    ci_sku        = _find(['sku'])
+    ci_sub_bucket = _find(['sub bucket'])
+    ci_main_bucket= _find(['main bucket'])
+    ci_claim_st   = _find(['claim status'])
+    ci_amt        = _find(['amt'])
+    ci_expected   = _find(['expected claim', 'expected'])
+    ci_remark     = _find(['claims remark', 'remark'])
+    ci_carrier    = _find(['carrier'])
+    ci_row_status = _find(['row status'])
+    ci_line_name  = _find(['line item name'])
+
+    print(f"[ShipBob D2C] Column map: month={ci_month} ship={ci_ship_id} ch={ci_channel} "
+          f"sku={ci_sku} sub={ci_sub_bucket} main={ci_main_bucket} "
+          f"amt={ci_amt} exp={ci_expected} remark={ci_remark} carrier={ci_carrier}")
+
+    def gv(row, idx):
+        if idx is None or idx >= len(row):
+            return ''
+        v = row[idx]
+        return str(v).strip() if v is not None else ''
+
     # Normalise bucket label → key
     BUCKET_MAP = {
         'claim raised and received':     'rec',
@@ -1025,7 +1064,10 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
         'claim window expired':          'expired',
         'rto':                           'rto',
         'cancelled':                     'cancelled',
+        'delivered':                     'delivered',
+        'intransit':                     'intransit',
     }
+    SKIP_BUCKETS = {'delivered', 'intransit', 'other'}
 
     rows          = []
     monthly       = {}   # month → {rec, prog, pend, expired}
@@ -1041,28 +1083,36 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
         if not any(raw):
             continue
 
-        def g(i):
-            return str(raw[i]).strip() if i < len(raw) and raw[i] is not None else ''
+        month        = gv(raw, ci_month)
+        shipment_id  = gv(raw, ci_ship_id)
+        channel      = gv(raw, ci_channel)
+        sku          = gv(raw, ci_sku) or gv(raw, ci_line_name)
+        sub_bucket   = gv(raw, ci_sub_bucket)
+        main_bucket  = gv(raw, ci_main_bucket)
+        claim_status = gv(raw, ci_claim_st)
+        amt          = safe_float(gv(raw, ci_amt))
+        exp          = safe_float(gv(raw, ci_expected))
+        remark       = gv(raw, ci_remark)
+        carrier      = gv(raw, ci_carrier)
 
-        month       = g(0)
-        shipment_id = g(1)
-        channel     = g(2)
-        sku         = g(3)
-        sub_bucket  = g(4)
-        claim_status = g(5)
-        amt         = safe_float(g(6))
-        exp         = safe_float(g(7))
-        remark      = g(8)
-        carrier     = g(9)
+        # Determine bucket key — sub_bucket is authoritative, fall back to main
+        bk = BUCKET_MAP.get(sub_bucket.strip().lower(),
+             BUCKET_MAP.get(main_bucket.strip().lower(), 'other'))
 
-        bk = BUCKET_MAP.get(sub_bucket.strip().lower(), 'other')
+        # Skip rows that are purely operational (no claim context)
+        if bk in SKIP_BUCKETS:
+            continue
+        # Also skip if there's no claim amount AND not a known claim bucket
+        claim_bks = {'rec', 'prog', 'pend', 'expired'}
+        if bk not in claim_bks and amt == 0 and exp == 0:
+            continue
 
         row = {
             'month':        month,
             'shipment_id':  shipment_id,
             'channel':      channel,
             'sku':          sku,
-            'sub_bucket':   sub_bucket,
+            'sub_bucket':   sub_bucket or main_bucket,
             'bucket_key':   bk,
             'claim_status': claim_status,
             'amt':          round(amt, 2),
