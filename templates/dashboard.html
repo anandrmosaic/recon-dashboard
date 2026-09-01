@@ -1710,8 +1710,6 @@ function renderDashboardOverview(data, lastUpdated) {
     </div>
 
 
-    ${upsIUSTbl}
-
     <!-- Claims Bucket (India→US only) -->
     ${_dashView === 'india_us' && cbMths.length > 0 ? `
     <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:16px">
@@ -1979,6 +1977,8 @@ function renderDashboardOverview(data, lastUpdated) {
       </div>
 
     </div>
+
+    ${upsIUSTbl}
 
     <!-- Bucket Breakdown -->
     <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
