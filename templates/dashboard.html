@@ -6399,12 +6399,14 @@ function renderShipBobD2C(data, lastUpdated) {
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
   const mc = document.getElementById('mainContent');
 
-  const d2c     = (data && data.shipbob_d2c) || {};
-  const rows    = d2c.rows    || [];
-  const monthly = d2c.monthly || {};
-  const months  = d2c.months  || [];
-  const kpis    = d2c.kpis    || {};
-  const channels= d2c.channels|| {};
+  const d2c          = (data && data.shipbob_d2c) || {};
+  const rows         = d2c.rows         || [];
+  const monthly      = d2c.monthly      || {};
+  const months       = d2c.months       || [];
+  const kpis         = d2c.kpis         || {};
+  const channels     = d2c.channels     || {};
+  const pivot1       = d2c.pivot1       || {};
+  const pivot1Months = d2c.pivot1_months|| [];
 
   // ── Badge ────────────────────────────────────────────────────────────────
   const progCount = (kpis.prog||{}).count||0;
@@ -6447,26 +6449,107 @@ function renderShipBobD2C(data, lastUpdated) {
   var _d2cMonth   = '';
   var _d2cChannel = '';
 
-  // ── KPI cards ────────────────────────────────────────────────────────────
-  function kpiCard(icon, label, val, color, sub) {
-    return `<div class="kpi-card hover-lift" style="background:#fff;border-radius:14px;padding:20px 22px;
-        border-left:5px solid ${color};box-shadow:0 2px 10px rgba(0,0,0,.06);border:1px solid #e9ecef;
-        border-left-width:5px">
-      <div style="font-size:11px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">
-        <i class="fas ${icon}" style="color:${color};margin-right:5px"></i>${label}</div>
-      <div class="kpi-value" style="font-size:26px;font-weight:800;color:${color};line-height:1;font-family:'Plus Jakarta Sans',sans-serif">${val}</div>
-      ${sub ? `<div style="font-size:11px;color:#aaa;margin-top:5px">${sub}</div>` : ''}
+  // ── KPI cards (colorful gradient style) ──────────────────────────────────
+  function kpiCard(icon, label, mainVal, subVal, gradA, gradB) {
+    return `<div class="hover-lift" style="background:linear-gradient(135deg,${gradA},${gradB});border-radius:16px;
+        padding:22px 20px;box-shadow:0 6px 20px rgba(0,0,0,.15);position:relative;overflow:hidden">
+      <div style="position:absolute;top:-14px;right:-14px;width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,.08)"></div>
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <i class="fas ${icon}" style="color:rgba(255,255,255,.85);font-size:14px"></i>
+        <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.8px">${label}</span>
+      </div>
+      <div style="font-size:26px;font-weight:800;color:#fff;line-height:1.1;font-family:'Plus Jakarta Sans',sans-serif;margin-bottom:6px">${mainVal}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.72)">${subVal}</div>
     </div>`;
   }
 
-  const kpiHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:24px">
-    ${kpiCard('fa-check-circle','Raised & Received',formatUSD(totRec),'#2e7d32',recCases+' cases · '+recPct+'% recovery')}
-    ${kpiCard('fa-hourglass-half','Pending Receipt',formatUSD(totProg),'#e65100',progCases+' cases open')}
-    ${kpiCard('fa-file-alt','Pending to Claim',formatUSD(totPend),'#c62828',pendCases+' cases unfiled')}
-    ${kpiCard('fa-dollar-sign','Total Eligible',formatUSD(totEligible),'#1b3a2d','all active claim $')}
-    ${kpiCard('fa-percentage','Recovery Rate',recPct+'%','#1565c0','of total eligible')}
-    ${totExpired>0?kpiCard('fa-exclamation-triangle','Claim Window Expired',formatUSD(totExpired),'#b71c1c',(kpis.expired||{}).count+' cases missed'):''}
+  const kpiHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px">
+    ${kpiCard('fa-check-circle','Raised & Received',   formatUSD(totRec),     recCases+' shipments · '+recPct+'% recovery',   '#1b5e20','#43a047')}
+    ${kpiCard('fa-hourglass-half','Pending Receipt',   formatUSD(totProg),    progCases+' unique orders open',                '#bf360c','#f4511e')}
+    ${kpiCard('fa-file-alt','Pending to Claim',        formatUSD(totPend),    pendCases+' unique orders unfiled',              '#b71c1c','#e53935')}
+    ${kpiCard('fa-dollar-sign','Total Eligible',       formatUSD(totEligible),'rec + pending receipt + pending claim',         '#1a237e','#3949ab')}
+    ${kpiCard('fa-percentage','Recovery Rate',         recPct+'%',            'of total eligible claimed back',                '#004d40','#00897b')}
+    ${totExpired>0?kpiCard('fa-exclamation-triangle','Window Expired',formatUSD(totExpired),(kpis.expired||{}).count+' cases — window closed','#4a148c','#8e24aa'):''}
   </div>`;
+
+  // ── Pivot 1: Shipment Distribution by Sub Bucket × Month (ALL rows) ─────
+  const PIVOT1_BUCKETS = [
+    { label: 'Claim raised and received',     bg: '#43a047', fg: '#fff',    fw: '700' },
+    { label: 'Claim raised but not received', bg: '#fdd835', fg: '#5d4037', fw: '700' },
+    { label: 'Claim Window Expired',          bg: '#fff9c4', fg: '#5d4037', fw: '500' },
+    { label: 'Pending to claim',              bg: '#e53935', fg: '#fff',    fw: '700' },
+    { label: 'Delivered',                     bg: '#1e88e5', fg: '#fff',    fw: '700' },
+    { label: 'Intransit',                     bg: '#1565c0', fg: '#fff',    fw: '700' },
+    { label: 'Rto',                           bg: '#a1887f', fg: '#fff',    fw: '500' },
+    { label: 'Cancelled',                     bg: '#f5f5f5', fg: '#555',    fw: '400' },
+  ];
+  function buildPivot1() {
+    if (!pivot1Months.length) return '';
+    const mHdrs = pivot1Months.map(m =>
+      `<th style="padding:9px 12px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`
+    ).join('');
+    const rows1 = PIVOT1_BUCKETS.map(bc => {
+      const bData = pivot1[bc.label] || {};
+      const rowTotal = pivot1Months.reduce((s, m) => s + (bData[m] || 0), 0);
+      if (rowTotal === 0) return '';
+      const cells = pivot1Months.map(m => {
+        const v = bData[m] || 0;
+        return `<td style="padding:8px 12px;text-align:right;color:${bc.fg};font-variant-numeric:tabular-nums">${v > 0 ? v.toLocaleString() : ''}</td>`;
+      }).join('');
+      return `<tr>
+        <td style="padding:8px 14px;background:${bc.bg};color:${bc.fg};font-weight:${bc.fw};white-space:nowrap">${bc.label}</td>
+        ${cells.replace(/<td/g, `<td style="background:${bc.bg}"`).replace(/style="background:[^"]*"/g, (m, o, s) => {
+          // replace only the added background on cells, preserve original style
+          return '';
+        })}
+        <td style="padding:8px 12px;text-align:right;background:${bc.bg};color:${bc.fg};font-weight:700;font-variant-numeric:tabular-nums">${rowTotal.toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+
+    // Rebuild rows properly without the broken replace
+    const rows1clean = PIVOT1_BUCKETS.map(bc => {
+      const bData = pivot1[bc.label] || {};
+      const rowTotal = pivot1Months.reduce((s, m) => s + (bData[m] || 0), 0);
+      if (rowTotal === 0) return '';
+      const cells = pivot1Months.map(m => {
+        const v = bData[m] || 0;
+        return `<td style="padding:8px 12px;text-align:right;background:${bc.bg};color:${bc.fg};font-variant-numeric:tabular-nums">${v > 0 ? v.toLocaleString() : ''}</td>`;
+      }).join('');
+      return `<tr>
+        <td style="padding:8px 14px;background:${bc.bg};color:${bc.fg};font-weight:${bc.fw};white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.15)">${bc.label}</td>
+        ${cells}
+        <td style="padding:8px 12px;text-align:right;background:${bc.bg};color:${bc.fg};font-weight:700;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,.15)">${rowTotal.toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+
+    const grandCells = pivot1Months.map(m => {
+      const v = Object.values(pivot1).reduce((s, bd) => s + (bd[m] || 0), 0);
+      return `<td style="padding:9px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;background:#e8f5e9;color:#1b3a2d">${v.toLocaleString()}</td>`;
+    }).join('');
+    const grandTotal = Object.values(pivot1).reduce((s, bd) => s + Object.values(bd).reduce((ss, v) => ss + v, 0), 0);
+
+    return `<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e9ecef;margin-bottom:24px">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <i class="fas fa-th" style="color:#1b3a2d"></i>
+        <span style="font-weight:700;font-size:13px;color:var(--text)">Shipment Distribution by Sub Bucket</span>
+        <span style="font-size:11px;color:#aaa;margin-left:auto">All ${grandTotal.toLocaleString()} shipments · ${pivot1Months.length} months</span>
+      </div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">
+        <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
+          <th style="padding:9px 14px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:left">Row Labels</th>
+          ${mHdrs}
+          <th style="padding:9px 12px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">Grand Total</th>
+        </tr></thead>
+        <tbody>${rows1clean}</tbody>
+        <tfoot><tr>
+          <td style="padding:9px 14px;font-weight:700;font-size:12px;background:#e8f5e9;color:#1b3a2d">Grand Total</td>
+          ${grandCells}
+          <td style="padding:9px 12px;text-align:right;font-weight:800;font-size:13px;background:#e8f5e9;color:#1b3a2d">${grandTotal.toLocaleString()}</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
+  }
+  const pivot1Html = buildPivot1();
 
   // ── Month × Bucket YTD table ─────────────────────────────────────────────
   const mthColHtml = months.map(m => `<th style="padding:9px 10px;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`).join('');
@@ -6556,34 +6639,44 @@ function renderShipBobD2C(data, lastUpdated) {
       if (chF && r.channel    !== chF) return false;
       return r.bucket_key !== 'other' && r.bucket_key !== 'rto' && r.bucket_key !== 'cancelled';
     });
-    const bkLabel = {'rec':'✅ Received','prog':'⏳ Pending Receipt','pend':'📋 Pending Claim','expired':'⛔ Window Expired'};
     const bkColor = {'rec':'#2e7d32','prog':'#e65100','pend':'#c62828','expired':'#b71c1c'};
+    const bkBg    = {'rec':'#e8f5e9','prog':'#fff3e0','pend':'#ffebee','expired':'#fce4ec'};
     var tRows = filtered.map(function(r) {
-      const bk = r.bucket_key;
-      const lbl = bkLabel[bk]||r.sub_bucket;
-      const clr = bkColor[bk]||'#888';
-      const amt = bk==='rec' ? (r.amt>0?formatUSD(r.amt):'—') : (r.exp>0?formatUSD(r.exp)+'*':'—');
+      const bk  = r.bucket_key;
+      const clr = bkColor[bk] || '#888';
+      const bg  = bkBg[bk]   || '#f5f5f5';
+      const sbLabel = r.sub_bucket || '—';
+      const amtVal  = r.amt > 0 ? formatUSD(r.amt) : '—';
+      const expVal  = r.exp > 0 ? formatUSD(r.exp) : '—';
+      const ageCell = (bk === 'prog' || bk === 'pend')
+        ? '<td style="padding:7px 10px;font-size:10px;text-align:right;font-variant-numeric:tabular-nums;color:' + (r.days > 60 ? '#c62828' : r.days > 30 ? '#e65100' : '#555') + ';font-weight:' + (r.days > 30 ? '700' : '400') + '">' + (r.days > 0 ? r.days + 'd' : '—') + '</td>'
+        : '<td style="padding:7px 10px;font-size:10px;color:#ccc">—</td>';
+      const qtyVal = r.total_qty > 0 ? r.total_qty : '—';
       return '<tr style="border-bottom:1px solid var(--border)">' +
         '<td style="padding:7px 10px;font-size:10px;white-space:nowrap;font-weight:600">' + (r.month||'—') + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px;font-family:monospace">' + (r.shipment_id||'—') + '</td>' +
+        '<td style="padding:7px 10px;font-size:10px;font-family:monospace;white-space:nowrap">' + (r.shipment_id||'—') + '</td>' +
         '<td style="padding:7px 10px;font-size:10px">' + (r.channel||'—') + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px">' + (r.sku||'—') + '</td>' +
-        '<td style="padding:7px 10px"><span style="background:' + clr + '18;color:' + clr + ';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">' + lbl + '</span></td>' +
-        '<td style="padding:7px 10px;font-size:10px;text-align:right;font-weight:700;color:' + clr + '">' + amt + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px;color:var(--muted)">' + (r.remark||'—') + '</td>' +
+        '<td style="padding:7px 10px;font-size:10px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + (r.line_name||r.sku||'') + '">' + (r.line_name||r.sku||'—') + '</td>' +
+        '<td style="padding:7px 10px;font-size:10px;text-align:right;font-variant-numeric:tabular-nums">' + qtyVal + '</td>' +
+        '<td style="padding:7px 10px"><span style="background:' + bg + ';color:' + clr + ';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">' + sbLabel + '</span></td>' +
+        '<td style="padding:7px 10px;font-size:10px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums">' + amtVal + '</td>' +
+        '<td style="padding:7px 10px;font-size:10px;text-align:right;color:#e65100;font-variant-numeric:tabular-nums">' + expVal + '</td>' +
+        ageCell +
         '<td style="padding:7px 10px;font-size:10px">' + (r.carrier||'—') + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:#aaa">No rows match the current filter</td></tr>';
-    return '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + filtered.length + ' rows · * = expected amount</div>' +
+    }).join('') || '<tr><td colspan="10" style="text-align:center;padding:30px;color:#aaa">No rows match the current filter</td></tr>';
+    return '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + filtered.length + ' rows</div>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
         '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Month</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Shipment ID</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;white-space:nowrap">Month</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;white-space:nowrap">Shipment ID</th>' +
           '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">SKU</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Status</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right">Amount</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Remark</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Line Item</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Total Qty</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Sub Bucket</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Amt ($)</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Expected ($)</th>' +
+          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Order Age</th>' +
           '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Carrier</th>' +
         '</tr></thead>' +
         '<tbody>' + tRows + '</tbody>' +
@@ -6617,9 +6710,10 @@ function renderShipBobD2C(data, lastUpdated) {
       </div>
       <div>
         <div style="font-size:20px;font-weight:800;color:var(--text)">ShipBob D2C Claims</div>
-        <div style="font-size:12px;color:var(--muted)">${rows.length} shipment records · ${months.length} months · D2C orders via ShipBob</div>
+        <div style="font-size:12px;color:var(--muted)">${Object.values(pivot1).reduce((s,bd)=>s+Object.values(bd).reduce((ss,v)=>ss+v,0),0).toLocaleString()} total shipments · ${rows.length} claim rows · ${pivot1Months.length} months</div>
       </div>
     </div>
+    ${pivot1Html}
     ${kpiHtml}
     ${ytdHtml}
     ${chHtml}

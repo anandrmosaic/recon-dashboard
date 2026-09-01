@@ -1011,7 +1011,7 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     try:
         result = service.spreadsheets().values().get(
             spreadsheetId=sheet_id,
-            range=f"'{tab_name}'!A1:BZ10000"
+            range=f"'{tab_name}'!A1:BZ50000"
         ).execute()
     except Exception as e:
         print(f"[ShipBob D2C] Sheet read failed ({tab_name}): {e}")
@@ -1036,6 +1036,8 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     ci_ship_id    = _find(['shipment id'])
     ci_channel    = _find(['sales channel', 'ingestion channel store', 'channel'])
     ci_sku        = _find(['sku'])
+    ci_line_name  = _find(['line item name'])
+    ci_line_qty   = _find(['line item qty'])
     ci_sub_bucket = _find(['sub bucket'])
     ci_main_bucket= _find(['main bucket'])
     ci_claim_st   = _find(['claim status'])
@@ -1044,7 +1046,7 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     ci_remark     = _find(['claims remark', 'remark'])
     ci_carrier    = _find(['carrier'])
     ci_row_status = _find(['row status'])
-    ci_line_name  = _find(['line item name'])
+    ci_days       = _find(['days of order'])
 
     print(f"[ShipBob D2C] Column map: month={ci_month} ship={ci_ship_id} ch={ci_channel} "
           f"sku={ci_sku} sub={ci_sub_bucket} main={ci_main_bucket} "
@@ -1070,14 +1072,21 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     SKIP_BUCKETS = {'delivered', 'intransit', 'other'}
 
     rows          = []
-    monthly       = {}   # month → {rec, prog, pend, expired}
-    ch_agg        = {}   # channel → {rec, prog, pend}
+    monthly       = {}   # month → {rec, prog, pend, expired}  (claim rows only)
+    ch_agg        = {}   # channel → {rec, prog, pend}          (claim rows only)
     kpis          = {
         'rec':     {'count': 0, 'amt': 0.0},
         'prog':    {'count': 0, 'exp': 0.0},
         'pend':    {'count': 0, 'exp': 0.0},
         'expired': {'count': 0, 'exp': 0.0},
     }
+    prog_shipments = set()   # unique shipment IDs for pending-receipt
+    pend_shipments = set()   # unique shipment IDs for pending-to-claim
+    # Pivot 1 — ALL rows: sub-bucket label × month → shipment count
+    pivot1        = {}   # {sub_bucket_label: {month: count}}
+    pivot1_months = set()
+    # Total qty per shipment (sum across all line items for same Shipment ID)
+    shipment_qty  = {}   # {shipment_id: total_qty}
 
     for raw in values[1:]:
         if not any(raw):
@@ -1086,7 +1095,8 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
         month        = gv(raw, ci_month)
         shipment_id  = gv(raw, ci_ship_id)
         channel      = gv(raw, ci_channel)
-        sku          = gv(raw, ci_sku) or gv(raw, ci_line_name)
+        sku          = gv(raw, ci_sku)
+        line_name    = gv(raw, ci_line_name) or sku
         sub_bucket   = gv(raw, ci_sub_bucket)
         main_bucket  = gv(raw, ci_main_bucket)
         claim_status = gv(raw, ci_claim_st)
@@ -1094,10 +1104,24 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
         exp          = safe_float(gv(raw, ci_expected))
         remark       = gv(raw, ci_remark)
         carrier      = gv(raw, ci_carrier)
+        days         = safe_float(gv(raw, ci_days))
 
         # Determine bucket key — sub_bucket is authoritative, fall back to main
         bk = BUCKET_MAP.get(sub_bucket.strip().lower(),
              BUCKET_MAP.get(main_bucket.strip().lower(), 'other'))
+
+        # ── Pivot 1: count ALL rows by sub-bucket label × month ──────────
+        sb_label = (sub_bucket or main_bucket or 'Unknown').strip()
+        if month and sb_label:
+            if sb_label not in pivot1:
+                pivot1[sb_label] = {}
+            pivot1[sb_label][month] = pivot1[sb_label].get(month, 0) + 1
+            pivot1_months.add(month)
+
+        # ── Shipment qty: sum line item qty per Shipment ID ───────────────
+        if shipment_id:
+            qty_val = safe_float(gv(raw, ci_line_qty))
+            shipment_qty[shipment_id] = shipment_qty.get(shipment_id, 0) + qty_val
 
         # Skip rows that are purely operational (no claim context)
         if bk in SKIP_BUCKETS:
@@ -1112,6 +1136,7 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
             'shipment_id':  shipment_id,
             'channel':      channel,
             'sku':          sku,
+            'line_name':    line_name,
             'sub_bucket':   sub_bucket or main_bucket,
             'bucket_key':   bk,
             'claim_status': claim_status,
@@ -1119,6 +1144,8 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
             'exp':          round(exp, 2),
             'remark':       remark,
             'carrier':      carrier,
+            'days':         int(days) if days else 0,
+            # total_qty filled after full-pass completes
         }
         rows.append(row)
 
@@ -1137,10 +1164,17 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
 
         # ── KPI aggregation ──
         if bk in kpis:
-            kpis[bk]['count'] += 1
             if bk == 'rec':
+                kpis[bk]['count'] += 1
                 kpis[bk]['amt'] += amt
-            else:
+            elif bk == 'prog':
+                prog_shipments.add(shipment_id)
+                kpis[bk]['exp'] += exp
+            elif bk == 'pend':
+                pend_shipments.add(shipment_id)
+                kpis[bk]['exp'] += exp
+            elif bk == 'expired':
+                kpis[bk]['count'] += 1
                 kpis[bk]['exp'] += exp
 
         # ── Channel aggregation ──
@@ -1154,8 +1188,18 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
             elif bk == 'pend':
                 ch_agg[channel]['pend'] += exp
 
+    # Unique order counts for prog / pend
+    kpis['prog']['count'] = len(prog_shipments)
+    kpis['pend']['count'] = len(pend_shipments)
+
+    # Backfill total_qty into every claim row
+    for row in rows:
+        row['total_qty'] = int(shipment_qty.get(row['shipment_id'], 0))
+
     months = sorted(monthly.keys(),
                     key=lambda m: MONTH_ORDER.index(m) if m in MONTH_ORDER else 99)
+    p1_months = sorted(pivot1_months,
+                       key=lambda m: MONTH_ORDER.index(m) if m in MONTH_ORDER else 99)
 
     # Round all monthly values
     for m in monthly:
@@ -1170,13 +1214,16 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
                 kpis[bk][k] = round(kpis[bk][k], 2)
 
     return {
-        'rows':     rows,
-        'monthly':  monthly,
-        'months':   months,
-        'kpis':     kpis,
-        'channels': ch_agg,
+        'rows':         rows,
+        'monthly':      monthly,
+        'months':       months,
+        'kpis':         kpis,
+        'channels':     ch_agg,
+        'pivot1':       pivot1,
+        'pivot1_months': p1_months,
     }
 
 
 def _empty_d2c():
-    return {'rows': [], 'monthly': {}, 'months': [], 'kpis': {}, 'channels': {}}
+    return {'rows': [], 'monthly': {}, 'months': [], 'kpis': {}, 'channels': {},
+            'pivot1': {}, 'pivot1_months': []}
