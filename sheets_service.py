@@ -1012,7 +1012,7 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     try:
         result = service.spreadsheets().values().get(
             spreadsheetId=sheet_id,
-            range=f"'{tab_name}'!A1:BZ50000"
+            range=f"'{tab_name}'!A1:BZ200000"
         ).execute()
     except Exception as e:
         print(f"[ShipBob D2C] Sheet read failed ({tab_name}): {e}")
