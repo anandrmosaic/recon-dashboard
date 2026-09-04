@@ -2971,9 +2971,9 @@ function renderWeeklyReview(data, lastUpdated) {
 
   // ── WoW snapshot data (hardcoded from snapshots.json — local file, not on Render) ──
   const WOW_SNAPS = [
-    { label:'13 Aug', wkNum:'Wk 33', ius:{received:10668.49, pending_receipt:2714.02, pending_claim:1027.86}, u2u:null },
-    { label:'20 Aug', wkNum:'Wk 34', ius:{received:7133.73,  pending_receipt:640.13,  pending_claim:931.54 }, u2u:{received:8674.61, pending_receipt:231.73,  pending_claim:0} },
-    { label:'27 Aug', wkNum:'Wk 35', ius:{received:7875.60,  pending_receipt:664.21,  pending_claim:8610.5 }, u2u:{received:9066.67, pending_receipt:1126.88, pending_claim:0} },
+    { label:'20 Aug', wkNum:'Wk 34', ius:{received:7133.73,  pending_receipt:640.13,  pending_claim:931.54 }, u2u:{received:8674.61,  pending_receipt:231.73,  pending_claim:0} },
+    { label:'27 Aug', wkNum:'Wk 35', ius:{received:7875.60,  pending_receipt:821.46,  pending_claim:1433.87}, u2u:{received:9066.67,  pending_receipt:1126.88, pending_claim:0} },
+    { label:'3 Sep',  wkNum:'Wk 36', ius:{received:8040.17,  pending_receipt:785.66,  pending_claim:3990.16}, u2u:{received:10227.31, pending_receipt:456.08,  pending_claim:0} },
   ];
 
   const _makeWoWTable = (route, title, icon) => {
@@ -3009,14 +3009,14 @@ function renderWeeklyReview(data, lastUpdated) {
           <div style="font-size:13px;font-weight:700;color:#fff">${icon} ${title}</div>
           <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:3px">Week-over-week reimbursement bucket comparison · Aug 2026</div>
         </div>
-        <div style="font-size:10px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px">Wk 35 = current</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px">Wk 36 = current</div>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="background:#f8f9fa">
             <th style="padding:10px 16px;color:#555;font-size:11px;font-weight:700;text-align:left;border-bottom:2px solid #e9ecef">Bucket</th>
             ${WOW_SNAPS.map((s,i) => `<th style="padding:10px 16px;color:${i===WOW_SNAPS.length-1?'#1b3a2d':'#555'};font-size:11px;font-weight:${i===WOW_SNAPS.length-1?'800':'600'};text-align:right;border-bottom:${i===WOW_SNAPS.length-1?'2px solid #1b3a2d':'2px solid #e9ecef'};${i===WOW_SNAPS.length-1?'background:#fffde7;':''}">${s.label}<div style="font-size:9px;font-weight:400;opacity:.6">${s.wkNum}</div></th>`).join('')}
-            <th style="padding:10px 16px;color:#888;font-size:11px;font-weight:700;text-align:right;border-bottom:2px solid #e9ecef">WoW vs 20 Aug</th>
+            <th style="padding:10px 16px;color:#888;font-size:11px;font-weight:700;text-align:right;border-bottom:2px solid #e9ecef">WoW vs 27 Aug</th>
           </tr></thead>
           <tbody>${bRows}</tbody>
           <tfoot><tr style="background:#1b3a2d">
@@ -3046,7 +3046,7 @@ function renderWeeklyReview(data, lastUpdated) {
     <div style="padding:20px 24px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:wrap">
         <div style="font-size:12px;font-weight:700;color:#1b3a2d;display:flex;align-items:center;gap:6px">
-          <i class="fas fa-chart-line"></i> Weekly Bucket Snapshot — Week 35 · 27 Aug 2026
+          <i class="fas fa-chart-line"></i> Weekly Bucket Snapshot — Week 36 · 3 Sep 2026
         </div>
         ${subTabToggle}
       </div>
@@ -3056,18 +3056,18 @@ function renderWeeklyReview(data, lastUpdated) {
         <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06)">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:10px">✈️ India→US · WoW Recovery Change</div>
           <div style="font-size:30px;font-weight:800;color:${iusDiff>=0?'#2e7d32':'#c62828'};font-variant-numeric:tabular-nums;font-family:'Plus Jakarta Sans',sans-serif">${iusDiff>=0?'↑':'↓'} ${formatUSD(Math.abs(iusDiff))}</div>
-          <div style="font-size:11px;color:#888;margin-top:5px">vs 20 Aug (Wk 34) · <span style="font-weight:700;color:${iusDiff>=0?'#2e7d32':'#c62828'}">${iusDiff>=0?'+':'-'}${prevWow.ius.received>0?((Math.abs(iusDiff)/prevWow.ius.received)*100).toFixed(1)+'%':'—'}</span></div>
+          <div style="font-size:11px;color:#888;margin-top:5px">vs 27 Aug (Wk 35) · <span style="font-weight:700;color:${iusDiff>=0?'#2e7d32':'#c62828'}">${iusDiff>=0?'+':'-'}${prevWow.ius.received>0?((Math.abs(iusDiff)/prevWow.ius.received)*100).toFixed(1)+'%':'—'}</span></div>
         </div>
         ${u2uDiff !== null ? `
         <div style="background:#fff;border:1px solid #e9ecef;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06)">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:10px">🔄 US→US · WoW Recovery Change</div>
           <div style="font-size:30px;font-weight:800;color:${u2uDiff>=0?'#2e7d32':'#c62828'};font-variant-numeric:tabular-nums;font-family:'Plus Jakarta Sans',sans-serif">${u2uDiff>=0?'↑':'↓'} ${formatUSD(Math.abs(u2uDiff))}</div>
-          <div style="font-size:11px;color:#888;margin-top:5px">vs 20 Aug (Wk 34) · <span style="font-weight:700;color:${u2uDiff>=0?'#2e7d32':'#c62828'}">${u2uDiff>=0?'+':'-'}${prevWow.u2u&&prevWow.u2u.received>0?((Math.abs(u2uDiff)/prevWow.u2u.received)*100).toFixed(1)+'%':'—'}</span></div>
+          <div style="font-size:11px;color:#888;margin-top:5px">vs 27 Aug (Wk 35) · <span style="font-weight:700;color:${u2uDiff>=0?'#2e7d32':'#c62828'}">${u2uDiff>=0?'+':'-'}${prevWow.u2u&&prevWow.u2u.received>0?((Math.abs(u2uDiff)/prevWow.u2u.received)*100).toFixed(1)+'%':'—'}</span></div>
         </div>` : '<div></div>'}
       </div>
       <div style="padding:10px 14px;border-radius:8px;background:#f0f4ff;border:1px solid #c5cae9;font-size:11px;color:#3949ab;display:flex;align-items:flex-start;gap:8px">
         <span>ℹ️</span>
-        <div>Weekly snapshots captured each Thursday. <strong>Wk 35 = 27 Aug</strong> is the current review week. Wk 33 (13 Aug) has India→US only — US→US snapshot tracking started Wk 34 (20 Aug).</div>
+        <div>Weekly snapshots captured each Thursday. <strong>Wk 36 = 3 Sep</strong> is the current review week. 3 weeks shown: Wk 34 (20 Aug), Wk 35 (27 Aug), Wk 36 (3 Sep). Run <code>pivot_weekly.py</code> each Thursday to add the next week.</div>
       </div>
     </div>`;
     return;
