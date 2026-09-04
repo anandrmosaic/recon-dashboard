@@ -1,3 +1,4 @@
+import os
 from googleapiclient.discovery import build
 from collections import defaultdict
 from datetime import datetime, date as date_type, timedelta
@@ -1227,3 +1228,234 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
 def _empty_d2c():
     return {'rows': [], 'monthly': {}, 'months': [], 'kpis': {}, 'channels': {},
             'pivot1': {}, 'pivot1_months': []}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ShipBob D2C Claims — read from local Excel file (G: Drive folder)
+# Automatically picks the latest "Shipbob Order Data - Updated *.xlsx" file.
+# Falls back to Sheets tab if folder is missing or no file found.
+# ─────────────────────────────────────────────────────────────────────────────
+def get_shipbob_d2c_from_excel(folder):
+    """Read ShipBob D2C claim data from the latest Excel file in *folder*.
+
+    Returns the same dict structure as get_shipbob_d2c_data() so the rest of
+    the app needs no changes.
+    """
+    import glob as _glob
+    import openpyxl as _openpyxl
+
+    pattern = os.path.join(folder, "Shipbob Order Data - Updated *.xlsx")
+    files   = sorted(_glob.glob(pattern), key=os.path.getmtime)
+    if not files:
+        print(f"[ShipBob Excel] No matching file in {folder!r} — falling back")
+        return None   # caller will fall back to Sheets tab
+
+    latest = files[-1]
+    print(f"[ShipBob Excel] Reading {os.path.basename(latest)}")
+
+    try:
+        wb = _openpyxl.load_workbook(latest, read_only=True, data_only=True)
+    except Exception as e:
+        print(f"[ShipBob Excel] Failed to open workbook: {e}")
+        return None
+
+    # Try 'Dump' sheet first, then active sheet
+    ws = wb["Dump"] if "Dump" in wb.sheetnames else wb.active
+
+    raw_rows = list(ws.iter_rows(min_row=1, values_only=True))
+    wb.close()
+
+    if len(raw_rows) < 2:
+        return None
+
+    # ── Header map (same partial-match logic as Sheets version) ───────────────
+    raw_hdrs = [str(h).strip().lower() if h is not None else '' for h in raw_rows[0]]
+
+    def _find(candidates):
+        for kw in candidates:
+            for i, rh in enumerate(raw_hdrs):
+                if kw in rh:
+                    return i
+        return None
+
+    ci_month      = _find(['month'])
+    ci_ship_id    = _find(['shipment id'])
+    ci_channel    = _find(['sales channel', 'ingestion channel store', 'channel'])
+    ci_sku        = _find(['sku'])
+    ci_line_name  = _find(['line item name'])
+    ci_line_qty   = _find(['line item qty'])
+    ci_sub_bucket = _find(['sub bucket'])
+    ci_main_bucket= _find(['main bucket'])
+    ci_claim_st   = _find(['claim status'])
+    ci_amt        = _find(['amt'])
+    ci_expected   = _find(['expected claim', 'expected'])
+    ci_remark     = _find(['claims remark', 'remark'])
+    ci_carrier    = _find(['carrier'])
+    ci_row_status = _find(['row status'])
+    ci_days       = _find(['days of order'])
+
+    print(f"[ShipBob Excel] Column map: month={ci_month} ship={ci_ship_id} "
+          f"ch={ci_channel} sub={ci_sub_bucket} amt={ci_amt} exp={ci_expected}")
+
+    def gv(row, idx):
+        if idx is None or idx >= len(row):
+            return ''
+        v = row[idx]
+        return str(v).strip() if v is not None else ''
+
+    BUCKET_MAP = {
+        'claim raised and received':     'rec',
+        'claim raised but not received': 'prog',
+        'pending to claim':              'pend',
+        'claim window expired':          'expired',
+        'rto':                           'rto',
+        'cancelled':                     'cancelled',
+        'delivered':                     'delivered',
+        'intransit':                     'intransit',
+    }
+    SKIP_BUCKETS = {'delivered', 'intransit', 'other'}
+
+    rows          = []
+    monthly       = {}
+    ch_agg        = {}
+    kpis          = {
+        'rec':     {'count': 0, 'amt': 0.0},
+        'prog':    {'count': 0, 'exp': 0.0},
+        'pend':    {'count': 0, 'exp': 0.0},
+        'expired': {'count': 0, 'exp': 0.0},
+    }
+    prog_shipments = set()
+    pend_shipments = set()
+    pivot1         = {}
+    pivot1_months  = set()
+    shipment_qty   = {}
+
+    for raw in raw_rows[1:]:
+        if not any(v is not None for v in raw):
+            continue
+
+        month        = gv(raw, ci_month)
+        shipment_id  = gv(raw, ci_ship_id)
+        channel      = gv(raw, ci_channel)
+        sku          = gv(raw, ci_sku)
+        line_name    = gv(raw, ci_line_name) or sku
+        sub_bucket   = gv(raw, ci_sub_bucket)
+        main_bucket  = gv(raw, ci_main_bucket)
+        claim_status = gv(raw, ci_claim_st)
+        remark       = gv(raw, ci_remark)
+        carrier      = gv(raw, ci_carrier)
+
+        try: amt = float(raw[ci_amt]) if ci_amt is not None and raw[ci_amt] is not None else 0.0
+        except: amt = 0.0
+        try: exp = float(raw[ci_expected]) if ci_expected is not None and raw[ci_expected] is not None else 0.0
+        except: exp = 0.0
+        try: days = float(raw[ci_days]) if ci_days is not None and raw[ci_days] is not None else 0.0
+        except: days = 0.0
+
+        bk = BUCKET_MAP.get(sub_bucket.strip().lower(),
+             BUCKET_MAP.get(main_bucket.strip().lower(), 'other'))
+
+        sb_label = (sub_bucket or main_bucket or 'Unknown').strip()
+        if month and sb_label:
+            if sb_label not in pivot1:
+                pivot1[sb_label] = {}
+            pivot1[sb_label][month] = pivot1[sb_label].get(month, 0) + 1
+            pivot1_months.add(month)
+
+        if shipment_id:
+            try: qty_val = float(raw[ci_line_qty]) if ci_line_qty is not None and raw[ci_line_qty] else 0.0
+            except: qty_val = 0.0
+            shipment_qty[shipment_id] = shipment_qty.get(shipment_id, 0) + qty_val
+
+        if bk in SKIP_BUCKETS:
+            continue
+        claim_bks = {'rec', 'prog', 'pend', 'expired'}
+        if bk not in claim_bks and amt == 0 and exp == 0:
+            continue
+
+        row = {
+            'month':        month,
+            'shipment_id':  shipment_id,
+            'channel':      channel,
+            'sku':          sku,
+            'line_name':    line_name,
+            'sub_bucket':   sub_bucket or main_bucket,
+            'bucket_key':   bk,
+            'claim_status': claim_status,
+            'amt':          round(amt, 2),
+            'exp':          round(exp, 2),
+            'remark':       remark,
+            'carrier':      carrier,
+            'days':         int(days) if days else 0,
+        }
+        rows.append(row)
+
+        if month:
+            if month not in monthly:
+                monthly[month] = {'rec': 0.0, 'prog': 0.0, 'pend': 0.0, 'expired': 0.0}
+            if bk == 'rec':
+                monthly[month]['rec']     += amt
+            elif bk == 'prog':
+                monthly[month]['prog']    += exp
+            elif bk == 'pend':
+                monthly[month]['pend']    += exp
+            elif bk == 'expired':
+                monthly[month]['expired'] += exp
+
+        if bk in kpis:
+            if bk == 'rec':
+                kpis[bk]['count'] += 1
+                kpis[bk]['amt']   += amt
+            elif bk == 'prog':
+                prog_shipments.add(shipment_id)
+                kpis[bk]['exp']   += exp
+            elif bk == 'pend':
+                pend_shipments.add(shipment_id)
+                kpis[bk]['exp']   += exp
+            elif bk == 'expired':
+                kpis[bk]['count'] += 1
+                kpis[bk]['exp']   += exp
+
+        if channel:
+            if channel not in ch_agg:
+                ch_agg[channel] = {'rec': 0.0, 'prog': 0.0, 'pend': 0.0}
+            if bk == 'rec':
+                ch_agg[channel]['rec'] += amt
+            elif bk == 'prog':
+                ch_agg[channel]['prog'] += exp
+            elif bk == 'pend':
+                ch_agg[channel]['pend'] += exp
+
+    kpis['prog']['count'] = len(prog_shipments)
+    kpis['pend']['count'] = len(pend_shipments)
+
+    for row in rows:
+        row['total_qty'] = int(shipment_qty.get(row['shipment_id'], 0))
+
+    months  = sorted(monthly.keys(),
+                     key=lambda m: MONTH_ORDER.index(m) if m in MONTH_ORDER else 99)
+    p1_months = sorted(pivot1_months,
+                       key=lambda m: MONTH_ORDER.index(m) if m in MONTH_ORDER else 99)
+
+    for m in monthly:
+        for k in monthly[m]:
+            monthly[m][k] = round(monthly[m][k], 2)
+    for ch in ch_agg:
+        for k in ch_agg[ch]:
+            ch_agg[ch][k] = round(ch_agg[ch][k], 2)
+    for bk in kpis:
+        for k in kpis[bk]:
+            if isinstance(kpis[bk][k], float):
+                kpis[bk][k] = round(kpis[bk][k], 2)
+
+    print(f"[ShipBob Excel] Loaded {len(rows)} claim rows. "
+          f"rec={kpis['rec']['amt']} prog={kpis['prog']['exp']} pend={kpis['pend']['exp']}")
+    return {
+        'rows':          rows,
+        'monthly':       monthly,
+        'months':        months,
+        'kpis':          kpis,
+        'channels':      ch_agg,
+        'pivot1':        pivot1,
+        'pivot1_months': p1_months,
+    }

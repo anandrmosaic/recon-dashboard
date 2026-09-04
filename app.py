@@ -18,7 +18,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data
+from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -67,10 +67,16 @@ def refresh_data():
             data['ups_claims'] = {'summary': {}, 'claims': []}
 
         # ── ShipBob D2C Claims ────────────────────────────────────────────────
+        # Try local Excel file first (G: Drive folder), fall back to Sheets tab
         try:
-            d2c_tab = CONFIG.get('shipbob_d2c_tab', 'ShipBob D2C Claims')
-            data['shipbob_d2c'] = get_shipbob_d2c_data(creds, RECON_ID, d2c_tab)
-            print(f"[Data] ShipBob D2C loaded: {len(data['shipbob_d2c'].get('rows', []))} rows")
+            excel_folder = CONFIG.get('shipbob_d2c_folder', '')
+            d2c = get_shipbob_d2c_from_excel(excel_folder) if excel_folder else None
+            if d2c is None:
+                d2c_tab = CONFIG.get('shipbob_d2c_tab', 'ShipBob D2C Claims')
+                d2c = get_shipbob_d2c_data(creds, RECON_ID, d2c_tab)
+                print(f"[Data] ShipBob D2C loaded from Sheets tab: {len(d2c.get('rows', []))} rows")
+            data['shipbob_d2c'] = d2c
+            print(f"[Data] ShipBob D2C final: {len(data['shipbob_d2c'].get('rows', []))} rows")
         except Exception as e:
             print(f"[Data] ShipBob D2C failed: {e}")
             data['shipbob_d2c'] = {'rows': [], 'monthly': {}, 'kpis': {}, 'months': [], 'channels': {}}
