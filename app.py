@@ -390,11 +390,11 @@ if __name__ == '__main__':
     tz    = pytz.timezone(sched['timezone'])
     scheduler = BackgroundScheduler(timezone=tz)
 
-    # 1. Auto data refresh every 4 hours (keeps dashboard fresh without hammering Sheets API)
+    # 1. Auto data refresh every 1 hour
     scheduler.add_job(
         refresh_data,
         'interval',
-        hours=4,
+        hours=1,
         id='auto_refresh',
         next_run_time=None,   # don't double-fire right at startup (startup thread handles first load)
     )
@@ -410,7 +410,7 @@ if __name__ == '__main__':
         )
     )
     scheduler.start()
-    print(f"[Scheduler] Auto data refresh every 4 hours")
+    print(f"[Scheduler] Auto data refresh every 1 hour")
     print(f"[Scheduler] Weekly email set for every {sched['day_of_week'].upper()} {sched['hour']}:{sched['minute']:02d} {sched['timezone']}")
 
     print("[Server] Dashboard running at http://localhost:5000")
