@@ -109,4 +109,70 @@ ss.values().update(
 ).execute()
 
 print(f"\nSync complete — {len(sheet_rows)-1} rows in '{TAB_NAME}'")
+
+# ── Build Monthly Summary pivot (all sub-buckets incl. Delivered / Intransit) ─
+SUMMARY_TAB = 'ShipBob Monthly Summary'
+
+pivot1        = d2c['pivot1']          # {sub_bucket: {month: count}}
+pivot1_months = d2c['pivot1_months']   # sorted month names
+
+MONTH_ORDER = ['January','February','March','April','May','June',
+               'July','August','September','October','November','December']
+
+months_sorted = sorted(pivot1_months,
+                       key=lambda m: MONTH_ORDER.index(m) if m in MONTH_ORDER else 99)
+
+# Row order to match Excel pivot (most-volume first, claim buckets below)
+BUCKET_ORDER = [
+    'Delivered',
+    'Intransit',
+    'Claim raised and received',
+    'Rto',
+    'Claim raised but not received',
+    'Pending to claim',
+    'Claim Window Expired',
+    'Cancelled',
+]
+all_buckets = list(pivot1.keys())
+ordered_buckets = [b for b in BUCKET_ORDER if b in pivot1] + \
+                  [b for b in all_buckets if b not in BUCKET_ORDER]
+
+summary_rows = [['Count of Shipment ID'] + months_sorted + ['Grand Total']]
+col_totals   = [0] * len(months_sorted)
+
+for bucket in ordered_buckets:
+    month_counts = pivot1[bucket]
+    row_vals     = [month_counts.get(m, 0) for m in months_sorted]
+    grand        = sum(row_vals)
+    for i, v in enumerate(row_vals):
+        col_totals[i] += v
+    # Write 0 as '' to match Excel pivot's blank cells
+    display = [v if v else '' for v in row_vals]
+    summary_rows.append([bucket] + display + [grand])
+
+# Grand Total row
+summary_rows.append(['Grand Total'] + col_totals + [sum(col_totals)])
+
+# Write summary tab
+if SUMMARY_TAB not in tab_names:
+    print(f"Creating tab '{SUMMARY_TAB}'...")
+    ss.batchUpdate(
+        spreadsheetId=SHEET_ID,
+        body={'requests': [{'addSheet': {'properties': {'title': SUMMARY_TAB}}}]}
+    ).execute()
+else:
+    print(f"Clearing '{SUMMARY_TAB}' tab...")
+    ss.values().clear(
+        spreadsheetId=SHEET_ID,
+        range=f"'{SUMMARY_TAB}'!A1:Z100"
+    ).execute()
+
+ss.values().update(
+    spreadsheetId=SHEET_ID,
+    range=f"'{SUMMARY_TAB}'!A1",
+    valueInputOption='RAW',
+    body={'values': summary_rows}
+).execute()
+
+print(f"Summary tab written — {len(summary_rows)-2} bucket rows + Grand Total")
 print(f"Hit Refresh on the dashboard to see updated numbers.")
