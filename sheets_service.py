@@ -1327,8 +1327,13 @@ def get_shipbob_d2c_from_excel(folder):
     ci_expected   = _find(['expected claim', 'expected'])
     ci_remark     = _find(['claims remark', 'remark'])
     ci_carrier    = _find(['carrier'])
-    ci_row_status = _find(['row status'])
-    ci_days       = _find(['days of order'])
+    ci_row_status    = _find(['row status'])
+    ci_days          = _find(['days of order'])
+    ci_import_date   = _find(['import date'])
+    ci_fulfil_cost   = _find(['fulfillment cost', 'fulfilment cost'])
+    ci_total_qty_col = _find(['total item quantity'])
+    ci_delivery_st   = _find(['delivery status'])
+    ci_delivery_rmk  = _find(['delivery remark'])
 
     print(f"[ShipBob Excel] Column map: month={ci_month} ship={ci_ship_id} "
           f"ch={ci_channel} sub={ci_sub_bucket} amt={ci_amt} exp={ci_expected}")
@@ -1387,6 +1392,12 @@ def get_shipbob_d2c_from_excel(folder):
         except: exp = 0.0
         try: days = float(raw[ci_days]) if ci_days is not None and raw[ci_days] is not None else 0.0
         except: days = 0.0
+        import_date    = gv(raw, ci_import_date)
+        fulfil_cost    = gv(raw, ci_fulfil_cost)
+        total_qty_raw  = gv(raw, ci_total_qty_col)
+        delivery_st    = gv(raw, ci_delivery_st)
+        delivery_rmk   = gv(raw, ci_delivery_rmk)
+        row_status     = gv(raw, ci_row_status)
 
         bk = BUCKET_MAP.get(sub_bucket.strip().lower(),
              BUCKET_MAP.get(main_bucket.strip().lower(), 'other'))
@@ -1410,19 +1421,27 @@ def get_shipbob_d2c_from_excel(folder):
             continue
 
         row = {
-            'month':        month,
-            'shipment_id':  shipment_id,
-            'channel':      channel,
-            'sku':          sku,
-            'line_name':    line_name,
-            'sub_bucket':   sub_bucket or main_bucket,
-            'bucket_key':   bk,
-            'claim_status': claim_status,
-            'amt':          round(amt, 2),
-            'exp':          round(exp, 2),
-            'remark':       remark,
-            'carrier':      carrier,
-            'days':         int(days) if days else 0,
+            'month':           month,
+            'shipment_id':     shipment_id,
+            'import_date':     import_date,
+            'days':            int(days) if days else 0,
+            'fulfil_cost':     fulfil_cost,
+            'channel':         channel,
+            'sku':             sku,
+            'line_name':       line_name,
+            'line_qty':        qty_val if shipment_id else 0,
+            'total_qty_raw':   total_qty_raw,
+            'delivery_status': delivery_st,
+            'delivery_remark': delivery_rmk,
+            'sub_bucket':      sub_bucket or main_bucket,
+            'main_bucket':     main_bucket or sub_bucket,
+            'bucket_key':      bk,
+            'claim_status':    claim_status,
+            'amt':             round(amt, 2),
+            'exp':             round(exp, 2),
+            'remark':          remark,
+            'carrier':         carrier,
+            'row_status':      row_status,
         }
         rows.append(row)
 

@@ -36,12 +36,17 @@ print(f"  rec  = Rs.{kpis['rec']['amt']}  ({kpis['rec']['count']} shipments)")
 print(f"  prog = Rs.{kpis['prog']['exp']}  ({kpis['prog']['count']} shipments)")
 print(f"  pend = Rs.{kpis['pend']['exp']}  ({kpis['pend']['count']} shipments)")
 
-# ── Build clean 18-column output ──────────────────────────────────────────────
-# Column order matches what get_shipbob_d2c_data() expects (header-name based)
+# ── Build output — columns in same order as the Dump sheet ────────────────────
+# Shipment ID | Import Date | Month | Days of order | Fulfillment Cost |
+# Line Item Name | Line Item Qty | Total Item Quantity |
+# Delivery Status | Delivery remark | Claim status |
+# Amt | Expected Claim amount | Claims remark | Sub Bucket | Main Bucket | Row Status
 HEADER = [
-    'Month', 'Shipment ID', 'Sales Channel', 'SKU', 'Line Item Name',
-    'Sub Bucket', 'Main Bucket', 'Claim status',
-    'Amt', 'Expected Claim amount', 'Claims remark', 'Carrier',
+    'Shipment ID', 'Import Date', 'Month', 'Days of order', 'Fulfillment Cost',
+    'Line Item Name', 'Line Item Qty', 'Total Item Quantity',
+    'Delivery Status', 'Delivery remark', 'Claim status',
+    'Amt', 'Expected Claim amount', 'Claims remark',
+    'Sub Bucket', 'Main Bucket', 'Row Status',
 ]
 
 def fmt(v):
@@ -52,18 +57,23 @@ def fmt(v):
 sheet_rows = [HEADER]
 for r in rows:
     sheet_rows.append([
-        fmt(r.get('month')),
         fmt(r.get('shipment_id')),
-        fmt(r.get('channel')),
-        fmt(r.get('sku')),
+        fmt(r.get('import_date')),
+        fmt(r.get('month')),
+        fmt(r.get('days')),
+        fmt(r.get('fulfil_cost')),
         fmt(r.get('line_name')),
-        fmt(r.get('sub_bucket')),
-        fmt(r.get('sub_bucket')),   # main bucket = sub bucket (already normalised)
+        fmt(r.get('line_qty')),
+        fmt(r.get('total_qty_raw')),
+        fmt(r.get('delivery_status')),
+        fmt(r.get('delivery_remark')),
         fmt(r.get('claim_status')),
         fmt(r.get('amt')),
         fmt(r.get('exp')),
         fmt(r.get('remark')),
-        fmt(r.get('carrier')),
+        fmt(r.get('sub_bucket')),
+        fmt(r.get('main_bucket')),
+        fmt(r.get('row_status')),
     ])
 
 print(f"Rows to write     : {len(sheet_rows) - 1} (+ 1 header)")
@@ -87,7 +97,7 @@ else:
     print(f"Clearing '{TAB_NAME}' tab...")
     ss.values().clear(
         spreadsheetId=SHEET_ID,
-        range=f"'{TAB_NAME}'!A1:Z10000"
+        range=f"'{TAB_NAME}'!A1:Z200000"
     ).execute()
 
 # ── Write in one shot (< 300 rows, tiny) ─────────────────────────────────────
