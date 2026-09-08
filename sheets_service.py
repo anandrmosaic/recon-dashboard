@@ -1230,6 +1230,60 @@ def _empty_d2c():
             'pivot1': {}, 'pivot1_months': []}
 
 
+def get_shipbob_summary_pivot(creds, sheet_id, tab_name='ShipBob Monthly Summary'):
+    """Read the pre-built monthly summary tab and return pivot1 + pivot1_months.
+
+    The tab is written by sync_shipbob.py and has the form:
+      Row 1 : header  → [label_col, Month1, Month2, …, Grand Total]
+      Row 2+: data    → [Sub Bucket, count, count, …, row_total]
+      Last  : Grand Total row (skipped)
+
+    Returns {'pivot1': {sub_bucket: {month: count}}, 'pivot1_months': [...]}
+    or None if the tab can't be read.
+    """
+    try:
+        service = build('sheets', 'v4', credentials=creds)
+        result  = service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=f"'{tab_name}'!A1:Z50"
+        ).execute()
+        rows = result.get('values', [])
+    except Exception as e:
+        print(f"[ShipBob Summary] Could not read '{tab_name}': {e}")
+        return None
+
+    if len(rows) < 2:
+        return None
+
+    header = rows[0]   # ['Count of Shipment ID', 'April', 'May', ..., 'Grand Total']
+    # months = columns 1 … second-last (skip label col and Grand Total col)
+    months = [h for h in header[1:-1] if h in MONTH_ORDER]
+
+    pivot1 = {}
+    for row in rows[1:]:
+        if not row:
+            continue
+        label = str(row[0]).strip()
+        if label in ('Grand Total', ''):
+            continue
+        month_counts = {}
+        for i, m in enumerate(months):
+            raw = row[i + 1] if (i + 1) < len(row) else ''
+            try:
+                v = int(str(raw).replace(',', '').strip()) if raw else 0
+            except ValueError:
+                v = 0
+            if v:
+                month_counts[m] = v
+        if month_counts:
+            pivot1[label] = month_counts
+
+    pivot1_months = sorted(months,
+                           key=lambda m: MONTH_ORDER.index(m) if m in MONTH_ORDER else 99)
+    print(f"[ShipBob Summary] Loaded {len(pivot1)} buckets across {len(pivot1_months)} months")
+    return {'pivot1': pivot1, 'pivot1_months': pivot1_months}
+
+
 # ── Month normaliser ─────────────────────────────────────────────────────────
 # openpyxl can return date serial numbers (e.g. 46375) instead of text month
 # names when Month cells contain date values.  Convert everything to a proper

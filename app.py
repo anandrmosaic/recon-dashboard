@@ -18,7 +18,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel
+from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel, get_shipbob_summary_pivot
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -75,6 +75,12 @@ def refresh_data():
                 d2c_tab = CONFIG.get('shipbob_d2c_tab', 'ShipBob D2C Claims')
                 d2c = get_shipbob_d2c_data(creds, RECON_ID, d2c_tab)
                 print(f"[Data] ShipBob D2C loaded from Sheets tab: {len(d2c.get('rows', []))} rows")
+                # Inject full pivot (incl. Delivered/Intransit) from summary tab
+                summary_tab = CONFIG.get('shipbob_summary_tab', 'ShipBob Monthly Summary')
+                sp = get_shipbob_summary_pivot(creds, RECON_ID, summary_tab)
+                if sp:
+                    d2c['pivot1']        = sp['pivot1']
+                    d2c['pivot1_months'] = sp['pivot1_months']
             data['shipbob_d2c'] = d2c
             print(f"[Data] ShipBob D2C final: {len(data['shipbob_d2c'].get('rows', []))} rows")
         except Exception as e:
