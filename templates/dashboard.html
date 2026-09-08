@@ -608,14 +608,13 @@
   <button class="tab-btn" data-tab="weekly_review" onclick="switchTab('weekly_review')">
     <i class="fas fa-calendar-week"></i> Weekly Review
   </button>
-  <button class="tab-btn" data-tab="india_us" onclick="switchTab('india_us')">
-    <i class="fas fa-plane-departure"></i> India → US
-    <span id="iusBadge" style="background:#1565c0;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
+  <button class="tab-btn" data-tab="inbound_recon" onclick="switchTab('inbound_recon')">
+    <i class="fas fa-exchange-alt"></i> Inbound Recon
+    <span id="inboundBadge" style="background:#1565c0;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
-  <button class="tab-btn" data-tab="us2us" onclick="switchTab('us2us')">
-    <i class="fas fa-exchange-alt"></i> Internal US 2 US
-    <span id="us2usBadge" style="background:#6a1b9a;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
-  </button>
+  <!-- hidden: keep old badge IDs alive so existing JS references don't throw -->
+  <span id="iusBadge"   style="display:none"></span>
+  <span id="us2usBadge" style="display:none"></span>
   <button class="tab-btn" data-tab="ups_claims" onclick="switchTab('ups_claims')">
     <i class="fas fa-shipping-fast"></i> UPS Claims
     <span id="upsBadge" style="background:#e65100;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
@@ -639,10 +638,11 @@ let _rawData = null;
 let _lastUpdated = null;
 let _activeTab = 'dashboard';
 let chartInstances = {};
-let _dashView    = 'india_us';
-let _caseView    = 'india_us';
-let _caseSubView = 'overview'; // 'overview' | 'pending_receipt' | 'pending_claim'
-let _weeklyView  = 'india_us';
+let _dashView      = 'india_us';
+let _inboundView   = 'india_us'; // sub-toggle inside Inbound Recon tab
+let _caseView      = 'india_us';
+let _caseSubView   = 'overview'; // 'overview' | 'pending_receipt' | 'pending_claim'
+let _weeklyView    = 'india_us';
 let _weekIdx     = 0;
 let _weekOptions = [];
 let _wrSubTab    = 'summary'; // 'summary' | 'wow'
@@ -1180,16 +1180,61 @@ function applyAndRender() {
     renderWeeklyReview(_rawData, _lastUpdated);
   } else if (_activeTab === 'ups_claims') {
     renderUPSClaimsTab(_rawData, _lastUpdated);
-  } else if (_activeTab === 'us2us') {
-    renderUS2USTab(_rawData, _lastUpdated);
+  } else if (_activeTab === 'inbound_recon') {
+    renderInboundRecon(_rawData, _lastUpdated);
   } else if (_activeTab === 'shipbob_d2c') {
     renderShipBobD2C(_rawData, _lastUpdated);
   } else {
-    renderIndiaUSTab(_rawData, _lastUpdated);
+    renderDashboardOverview(_rawData, _lastUpdated);
   }
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
+
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║  INBOUND RECON TAB  (India → US + Internal US 2 US merged)               ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+
+function renderInboundRecon(data, lastUpdated) {
+  const iusKpis  = ((data.india_us || {}).kpis) || {};
+  const u2Kpis   = ((data.us2us   || {}).kpis) || {};
+  const iusRows  = (data.india_us || {}).rows || [];
+  const u2Rows   = (data.us2us   || {}).rows || [];
+  const iusCount = ((iusKpis.short_grn_pending||{}).count||0) + ((iusKpis.short_grn_progress||{}).count||0);
+  const u2Count  = ((u2Kpis.pending||{}).count||0)           + ((u2Kpis.in_progress||{}).count||0);
+
+  const on  = 'background:#1B3A2D;color:#fff;border-color:#1B3A2D;';
+  const off = 'background:transparent;color:var(--text);border:2px solid var(--border);';
+
+  const toggleHtml = `
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.8px">Viewing:</span>
+    <button onclick="_inboundView='india_us';renderInboundRecon(_rawData,_lastUpdated)"
+      style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${_inboundView==='india_us'?on:off}">
+      ✈️ India → US <span style="opacity:.7;font-weight:400">(${iusRows.length} rows)</span>
+    </button>
+    <button onclick="_inboundView='us2us';renderInboundRecon(_rawData,_lastUpdated)"
+      style="padding:7px 20px;border-radius:20px;border:2px solid;font-weight:700;cursor:pointer;font-size:12px;transition:all .18s;${_inboundView==='us2us'?on:off}">
+      🔄 Internal US 2 US <span style="opacity:.7;font-weight:400">(${u2Rows.length} rows)</span>
+    </button>
+  </div>`;
+
+  // Render the selected sub-tab (it writes to mainContent)
+  if (_inboundView === 'india_us') {
+    renderIndiaUSTab(data, lastUpdated);
+  } else {
+    renderUS2USTab(data, lastUpdated);
+  }
+
+  // Prepend the sub-toggle above whatever the sub-tab rendered
+  document.getElementById('mainContent').insertAdjacentHTML('afterbegin', toggleHtml);
+
+  // Update combined Inbound Recon badge
+  const total = iusCount + u2Count;
+  const ib = document.getElementById('inboundBadge');
+  if (ib) { ib.textContent = total; ib.style.display = total > 0 ? 'inline' : 'none'; }
+}
+
 
 // ╔═══════════════════════════════════════════════════════════════════════════╗
 // ║  DASHBOARD OVERVIEW TAB                                                  ║
@@ -6232,17 +6277,14 @@ async function loadData() {
       _rawData = json.data;
       _lastUpdated = json.last_updated;
 
-      // India→US badge: action needed (pending + in-progress)
-      const iusKpis = (_rawData.india_us || {}).kpis || {};
+      // Inbound Recon badge: combined India→US + US2US action needed
+      const iusKpis  = (_rawData.india_us || {}).kpis || {};
       const iusAction = ((iusKpis.short_grn_pending||{}).count||0) + ((iusKpis.short_grn_progress||{}).count||0);
-      const iusBadge = document.getElementById('iusBadge');
-      if (iusBadge) { iusBadge.textContent = iusAction; iusBadge.style.display = iusAction > 0 ? 'inline' : 'none'; }
-
-      // US2US badge: pending + in-progress
-      const u2Kpis = (_rawData.us2us || {}).kpis || {};
-      const u2Action = ((u2Kpis.pending||{}).count||0) + ((u2Kpis.in_progress||{}).count||0);
-      const u2Badge = document.getElementById('us2usBadge');
-      if (u2Badge) { u2Badge.textContent = u2Action; u2Badge.style.display = u2Action > 0 ? 'inline' : 'none'; }
+      const u2Kpis   = (_rawData.us2us || {}).kpis || {};
+      const u2Action  = ((u2Kpis.pending||{}).count||0) + ((u2Kpis.in_progress||{}).count||0);
+      const inboundTotal = iusAction + u2Action;
+      const inboundBadge = document.getElementById('inboundBadge');
+      if (inboundBadge) { inboundBadge.textContent = inboundTotal; inboundBadge.style.display = inboundTotal > 0 ? 'inline' : 'none'; }
 
       // Reset weekly options so they rebuild from fresh data
       _weekOptions = [];
