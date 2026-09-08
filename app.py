@@ -67,25 +67,18 @@ def refresh_data():
             data['ups_claims'] = {'summary': {}, 'claims': []}
 
         # ── ShipBob D2C Claims ────────────────────────────────────────────────
-        # Try local Excel file first (G: Drive folder), fall back to Sheets tab
+        # Always reads from the "ShipBob D2C Claims" Sheets tab.
+        # To update: run "Sync to Dashboard.bat" in G:\My Drive\Shibob D2C Claim\
+        # (writes all 17 columns from the latest Excel), then hit Refresh here.
         try:
-            excel_folder = CONFIG.get('shipbob_d2c_folder', '')
-            d2c = get_shipbob_d2c_from_excel(excel_folder) if excel_folder else None
-            if d2c is None:
-                d2c_tab = CONFIG.get('shipbob_d2c_tab', 'ShipBob D2C Claims')
-                d2c = get_shipbob_d2c_data(creds, RECON_ID, d2c_tab)
-                print(f"[Data] ShipBob D2C loaded from Sheets tab: {len(d2c.get('rows', []))} rows")
-                # Inject full pivot (incl. Delivered/Intransit) from summary tab
-                summary_tab = CONFIG.get('shipbob_summary_tab', 'ShipBob Monthly Summary')
-                sp = get_shipbob_summary_pivot(creds, RECON_ID, summary_tab)
-                if sp:
-                    d2c['pivot1']        = sp['pivot1']
-                    d2c['pivot1_months'] = sp['pivot1_months']
+            d2c_tab = CONFIG.get('shipbob_d2c_tab', 'ShipBob D2C Claims')
+            d2c = get_shipbob_d2c_data(creds, RECON_ID, d2c_tab)
             data['shipbob_d2c'] = d2c
-            print(f"[Data] ShipBob D2C final: {len(data['shipbob_d2c'].get('rows', []))} rows")
+            print(f"[Data] ShipBob D2C loaded: {len(d2c.get('rows', []))} claim rows")
         except Exception as e:
             print(f"[Data] ShipBob D2C failed: {e}")
-            data['shipbob_d2c'] = {'rows': [], 'monthly': {}, 'kpis': {}, 'months': [], 'channels': {}}
+            data['shipbob_d2c'] = {'rows': [], 'monthly': {}, 'kpis': {}, 'months': [], 'channels': {},
+                                   'pivot1': {}, 'pivot1_months': []}
 
         _cache['data'] = None
         gc.collect()

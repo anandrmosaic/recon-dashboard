@@ -1033,21 +1033,26 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
                     return i
         return None
 
-    ci_month      = _find(['month'])
-    ci_ship_id    = _find(['shipment id'])
-    ci_channel    = _find(['sales channel', 'ingestion channel store', 'channel'])
-    ci_sku        = _find(['sku'])
-    ci_line_name  = _find(['line item name'])
-    ci_line_qty   = _find(['line item qty'])
-    ci_sub_bucket = _find(['sub bucket'])
-    ci_main_bucket= _find(['main bucket'])
-    ci_claim_st   = _find(['claim status'])
-    ci_amt        = _find(['amt'])
-    ci_expected   = _find(['expected claim', 'expected'])
-    ci_remark     = _find(['claims remark', 'remark'])
-    ci_carrier    = _find(['carrier'])
-    ci_row_status = _find(['row status'])
-    ci_days       = _find(['days of order'])
+    ci_month         = _find(['month'])
+    ci_ship_id       = _find(['shipment id'])
+    ci_channel       = _find(['sales channel', 'ingestion channel store', 'channel'])
+    ci_sku           = _find(['sku'])
+    ci_line_name     = _find(['line item name'])
+    ci_line_qty      = _find(['line item qty'])
+    ci_sub_bucket    = _find(['sub bucket'])
+    ci_main_bucket   = _find(['main bucket'])
+    ci_claim_st      = _find(['claim status'])
+    ci_amt           = _find(['amt'])
+    ci_expected      = _find(['expected claim', 'expected'])
+    ci_remark        = _find(['claims remark', 'remark'])
+    ci_carrier       = _find(['carrier'])
+    ci_row_status    = _find(['row status'])
+    ci_days          = _find(['days of order'])
+    ci_import_date   = _find(['import date'])
+    ci_fulfil_cost   = _find(['fulfillment cost', 'fulfilment cost'])
+    ci_total_qty_col = _find(['total item quantity'])
+    ci_delivery_st   = _find(['delivery status'])
+    ci_delivery_rmk  = _find(['delivery remark'])
 
     print(f"[ShipBob D2C] Column map: month={ci_month} ship={ci_ship_id} ch={ci_channel} "
           f"sku={ci_sku} sub={ci_sub_bucket} main={ci_main_bucket} "
@@ -1106,6 +1111,12 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
         remark       = gv(raw, ci_remark)
         carrier      = gv(raw, ci_carrier)
         days         = safe_float(gv(raw, ci_days))
+        import_date  = gv(raw, ci_import_date)
+        fulfil_cost  = gv(raw, ci_fulfil_cost)
+        total_qty_raw= gv(raw, ci_total_qty_col)
+        delivery_st  = gv(raw, ci_delivery_st)
+        delivery_rmk = gv(raw, ci_delivery_rmk)
+        row_status   = gv(raw, ci_row_status)
 
         # Determine bucket key — sub_bucket is authoritative, fall back to main
         bk = BUCKET_MAP.get(sub_bucket.strip().lower(),
@@ -1133,19 +1144,26 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
             continue
 
         row = {
-            'month':        month,
-            'shipment_id':  shipment_id,
-            'channel':      channel,
-            'sku':          sku,
-            'line_name':    line_name,
-            'sub_bucket':   sub_bucket or main_bucket,
-            'bucket_key':   bk,
-            'claim_status': claim_status,
-            'amt':          round(amt, 2),
-            'exp':          round(exp, 2),
-            'remark':       remark,
-            'carrier':      carrier,
-            'days':         int(days) if days else 0,
+            'month':           month,
+            'shipment_id':     shipment_id,
+            'import_date':     import_date,
+            'days':            int(days) if days else 0,
+            'fulfil_cost':     fulfil_cost,
+            'channel':         channel,
+            'sku':             sku,
+            'line_name':       line_name,
+            'delivery_status': delivery_st,
+            'delivery_remark': delivery_rmk,
+            'sub_bucket':      sub_bucket or main_bucket,
+            'main_bucket':     main_bucket or sub_bucket,
+            'bucket_key':      bk,
+            'claim_status':    claim_status,
+            'amt':             round(amt, 2),
+            'exp':             round(exp, 2),
+            'remark':          remark,
+            'carrier':         carrier,
+            'row_status':      row_status,
+            'total_qty_raw':   total_qty_raw,
             # total_qty filled after full-pass completes
         }
         rows.append(row)
