@@ -77,6 +77,9 @@ def read_excel(path):
     if missing:
         print(f'  ⚠ Columns not found in Excel (will be blank): {missing}')
 
+    # Excel formula error strings — treat as blank
+    EXCEL_ERRORS = {'#VALUE!', '#REF!', '#N/A', '#DIV/0!', '#NAME?', '#NULL!', '#NUM!'}
+
     def cell_val(raw, col):
         if col not in col_idx:
             return ''
@@ -86,11 +89,18 @@ def read_excel(path):
         v = raw[i]
         if v is None:
             return ''
-        if hasattr(v, 'strftime'):          # datetime cell
+        if hasattr(v, 'strftime'):          # datetime / date cell → YYYY-MM-DD
             return v.strftime('%Y-%m-%d')
-        if isinstance(v, float) and v == int(v):
-            return str(int(v))
-        return str(v)
+        if isinstance(v, float):
+            if v == int(v):
+                return str(int(v))          # whole number → no decimal
+            if col == 'Days of order':
+                return str(round(v, 1))     # days → 1 decimal place
+            return str(round(v, 4))         # other floats → 4 dp
+        s = str(v).strip()
+        if s in EXCEL_ERRORS:               # formula error → blank
+            return ''
+        return s
 
     data_rows = []
     for raw in rows_iter:
@@ -151,10 +161,10 @@ def upload_to_sheets(data_rows):
     ).execute()
     print(f'  Grid expanded to {needed_rows:,} rows × {needed_cols} cols')
 
-    # ── Clear existing content ────────────────────────────────────────────
+    # ── Clear existing content (wipe full grid width to remove any old columns) ──
     ss.values().clear(
         spreadsheetId=SHEET_ID,
-        range=f"'{TAB_NAME}'!A1:Q{needed_rows}",
+        range=f"'{TAB_NAME}'!A1:Z{needed_rows}",
     ).execute()
 
     # ── Write header + data in 5 000-row batches ──────────────────────────
