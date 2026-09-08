@@ -1093,7 +1093,7 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
         if not any(raw):
             continue
 
-        month        = gv(raw, ci_month)
+        month        = _norm_month(gv(raw, ci_month))
         shipment_id  = gv(raw, ci_ship_id)
         channel      = gv(raw, ci_channel)
         sku          = gv(raw, ci_sku)
@@ -1228,6 +1228,42 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
 def _empty_d2c():
     return {'rows': [], 'monthly': {}, 'months': [], 'kpis': {}, 'channels': {},
             'pivot1': {}, 'pivot1_months': []}
+
+
+# ── Month normaliser ─────────────────────────────────────────────────────────
+# openpyxl can return date serial numbers (e.g. 46375) instead of text month
+# names when Month cells contain date values.  Convert everything to a proper
+# month name; discard anything that can't be resolved.
+_MONTH_ABBR = {m[:3].lower(): m for m in MONTH_ORDER}   # 'jan'→'January' …
+
+def _norm_month(raw):
+    """Return a canonical month name ('January'…'December') or '' if invalid."""
+    if not raw:
+        return ''
+    s = str(raw).strip()
+    # Already a full name
+    if s in MONTH_ORDER:
+        return s
+    # 3-letter abbreviation (Apr, Sep …)
+    if s[:3].lower() in _MONTH_ABBR:
+        return _MONTH_ABBR[s[:3].lower()]
+    # Excel serial date → datetime
+    try:
+        n = float(s)
+        from datetime import date as _date
+        # Excel epoch: 1899-12-30 (serial 1 = Jan 1 1900)
+        d = _date(1899, 12, 30) + __import__('datetime').timedelta(days=int(n))
+        return d.strftime('%B')   # 'January' … 'December'
+    except Exception:
+        pass
+    # Last resort: try parsing as a date string
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y'):
+        try:
+            from datetime import datetime as _dt
+            return _dt.strptime(s[:10], fmt).strftime('%B')
+        except Exception:
+            pass
+    return ''   # give up — row will be excluded from monthly pivots
 
 
 # ─────────────────────────────────────────────────────────────────────────────
