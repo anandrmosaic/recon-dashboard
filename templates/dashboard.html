@@ -3414,7 +3414,7 @@ function renderUS2USTab(data, lastUpdated) {
   // Badges
   const actionNeeded = (pending.count||0) + (progress.count||0);
   const badge = document.getElementById('us2usBadge');
-  if (badge) { badge.textContent = actionNeeded; badge.style.display = actionNeeded > 0 ? 'inline' : 'none'; }
+  if (badge) { badge.textContent = actionNeeded; badge.style.display = 'none'; } // hidden — merged into inboundBadge
 
   const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const sortedMonths = months.slice().sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
@@ -3975,7 +3975,7 @@ function renderIndiaUSTab(data, lastUpdated) {
   // Update badge
   const actionNeeded = (pending.count || 0) + (progress.count || 0);
   const badge = document.getElementById('iusBadge');
-  if (badge) { badge.textContent = actionNeeded; badge.style.display = actionNeeded > 0 ? 'inline' : 'none'; }
+  if (badge) { badge.textContent = actionNeeded; badge.style.display = 'none'; } // hidden — merged into inboundBadge
 
   // Sort months by year then month name (handles multi-year data)
   const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
