@@ -9,7 +9,7 @@ socket.getaddrinfo = _ipv4_first
 import json
 from flask import Flask, jsonify, render_template, request
 from auth import get_credentials
-from provision_engine import get_sheet_carriers, process_provision
+from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
 app = Flask(__name__)
 
@@ -43,6 +43,22 @@ def api_detect_carriers():
         import traceback
         print(f"[Provision] detect-carriers error: {traceback.format_exc()}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/provision/detect-carriers-from-finance', methods=['POST'])
+def api_detect_carriers_from_finance():
+    f = request.files.get('finance_file')
+    if not f:
+        return jsonify({'status': 'ok', 'carriers': []})
+    try:
+        carriers = get_carriers_for_finance_file(
+            get_creds(), CONFIG['sheet_id'], f.read()
+        )
+        return jsonify({'status': 'ok', 'carriers': carriers})
+    except Exception as e:
+        import traceback
+        print(f"[Provision] detect-carriers-from-finance error: {traceback.format_exc()}")
+        return jsonify({'status': 'ok', 'carriers': []})
 
 
 @app.route('/api/provision/generate', methods=['POST'])

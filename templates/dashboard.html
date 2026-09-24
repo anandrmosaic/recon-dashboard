@@ -254,6 +254,83 @@
     .recon-table tbody tr:hover { background: var(--primary-soft) !important; transition: background var(--t-fast); }
     .recon-table tbody tr:last-child td { font-weight: 700; background: linear-gradient(90deg, var(--surface-3), var(--surface-2)) !important; }
 
+    /* ── Claims month matrix ──────────────────────────────────────────────
+       Each month is a visually-contained Qty + Amount pair.  The first
+       column stays visible while the wide YTD table scrolls horizontally.
+    ───────────────────────────────────────────────────────────────────── */
+    .claims-month-scroll { overflow-x: auto; background: #fff; }
+    .claims-month-table {
+      width: 100%; min-width: max-content; border-collapse: separate;
+      border-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums;
+    }
+    .claims-month-table th, .claims-month-table td { vertical-align: middle; }
+    .claims-month-table .claims-label-col {
+      position: sticky; left: 0; z-index: 3; min-width: 220px;
+      box-shadow: 2px 0 0 rgba(15,23,42,.08);
+    }
+    .claims-month-table thead .claims-label-col { z-index: 6; background: #173d2c !important; }
+    .claims-month-table .claims-month-head {
+      padding: 9px 10px !important; text-align: center !important;
+      background: var(--month-accent) !important; color: #fff !important;
+      font-weight: 800 !important; letter-spacing: .35px;
+      border-left: 3px solid #fff; border-right: 1px solid rgba(255,255,255,.32);
+    }
+    .claims-month-table .claims-metric-head {
+      padding: 6px 10px !important; text-align: right !important;
+      background: var(--month-mid) !important; color: #243244 !important;
+      font-size: 10px !important; font-weight: 800 !important;
+      text-transform: uppercase; letter-spacing: .6px;
+      border-bottom: 1px solid var(--month-line);
+    }
+    .claims-month-table .claims-metric-head.claims-qty,
+    .claims-month-table .claims-month-cell.claims-qty { border-left: 3px solid var(--month-line); }
+    .claims-month-table .claims-metric-head.claims-amount,
+    .claims-month-table .claims-month-cell.claims-amount { border-right: 1px solid var(--month-line); }
+    .claims-month-table .claims-month-cell {
+      background: var(--month-soft); border-bottom: 1px solid #e7edf3;
+      transition: filter var(--t-fast), box-shadow var(--t-fast);
+    }
+    .claims-month-table .claims-clickable:hover {
+      filter: brightness(.96); box-shadow: inset 0 0 0 1px var(--month-line);
+    }
+    .claims-month-table .claims-total-head {
+      background: #244b39 !important; color: #fff !important;
+      text-align: center !important; border-left: 3px solid #fff;
+    }
+    .claims-month-table .claims-total-metric {
+      background: #e6f1eb !important; color: #173d2c !important;
+      text-align: right !important; padding: 6px 10px !important;
+      font-size: 10px !important; font-weight: 800 !important;
+      text-transform: uppercase; letter-spacing: .6px;
+    }
+    .claims-month-table tbody .claims-label-col { background: inherit; }
+    .claims-month-table tfoot .claims-label-col { background: inherit; }
+    .claims-month-table tfoot .claims-month-cell {
+      background: inherit; border-bottom: 0; border-left-color: rgba(255,255,255,.28);
+      border-right-color: rgba(255,255,255,.18);
+    }
+    .claims-table-hint { display:flex; align-items:center; gap:7px; color:#94a3b8; font-size:10px; }
+    .claims-table-hint i { color:#64748b; }
+    .claims-channel-table .claims-group-bar td { padding: 0 !important; }
+    .claims-group-toggle {
+      width: 100%; min-height: 42px; padding: 9px 16px; border: 0;
+      display: flex; align-items: center; gap: 9px; cursor: pointer;
+      background: transparent; color: inherit; font: inherit; text-align: left;
+      transition: filter var(--t-fast);
+    }
+    .claims-group-toggle:hover { filter: brightness(.96); }
+    .claims-group-toggle:focus-visible { outline: 3px solid #2563eb; outline-offset: -3px; }
+    .claims-group-toggle .claims-group-chevron {
+      margin-left: auto; transition: transform var(--t-base); font-size: 10px;
+    }
+    .claims-group-toggle[aria-expanded="true"] .claims-group-chevron { transform: rotate(180deg); }
+    .claims-group-toggle .claims-group-summary { font-size: 10px; font-weight: 600; opacity: .72; }
+    .claims-channel-table .claims-month-row td { background: var(--month-soft); }
+    .claims-channel-table .claims-month-row td:first-child {
+      border-left: 4px solid var(--month-accent); font-weight: 700; color: #334155;
+    }
+    .claims-channel-table .claims-subtotal-row td { border-top-width: 2px !important; }
+
     /* ── Badges ── */
     .badge-lost { background: var(--red-soft) !important; color: var(--red) !important; padding: 3px 9px; border-radius: var(--r-full); font-size: 11px; font-weight: 700; border: 1px solid var(--red-mid); }
     .badge-recovered { background: var(--green-soft) !important; color: var(--green-val) !important; padding: 3px 9px; border-radius: var(--r-full); font-size: 11px; font-weight: 700; border: 1px solid var(--green-mid); }
@@ -706,24 +783,23 @@ function destroyCharts() {
 }
 
 // ── Claims Bucket drill-down modal ────────────────────────────────────────
-function showCBDrill(month, bucket) {
-  const allDetail = window._cbDetail || {};
-  const rows = month === 'all'
-    ? Object.values(allDetail).flatMap(d => d[bucket] || [])
-    : ((allDetail[month] || {})[bucket] || []);
+function renderCBDrillModal(month, bucket, rows, contextLabel='') {
   const bktLabel = bucket === 'rec'  ? 'Claim Raised & Received'
                  : bucket === 'prog' ? 'Claim Raised, Pending Receipt'
                  :                     'Pending to Claim';
   const amtLabel = bucket === 'rec' ? 'Actual ($)' : 'Expected ($)';
   const total    = rows.reduce((s,r) => s + r.amt, 0);
+  const totalQty = rows.reduce((s,r) => s + (r.qty || 0), 0);
 
   const rowsHtml = rows.length === 0
-    ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;font-size:13px">No rows found</td></tr>'
+    ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa;font-size:13px">No rows found</td></tr>'
     : rows.map((r,i) => `
         <tr style="${i%2?'background:#f9fafb':''}">
           <td style="padding:8px 14px;font-size:11px;color:#888;font-variant-numeric:tabular-nums">${r.row||'—'}</td>
           <td style="padding:8px 14px;font-size:12px;font-weight:700;color:#1b3a2d">${r.lbl||'—'}</td>
           <td style="padding:8px 14px;font-size:11px;color:#666;max-width:220px">${r.sub||'—'}</td>
+          <td style="padding:8px 14px;font-size:11px;color:#555;white-space:nowrap;font-variant-numeric:tabular-nums">${r.case_raise_date||'—'}</td>
+          <td style="padding:8px 14px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:#333;font-size:12px">${formatNum(r.qty || 0)}</td>
           <td style="padding:8px 14px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:#1565c0;font-size:12px">${formatUSD(r.amt)}</td>
         </tr>`).join('');
 
@@ -738,7 +814,7 @@ function showCBDrill(month, bucket) {
       <div style="padding:16px 22px;background:linear-gradient(135deg,#1b3a2d,#2d5a3d);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
         <div>
           <div style="color:#fff;font-weight:700;font-size:14px">${month} — ${bktLabel}</div>
-          <div style="color:rgba(255,255,255,.65);font-size:11px;margin-top:3px">${rows.length} row${rows.length!==1?'s':''} · Total ${formatUSD(total)}</div>
+          <div style="color:rgba(255,255,255,.65);font-size:11px;margin-top:3px">${rows.length} row${rows.length!==1?'s':''} · ${formatNum(totalQty)} qty · Total ${formatUSD(total)}</div>
         </div>
         <button onclick="document.getElementById('cbDrillModal').remove()"
           style="background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
@@ -748,18 +824,55 @@ function showCBDrill(month, bucket) {
           <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d);position:sticky;top:0;z-index:1">
             <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Sheet Row</th>
             <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">IBR / Label</th>
-            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">Sub Remark</th>
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">${contextLabel || 'Sub Remark'}</th>
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Case Raise Date</th>
+            <th style="padding:9px 14px;text-align:right;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">Qty</th>
             <th style="padding:9px 14px;text-align:right;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">${amtLabel}</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
           <tfoot><tr style="background:#1b3a2d">
-            <td colspan="3" style="padding:10px 14px;font-weight:700;color:#fff;font-size:12px">Total</td>
+            <td colspan="4" style="padding:10px 14px;font-weight:700;color:#fff;font-size:12px">Total</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:13px">${formatNum(totalQty)}</td>
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:13px">${formatUSD(total)}</td>
           </tr></tfoot>
         </table>
       </div>
     </div>`;
   document.body.appendChild(modal);
+}
+
+function showCBDrill(month, bucket) {
+  const allDetail = window._cbDetail || {};
+  const rows = month === 'all'
+    ? Object.values(allDetail).flatMap(d => d[bucket] || [])
+    : ((allDetail[month] || {})[bucket] || []);
+  renderCBDrillModal(month, bucket, rows);
+}
+
+function showU2UCBDrill(month, bucket) {
+  const allDetail = window._u2uCbDetail || {};
+  const rows = month === 'all'
+    ? Object.values(allDetail).flatMap(d => d[bucket] || [])
+    : ((allDetail[month] || {})[bucket] || []);
+  renderCBDrillModal(month, bucket, rows, 'Subbucket');
+}
+
+// Compact accordion for the Claims Bucket by Channel & Month tables.
+// Only one bucket is expanded at a time within each table.
+function toggleClaimsGroup(tableId, groupId) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const targetRows = [...table.querySelectorAll(`[data-claims-group="${groupId}"]`)];
+  const shouldOpen = targetRows.some(row => row.hidden);
+
+  table.querySelectorAll('[data-claims-group]').forEach(row => { row.hidden = true; });
+  table.querySelectorAll('.claims-group-toggle').forEach(button => button.setAttribute('aria-expanded', 'false'));
+
+  if (shouldOpen) {
+    targetRows.forEach(row => { row.hidden = false; });
+    const button = table.querySelector(`.claims-group-toggle[data-target-group="${groupId}"]`);
+    if (button) button.setAttribute('aria-expanded', 'true');
+  }
 }
 
 function computeTrends(filteredData) {
@@ -1345,18 +1458,23 @@ function renderDashboardOverview(data, lastUpdated) {
     const m  = r.month;
     // Check both Sub Remark and Remarks (AJ) columns — write keyword in either
     const sl = ((r.sub_remark || '') + ' ' + (r.remarks || '')).toLowerCase().trim();
-    if (!cbAgg[m])            cbAgg[m]            = { rec:0, prog:0, pend:0 };
+    if (!cbAgg[m])            cbAgg[m]            = { rec:0, prog:0, pend:0, rec_qty:0, prog_qty:0, pend_qty:0 };
     if (!window._cbDetail[m]) window._cbDetail[m]  = { rec:[], prog:[], pend:[] };
-    const det      = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'' };
+    const lostQty = Math.abs(r.lost_stock || 0);
     const subExact = (r.sub_remark || '').trim().toLowerCase();
     // ── Bucket 1: actual > 0 means money was received ──────────────────────
     if ((r.actual || 0) > 0) {
+      const claimQty = Math.abs(r.units_recovered || 0);
+      const det      = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'', qty: claimQty, case_raise_date: r.case_raise_date||'' };
       cbAgg[m].rec  += r.actual || 0;
+      cbAgg[m].rec_qty += claimQty;
       window._cbDetail[m].rec.push({ ...det, amt: r.actual||0 });
     // ── Bucket 3 (checked BEFORE keyword scan): explicit "Pending to Claim"
     //    sub_remark wins even if remarks contains the word "raised" ───────────
     } else if (subExact === 'pending to claim') {
+      const det = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'', qty: lostQty, case_raise_date: r.case_raise_date||'' };
       cbAgg[m].pend += r.expected || 0;
+      cbAgg[m].pend_qty += lostQty;
       window._cbDetail[m].pend.push({ ...det, amt: r.expected||0 });
     // ── Bucket 2: Claim raised but not yet received ─────────────────────────
     } else if (sl.includes('claim raised but not received') ||
@@ -1367,7 +1485,9 @@ function renderDashboardOverview(data, lastUpdated) {
                sl.includes('under review')                  ||
                sl.includes('claim in progress')             ||
                sl.includes('raised')) {
+      const det = { lbl: r.label||r.awb||'', sub: r.sub_remark||'', row: r.row_index||'', qty: lostQty, case_raise_date: r.case_raise_date||'' };
       cbAgg[m].prog += r.expected || 0;
+      cbAgg[m].prog_qty += lostQty;
       window._cbDetail[m].prog.push({ ...det, amt: r.expected||0 });
     }
     // rows matching none of the above (IBR/WRO etc.) excluded from table
@@ -1376,9 +1496,9 @@ function renderDashboardOverview(data, lastUpdated) {
   // ── Hardcoded Jan/Feb/Mar — source: Inward_Claims_Recon_Jan_May_2026_v2.xlsx ──
   // These months are fully settled; verified numbers override live-sheet values.
   const IUS_HIST = {
-    'January':  { rec: 886.85,   prog: 2.96,    pend: 0 },
-    'February': { rec: 2127.78,  prog: 1099.02, pend: 0 },
-    'March':    { rec: 2014.10,  prog: 63.82,   pend: 0 },
+    'January':  { rec: 886.85,   prog: 2.96,    pend: 0, rec_qty: 258,  prog_qty: 1,  pend_qty: 0 },
+    'February': { rec: 2127.78,  prog: 1099.02, pend: 0, rec_qty: 1961, prog_qty: 0,  pend_qty: 0 },
+    'March':    { rec: 2014.10,  prog: 63.82,   pend: 0, rec_qty: 244,  prog_qty: 18, pend_qty: 0 },
   };
   Object.entries(IUS_HIST).forEach(([m, v]) => {
     cbAgg[m] = v;
@@ -1392,28 +1512,97 @@ function renderDashboardOverview(data, lastUpdated) {
   const cbTotProg = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).prog ||0), 0);
   const cbTotPend = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).pend ||0), 0);
   const cbGrand   = cbTotRec + cbTotProg + cbTotPend;
+  const cbQtyRec  = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).rec_qty  ||0), 0);
+  const cbQtyProg = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).prog_qty ||0), 0);
+  const cbQtyPend = cbMths.reduce((s,m) => s+((cbAgg[m]||{}).pend_qty ||0), 0);
+  const cbQtyGrand = cbQtyRec + cbQtyProg + cbQtyPend;
+
+  const CLAIM_MONTH_PALETTE = [
+    { accent:'#355c7d', soft:'#f0f6fb', mid:'#dceaf4', line:'#b8cddd' },
+    { accent:'#5a4b81', soft:'#f5f2fb', mid:'#e7e0f3', line:'#cdc4e4' },
+    { accent:'#2f6b5f', soft:'#edf8f5', mid:'#d8eee8', line:'#b7ddd5' },
+    { accent:'#8a5a2b', soft:'#fff7ed', mid:'#f9e7cf', line:'#f0cda8' },
+    { accent:'#7a455e', soft:'#fff3f8', mid:'#f2dce6', line:'#e7bfd0' },
+    { accent:'#4d648d', soft:'#f2f5fb', mid:'#e0e6f2', line:'#c5cee0' },
+  ];
+  const claimMonthVars = i => {
+    const p = CLAIM_MONTH_PALETTE[i % CLAIM_MONTH_PALETTE.length];
+    return `--month-accent:${p.accent};--month-soft:${p.soft};--month-mid:${p.mid};--month-line:${p.line}`;
+  };
+  const claimMonthGroupHeaders = months => months.map((m,i) => `
+            <th colspan="2" class="claims-month-head" style="${claimMonthVars(i)}">${m}</th>`).join('');
+  const claimMonthMetricHeaders = months => months.map((m,i) => `
+            <th class="claims-metric-head claims-qty" style="${claimMonthVars(i)}">Qty</th>
+            <th class="claims-metric-head claims-amount" style="${claimMonthVars(i)}">Amount</th>`).join('');
+  const claimMonthCells = (months, agg, bucket, color, drill=false, drillFn='showCBDrill') => months.map((m,i) => {
+    const row = agg[m] || {};
+    const qty = row[bucket + '_qty'] || 0;
+    const amt = row[bucket] || 0;
+    const click = drill ? ` onclick="${drillFn}('${m}','${bucket}')" title="Click to see rows"` : '';
+    const clickClass = drill ? ' claims-clickable' : '';
+    return `
+              <td${click} class="claims-month-cell claims-qty${clickClass}" style="${claimMonthVars(i)};padding:10px 9px;text-align:right;color:${color};font-weight:800;${drill?'cursor:pointer;':''}">${qty>0?formatNum(qty):'<span style="color:#b5bdc8">—</span>'}</td>
+              <td${click} class="claims-month-cell claims-amount${clickClass}" style="${claimMonthVars(i)};padding:10px 11px;text-align:right;color:${color};font-weight:650;${drill?'cursor:pointer;':''}">${amt>0?formatUSD(amt):'<span style="color:#b5bdc8">—</span>'}</td>`;
+  }).join('');
+  const claimMonthTotalCells = (months, agg, footerBg) => months.map((m,i) => {
+    const row = agg[m] || {};
+    const qty = (row.rec_qty||0) + (row.prog_qty||0) + (row.pend_qty||0);
+    const amt = (row.rec||0) + (row.prog||0) + (row.pend||0);
+    return `
+              <td class="claims-month-cell claims-qty" style="${claimMonthVars(i)};padding:10px 9px;text-align:right;font-weight:800;color:#fff;background:${footerBg}">${qty>0?formatNum(qty):'<span style="opacity:.5">—</span>'}</td>
+              <td class="claims-month-cell claims-amount" style="${claimMonthVars(i)};padding:10px 11px;text-align:right;font-weight:700;color:#fff;background:${footerBg}">${amt>0?formatUSD(amt):'<span style="opacity:.5">—</span>'}</td>`;
+  }).join('');
 
   // ── Claims Bucket monthly breakdown (US→US) ───────────────────────────────
   const u2uCBRows = u2D.rows || [];
   const u2uCbMths = (u2D.months || []).slice().sort((a,b) => MO.indexOf(a) - MO.indexOf(b));
   const u2uCbAgg  = {};
+  window._u2uCbDetail = {};
+  const u2uRecoveredQty = r => {
+    const claimQty = Math.abs(r.diff || 0);
+    const recovered = r.recovered || 0;
+    const expected = r.expected || 0;
+    if (claimQty <= 0 || recovered <= 0) return 0;
+    if (expected > 0) return Math.min(claimQty, Math.max(1, Math.round((recovered / expected) * claimQty)));
+    return claimQty;
+  };
   u2uCBRows.forEach(r => {
     const m  = r.month;
     if (!m) return;
     // Use r.bucket_key — set by sheets_service.py from col W (Bucket) & X (Sub Bucket)
     // Values: 'closed' | 'intransit' | 'in_progress' | 'partial' | 'pending' | 'other'
     const bk = r.bucket_key || '';
-    if (!u2uCbAgg[m]) u2uCbAgg[m] = { rec:0, prog:0, pend:0 };
+    if (!u2uCbAgg[m]) u2uCbAgg[m] = { rec:0, prog:0, pend:0, rec_qty:0, prog_qty:0, pend_qty:0 };
+    if (!window._u2uCbDetail[m]) window._u2uCbDetail[m] = { rec:[], prog:[], pend:[] };
+    const claimQty = Math.abs(r.diff || 0);
+    const det = {
+      lbl: r.from_label || r.to_label || '',
+      sub: r.subbucket || r.bucket || '',
+      row: r.row_index || '',
+      case_raise_date: r.case_raise_date || '',
+    };
     if (bk === 'closed') {
       u2uCbAgg[m].rec  += r.recovered || 0;
+      const recQty = (r.recovered || 0) > 0 ? claimQty : 0;
+      u2uCbAgg[m].rec_qty += recQty;
+      if ((r.recovered || 0) > 0) window._u2uCbDetail[m].rec.push({ ...det, qty: recQty, amt: r.recovered || 0 });
     } else if (bk === 'in_progress') {
       u2uCbAgg[m].prog += r.expected  || 0;
+      u2uCbAgg[m].prog_qty += claimQty;
+      window._u2uCbDetail[m].prog.push({ ...det, qty: claimQty, amt: r.expected || 0 });
     } else if (bk === 'partial') {
       // Partial: split — received portion → rec, remaining balance → prog
+      const recQty = u2uRecoveredQty(r);
       u2uCbAgg[m].rec  += r.recovered || 0;
       u2uCbAgg[m].prog += r.pending   || 0;   // pending = expected - recovered
+      u2uCbAgg[m].rec_qty += recQty;
+      u2uCbAgg[m].prog_qty += Math.max(0, claimQty - recQty);
+      window._u2uCbDetail[m].rec.push({ ...det, qty: recQty, amt: r.recovered || 0 });
+      window._u2uCbDetail[m].prog.push({ ...det, qty: Math.max(0, claimQty - recQty), amt: r.pending || 0 });
     } else if (bk === 'pending') {
       u2uCbAgg[m].pend += r.expected  || 0;
+      u2uCbAgg[m].pend_qty += claimQty;
+      window._u2uCbDetail[m].pend.push({ ...det, qty: claimQty, amt: r.expected || 0 });
     }
     // 'intransit' and 'other' excluded from Claims Bucket (no $ value expected)
   });
@@ -1421,6 +1610,10 @@ function renderDashboardOverview(data, lastUpdated) {
   const u2uCbTotProg = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).prog ||0), 0);
   const u2uCbTotPend = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).pend ||0), 0);
   const u2uCbGrand   = u2uCbTotRec + u2uCbTotProg + u2uCbTotPend;
+  const u2uCbQtyRec  = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).rec_qty  ||0), 0);
+  const u2uCbQtyProg = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).prog_qty ||0), 0);
+  const u2uCbQtyPend = u2uCbMths.reduce((s,m) => s+((u2uCbAgg[m]||{}).pend_qty ||0), 0);
+  const u2uCbQtyGrand = u2uCbQtyRec + u2uCbQtyProg + u2uCbQtyPend;
 
   // ── Claims Bucket by CHANNEL (India→US) ──────────────────────────────────
   // Jan/Feb/Mar are covered by _CH_HIST_TOT (added below); skip them in the
@@ -1431,14 +1624,22 @@ function renderDashboardOverview(data, lastUpdated) {
     if (_IUS_HIST_MONTHS.has(r.month)) return;          // covered by hardcoded block
     const ch = r.channel; if (!ch) return;
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
-    if (!cbChAgg[ch]) { cbChAgg[ch]={rec:0,prog:0,pend:0}; cbChArr.push(ch); }
+    if (!cbChAgg[ch]) { cbChAgg[ch]={rec:0,prog:0,pend:0,rec_qty:0,prog_qty:0,pend_qty:0}; cbChArr.push(ch); }
     const cbChSub = (r.sub_remark||'').trim().toLowerCase();
-    if ((r.actual||0)>0) { cbChAgg[ch].rec += r.actual||0; }
-    else if (cbChSub==='pending to claim') { cbChAgg[ch].pend += r.expected||0; }
+    const cbChLostQty = Math.abs(r.lost_stock || 0);
+    if ((r.actual||0)>0) {
+      cbChAgg[ch].rec += r.actual||0;
+      cbChAgg[ch].rec_qty += Math.abs(r.units_recovered || 0);
+    }
+    else if (cbChSub==='pending to claim') {
+      cbChAgg[ch].pend += r.expected||0;
+      cbChAgg[ch].pend_qty += cbChLostQty;
+    }
     else if (sl.includes('claim raised but not received')||sl.includes('claim raised but pending')||
              sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('case raised')||
              sl.includes('under review')||sl.includes('claim in progress')||sl.includes('raised')) {
       cbChAgg[ch].prog += r.expected||0;
+      cbChAgg[ch].prog_qty += cbChLostQty;
     }
   });
   cbChArr.sort();
@@ -1450,7 +1651,7 @@ function renderDashboardOverview(data, lastUpdated) {
       'TikTok':  { rec: 0,       prog: 68.36,  pend: 0 },
     };
     Object.entries(_CH_HIST_TOT).forEach(([ch, v]) => {
-      if (!cbChAgg[ch]) { cbChAgg[ch] = {rec:0,prog:0,pend:0}; cbChArr.push(ch); }
+      if (!cbChAgg[ch]) { cbChAgg[ch] = {rec:0,prog:0,pend:0,rec_qty:0,prog_qty:0,pend_qty:0}; cbChArr.push(ch); }
       cbChAgg[ch].rec  += v.rec;
       cbChAgg[ch].prog += v.prog;
       cbChAgg[ch].pend += v.pend;
@@ -1466,17 +1667,24 @@ function renderDashboardOverview(data, lastUpdated) {
   const u2uCbChAgg = {}; const u2uCbChArr = [];
   u2uCBRows.forEach(r => {
     const ch = r.to_channel; if (!ch) return;
-    const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
-    const subExact = (r.sub_remark||'').trim().toLowerCase();
-    if (!u2uCbChAgg[ch]) { u2uCbChAgg[ch]={rec:0,prog:0,pend:0}; u2uCbChArr.push(ch); }
-    if ((r.recovered||0)>0) { u2uCbChAgg[ch].rec += r.recovered||0; }
-    else if (r.case_raise_date||r.case_resolve_date||
-             sl.includes('claim raised but not received')||sl.includes('claim raised but pending')||
-             sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('case raised')||
-             sl.includes('under review')||sl.includes('claim in progress')||sl.includes('raised')) {
+    const bk = r.bucket_key || '';
+    const claimQty = Math.abs(r.diff || 0);
+    if (!u2uCbChAgg[ch]) { u2uCbChAgg[ch]={rec:0,prog:0,pend:0,rec_qty:0,prog_qty:0,pend_qty:0}; u2uCbChArr.push(ch); }
+    if (bk === 'closed') {
+      u2uCbChAgg[ch].rec += r.recovered||0;
+      u2uCbChAgg[ch].rec_qty += (r.recovered||0) > 0 ? claimQty : 0;
+    } else if (bk === 'in_progress') {
       u2uCbChAgg[ch].prog += r.expected||0;
-    } else if ((r.expected||0)>0) {
+      u2uCbChAgg[ch].prog_qty += claimQty;
+    } else if (bk === 'partial') {
+      const recQty = u2uRecoveredQty(r);
+      u2uCbChAgg[ch].rec += r.recovered||0;
+      u2uCbChAgg[ch].prog += r.pending||0;
+      u2uCbChAgg[ch].rec_qty += recQty;
+      u2uCbChAgg[ch].prog_qty += Math.max(0, claimQty - recQty);
+    } else if (bk === 'pending') {
       u2uCbChAgg[ch].pend += r.expected||0;
+      u2uCbChAgg[ch].pend_qty += claimQty;
     }
   });
   u2uCbChArr.sort();
@@ -1492,10 +1700,20 @@ function renderDashboardOverview(data, lastUpdated) {
     const subExact = (r.sub_remark||'').trim().toLowerCase();
     const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
     if (!cbChMthAgg[ch]) cbChMthAgg[ch] = {};
-    if (!cbChMthAgg[ch][m]) cbChMthAgg[ch][m] = {rec:0,prog:0,pend:0};
-    if ((r.actual||0)>0) { cbChMthAgg[ch][m].rec += r.actual||0; }
-    else if (subExact==='pending to claim') { cbChMthAgg[ch][m].pend += r.expected||0; }
-    else if (sl.includes('raised')||sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('under review')||sl.includes('claim in progress')) { cbChMthAgg[ch][m].prog += r.expected||0; }
+    if (!cbChMthAgg[ch][m]) cbChMthAgg[ch][m] = {rec:0,prog:0,pend:0,rec_qty:0,prog_qty:0,pend_qty:0};
+    const cbChMthLostQty = Math.abs(r.lost_stock || 0);
+    if ((r.actual||0)>0) {
+      cbChMthAgg[ch][m].rec += r.actual||0;
+      cbChMthAgg[ch][m].rec_qty += Math.abs(r.units_recovered || 0);
+    }
+    else if (subExact==='pending to claim') {
+      cbChMthAgg[ch][m].pend += r.expected||0;
+      cbChMthAgg[ch][m].pend_qty += cbChMthLostQty;
+    }
+    else if (sl.includes('raised')||sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('under review')||sl.includes('claim in progress')) {
+      cbChMthAgg[ch][m].prog += r.expected||0;
+      cbChMthAgg[ch][m].prog_qty += cbChMthLostQty;
+    }
   });
 
   // ── Inject Jan/Feb/Mar into Channel × Month (India→US) ──────────────────
@@ -1508,7 +1726,7 @@ function renderDashboardOverview(data, lastUpdated) {
     Object.entries(_IUS_HIST_CH).forEach(([m, chData]) => {
       Object.entries(chData).forEach(([ch, v]) => {
         if (!cbChMthAgg[ch]) cbChMthAgg[ch] = {};
-        cbChMthAgg[ch][m] = v;
+        cbChMthAgg[ch][m] = { ...(cbChMthAgg[ch][m] || {}), ...v };
       });
     });
   }
@@ -1517,13 +1735,119 @@ function renderDashboardOverview(data, lastUpdated) {
   const u2uCbChMthAgg = {};
   u2uCBRows.forEach(r => {
     const ch = r.to_channel; const m = r.month; if (!ch || !m) return;
-    const sl = ((r.sub_remark||'')+' '+(r.remarks||'')).toLowerCase().trim();
+    const bk = r.bucket_key || '';
+    const claimQty = Math.abs(r.diff || 0);
     if (!u2uCbChMthAgg[ch]) u2uCbChMthAgg[ch] = {};
-    if (!u2uCbChMthAgg[ch][m]) u2uCbChMthAgg[ch][m] = {rec:0,prog:0,pend:0};
-    if ((r.recovered||0)>0) { u2uCbChMthAgg[ch][m].rec += r.recovered||0; }
-    else if (r.case_raise_date||r.case_resolve_date||sl.includes('raised')||sl.includes('claim submitted')||sl.includes('claim filed')||sl.includes('under review')||sl.includes('claim in progress')) { u2uCbChMthAgg[ch][m].prog += r.expected||0; }
-    else if ((r.expected||0)>0) { u2uCbChMthAgg[ch][m].pend += r.expected||0; }
+    if (!u2uCbChMthAgg[ch][m]) u2uCbChMthAgg[ch][m] = {rec:0,prog:0,pend:0,rec_qty:0,prog_qty:0,pend_qty:0};
+    if (bk === 'closed') {
+      u2uCbChMthAgg[ch][m].rec += r.recovered||0;
+      u2uCbChMthAgg[ch][m].rec_qty += (r.recovered||0) > 0 ? claimQty : 0;
+    } else if (bk === 'in_progress') {
+      u2uCbChMthAgg[ch][m].prog += r.expected||0;
+      u2uCbChMthAgg[ch][m].prog_qty += claimQty;
+    } else if (bk === 'partial') {
+      const recQty = u2uRecoveredQty(r);
+      u2uCbChMthAgg[ch][m].rec += r.recovered||0;
+      u2uCbChMthAgg[ch][m].prog += r.pending||0;
+      u2uCbChMthAgg[ch][m].rec_qty += recQty;
+      u2uCbChMthAgg[ch][m].prog_qty += Math.max(0, claimQty - recQty);
+    } else if (bk === 'pending') {
+      u2uCbChMthAgg[ch][m].pend += r.expected||0;
+      u2uCbChMthAgg[ch][m].pend_qty += claimQty;
+    }
   });
+
+  // Quantity totals for the channel matrices.  Using the month matrix keeps
+  // the hardcoded Jan/Feb/Mar amounts while retaining any available row-level
+  // quantity split by channel.
+  cbChArr.forEach(ch => ['rec','prog','pend'].forEach(bucket => {
+    cbChAgg[ch][bucket + '_qty'] = cbMths.reduce(
+      (sum, month) => sum + ((((cbChMthAgg[ch] || {})[month] || {})[bucket + '_qty']) || 0), 0
+    );
+  }));
+  u2uCbChArr.forEach(ch => ['rec','prog','pend'].forEach(bucket => {
+    u2uCbChAgg[ch][bucket + '_qty'] = u2uCbMths.reduce(
+      (sum, month) => sum + ((((u2uCbChMthAgg[ch] || {})[month] || {})[bucket + '_qty']) || 0), 0
+    );
+  }));
+
+  const cbChQtyRec   = cbChArr.reduce((s,c)=>s+(cbChAgg[c].rec_qty||0),0);
+  const cbChQtyProg  = cbChArr.reduce((s,c)=>s+(cbChAgg[c].prog_qty||0),0);
+  const cbChQtyPend  = cbChArr.reduce((s,c)=>s+(cbChAgg[c].pend_qty||0),0);
+  const cbChQtyGrand = cbChQtyRec + cbChQtyProg + cbChQtyPend;
+  const u2uCbChQtyRec   = u2uCbChArr.reduce((s,c)=>s+(u2uCbChAgg[c].rec_qty||0),0);
+  const u2uCbChQtyProg  = u2uCbChArr.reduce((s,c)=>s+(u2uCbChAgg[c].prog_qty||0),0);
+  const u2uCbChQtyPend  = u2uCbChArr.reduce((s,c)=>s+(u2uCbChAgg[c].pend_qty||0),0);
+  const u2uCbChQtyGrand = u2uCbChQtyRec + u2uCbChQtyProg + u2uCbChQtyPend;
+
+  const claimChannelGroupHeaders = channels => channels.map((channel,i) => `
+            <th colspan="2" class="claims-month-head" style="${claimMonthVars(i)}">${channel}</th>`).join('');
+  const claimChannelMetricHeaders = channels => channels.map((channel,i) => `
+            <th class="claims-metric-head claims-qty" style="${claimMonthVars(i)}">Qty</th>
+            <th class="claims-metric-head claims-amount" style="${claimMonthVars(i)}">Amount</th>`).join('');
+  const claimChannelMonthCells = (channels, matrix, month, bucket, color) => channels.map((channel,i) => {
+    const value = ((matrix[channel] || {})[month] || {});
+    const qty = value[bucket + '_qty'] || 0;
+    const amt = value[bucket] || 0;
+    return `
+              <td class="claims-month-cell claims-qty" style="${claimMonthVars(i)};padding:8px 9px;text-align:right;color:${color};font-weight:800">${qty>0?formatNum(qty):'<span style="color:#b5bdc8">—</span>'}</td>
+              <td class="claims-month-cell claims-amount" style="${claimMonthVars(i)};padding:8px 11px;text-align:right;color:${color};font-weight:650">${amt>0?formatUSD(amt):'<span style="color:#b5bdc8">—</span>'}</td>`;
+  }).join('');
+  const claimChannelSubtotalCells = (channels, agg, bucket, color) => channels.map((channel,i) => {
+    const value = agg[channel] || {};
+    const qty = value[bucket + '_qty'] || 0;
+    const amt = value[bucket] || 0;
+    return `
+              <td class="claims-month-cell claims-qty" style="${claimMonthVars(i)};padding:9px;text-align:right;color:${color};font-weight:800">${qty>0?formatNum(qty):'<span style="color:#aab2bd">—</span>'}</td>
+              <td class="claims-month-cell claims-amount" style="${claimMonthVars(i)};padding:9px 11px;text-align:right;color:${color};font-weight:800">${amt>0?formatUSD(amt):'<span style="color:#aab2bd">—</span>'}</td>`;
+  }).join('');
+  const claimChannelGrandCells = (channels, agg, footerBg) => channels.map((channel,i) => {
+    const value = agg[channel] || {};
+    const qty = (value.rec_qty||0) + (value.prog_qty||0) + (value.pend_qty||0);
+    const amt = (value.rec||0) + (value.prog||0) + (value.pend||0);
+    return `
+              <td class="claims-month-cell claims-qty" style="${claimMonthVars(i)};padding:10px 9px;text-align:right;color:#fff;background:${footerBg};font-weight:800">${qty>0?formatNum(qty):'<span style="opacity:.5">—</span>'}</td>
+              <td class="claims-month-cell claims-amount" style="${claimMonthVars(i)};padding:10px 11px;text-align:right;color:#fff;background:${footerBg};font-weight:800">${amt>0?formatUSD(amt):'<span style="opacity:.5">—</span>'}</td>`;
+  }).join('');
+  const claimChannelGroupRows = ({tableId, prefix, bucket, label, months, channels, matrix, agg, totalQty, totalAmt, grandAmt, color, barBg, border, subtotalBg}) => {
+    const groupId = `${prefix}-${bucket}`;
+    const colspan = channels.length * 2 + 4;
+    const activeMonths = months.filter(month => channels.some(channel => {
+      const value = ((matrix[channel] || {})[month] || {});
+      return (value[bucket]||0) > 0 || (value[bucket + '_qty']||0) > 0;
+    }));
+    const monthRows = activeMonths.map(month => {
+      const monthQty = channels.reduce((sum,channel) => sum + (((matrix[channel]||{})[month]||{})[bucket+'_qty']||0), 0);
+      const monthAmt = channels.reduce((sum,channel) => sum + (((matrix[channel]||{})[month]||{})[bucket]||0), 0);
+      const monthIndex = Math.max(0, MO.indexOf(month));
+      return `
+            <tr hidden data-claims-group="${groupId}" class="claims-month-row" style="${claimMonthVars(monthIndex)}">
+              <td class="claims-label-col" style="padding:8px 16px 8px 24px;border-bottom:1px solid #e7edf3;background:var(--month-soft)">${month}</td>
+              ${claimChannelMonthCells(channels, matrix, month, bucket, color)}
+              <td style="padding:8px 10px;text-align:right;font-weight:800;color:${color};border-bottom:1px solid #e7edf3">${monthQty>0?formatNum(monthQty):'—'}</td>
+              <td style="padding:8px 12px;text-align:right;font-weight:800;color:${color};border-bottom:1px solid #e7edf3">${monthAmt>0?formatUSD(monthAmt):'—'}</td>
+              <td style="border-bottom:1px solid #e7edf3"></td>
+            </tr>`;
+    }).join('');
+    return `
+            <tr class="claims-group-bar" style="background:${barBg};border-top:2px solid ${border}">
+              <td colspan="${colspan}">
+                <button type="button" class="claims-group-toggle" data-target-group="${groupId}" aria-expanded="false" onclick="toggleClaimsGroup('${tableId}','${groupId}')" style="color:${color}">
+                  <span style="font-weight:800;font-size:11px;letter-spacing:.45px;text-transform:uppercase">${label}</span>
+                  <span class="claims-group-summary">${formatNum(totalQty)} qty · ${formatUSD(totalAmt)}</span>
+                  <i class="fas fa-chevron-down claims-group-chevron" aria-hidden="true"></i>
+                </button>
+              </td>
+            </tr>
+            ${monthRows}
+            <tr hidden data-claims-group="${groupId}" class="claims-subtotal-row" style="background:${subtotalBg}">
+              <td class="claims-label-col" style="padding:9px 16px 9px 24px;font-weight:800;color:${color};border-top:2px solid ${border};background:${subtotalBg}">Subtotal</td>
+              ${claimChannelSubtotalCells(channels, agg, bucket, color)}
+              <td style="padding:9px 10px;text-align:right;font-weight:800;color:${color};border-top:2px solid ${border}">${formatNum(totalQty)}</td>
+              <td style="padding:9px 12px;text-align:right;font-weight:800;color:${color};border-top:2px solid ${border}">${formatUSD(totalAmt)}</td>
+              <td style="padding:9px 10px;text-align:right;font-weight:800;color:${color};border-top:2px solid ${border}">${grandAmt>0?((totalAmt/grandAmt)*100).toFixed(1)+'%':'—'}</td>
+            </tr>`;
+  };
 
   // ── Combined shipment count from both sources (for comparison pill) ─────
   const iusTot  = Object.values(iusD.kpis || {}).reduce((s,v) => s+(v.count||0), 0);
@@ -1763,39 +2087,50 @@ function renderDashboardOverview(data, lastUpdated) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
           <i class="fas fa-table" style="color:#1b3a2d"></i> Claims Bucket (Year-to-Date)
         </div>
-        <span style="font-size:11px;color:#bbb">India → US · ${cbMths.length} months</span>
+        <span style="font-size:11px;color:#94a3b8">India → US · ${cbMths.length} months · Qty + Amount</span>
       </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:220px">Claims Bucket</th>
-            ${cbMths.map(m=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`).join('')}
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">YTD%</th>
-          </tr></thead>
+      <div class="claims-month-scroll">
+        <table class="claims-month-table">
+          <thead>
+          <tr>
+            <th rowspan="2" class="claims-label-col" style="padding:10px 16px;text-align:left">Claims Bucket</th>
+            ${claimMonthGroupHeaders(cbMths)}
+            <th colspan="2" class="claims-total-head">Total</th>
+            <th rowspan="2" class="claims-total-head" style="padding:10px 14px;text-align:right!important">YTD%</th>
+          </tr>
+          <tr>
+            ${claimMonthMetricHeaders(cbMths)}
+            <th class="claims-total-metric" style="border-left:3px solid #b9d2c4">Qty</th>
+            <th class="claims-total-metric">Amount</th>
+          </tr>
+          </thead>
           <tbody>
             <tr style="background:#f0fdf4">
-              <td style="padding:9px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px">✅ Claim Raised &amp; Received</td>
-              ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','rec')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#e8f5e9'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).rec>0?formatUSD((cbAgg[m]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px;background:#f0fdf4">✅ Claim Raised &amp; Received</td>
+              ${claimMonthCells(cbMths,cbAgg,'rec','#2e7d32',true)}
+              <td onclick="showCBDrill('all','rec')" style="padding:9px 10px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatNum(cbQtyRec)}</td>
               <td onclick="showCBDrill('all','rec')" style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotRec)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotRec/cbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fffbf0">
-              <td style="padding:9px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px">⏳ Claim Raised, Pending Receipt</td>
-              ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','prog')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fff3e0'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).prog>0?formatUSD((cbAgg[m]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px;background:#fffbf0">⏳ Claim Raised, Pending Receipt</td>
+              ${claimMonthCells(cbMths,cbAgg,'prog','#e65100',true)}
+              <td onclick="showCBDrill('all','prog')" style="padding:9px 10px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatNum(cbQtyProg)}</td>
               <td onclick="showCBDrill('all','prog')" style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotProg)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotProg/cbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fff8f8">
-              <td style="padding:9px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px">📋 Pending to Claim</td>
-              ${cbMths.map(m=>`<td onclick="showCBDrill('${m}','pend')" style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#fce4ec'" onmouseout="this.style.background=''">${(cbAgg[m]||{}).pend>0?formatUSD((cbAgg[m]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
+              <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px;background:#fff8f8">📋 Pending to Claim</td>
+              ${claimMonthCells(cbMths,cbAgg,'pend','#c62828',true)}
+              <td onclick="showCBDrill('all','pend')" style="padding:9px 10px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatNum(cbQtyPend)}</td>
               <td onclick="showCBDrill('all','pend')" style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(cbTotPend)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${cbGrand>0?((cbTotPend/cbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
           </tbody>
           <tfoot><tr style="background:#1b3a2d">
-            <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
-            ${cbMths.map(m=>{const t=((cbAgg[m]||{}).rec||0)+((cbAgg[m]||{}).prog||0)+((cbAgg[m]||{}).pend||0)+((cbAgg[m]||{}).dmg||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
+            <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px;background:#1b3a2d">Total Eligible Claims</td>
+            ${claimMonthTotalCells(cbMths,cbAgg,'#1b3a2d')}
+            <td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatNum(cbQtyGrand)}</td>
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(cbGrand)}</td>
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
@@ -1810,70 +2145,33 @@ function renderDashboardOverview(data, lastUpdated) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
           <i class="fas fa-layer-group" style="color:#1b3a2d"></i> Claims Bucket by Channel &amp; Month
         </div>
-        <span style="font-size:11px;color:#bbb">India → US · ${cbChArr.length} channels · ${cbMths.length} months</span>
+        <span class="claims-table-hint"><i class="fas fa-chevron-down" aria-hidden="true"></i> Click a bucket to expand · ${cbChArr.length} channels</span>
       </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:180px">Bucket / Month</th>
-            ${cbChArr.map(c=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${c}</th>`).join('')}
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-            <th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">%</th>
-          </tr></thead>
+      <div class="claims-month-scroll">
+        <table id="iusClaimsChannelTable" class="claims-month-table claims-channel-table">
+          <thead>
+          <tr>
+            <th rowspan="2" class="claims-label-col" style="padding:10px 16px;text-align:left">Bucket / Month</th>
+            ${claimChannelGroupHeaders(cbChArr)}
+            <th colspan="2" class="claims-total-head">Total</th>
+            <th rowspan="2" class="claims-total-head" style="padding:10px;text-align:right!important">%</th>
+          </tr>
+          <tr>
+            ${claimChannelMetricHeaders(cbChArr)}
+            <th class="claims-total-metric" style="border-left:3px solid #b9d2c4">Qty</th>
+            <th class="claims-total-metric">Amount</th>
+          </tr>
+          </thead>
           <tbody>
-            <tr style="background:#e8f5e9;border-top:2px solid #4caf50">
-              <td colspan="${cbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#1b5e20;font-size:11px;letter-spacing:.5px;text-transform:uppercase">✅ Claim Raised &amp; Received</td>
-            </tr>
-            ${cbMths.filter(m=>cbChArr.some(c=>((cbChMthAgg[c]||{})[m]||{}).rec>0)).map(m=>`
-            <tr style="background:#f0fdf4">
-              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
-              ${cbChArr.map(c=>{const v=((cbChMthAgg[c]||{})[m]||{}).rec||0;return`<td style="padding:7px 10px;text-align:right;color:#2e7d32;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
-              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(cbChArr.reduce((s,c)=>s+(((cbChMthAgg[c]||{})[m]||{}).rec||0),0))}</td>
-              <td style="border-bottom:1px solid #f0f0f0"></td>
-            </tr>`).join('')}
-            <tr style="background:#c8e6c9">
-              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#1b5e20;font-size:12px;border-top:1px solid #a5d6a7">Subtotal</td>
-              ${cbChArr.map(c=>{const v=(cbChAgg[c]||{}).rec||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
-              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${formatUSD(cbChTotRec)}</td>
-              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;border-top:1px solid #a5d6a7">${cbChGrand>0?((cbChTotRec/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
-            </tr>
-            <tr style="background:#fff3e0;border-top:2px solid #ff9800">
-              <td colspan="${cbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#bf360c;font-size:11px;letter-spacing:.5px;text-transform:uppercase">⏳ Claim Raised, Pending Receipt</td>
-            </tr>
-            ${cbMths.filter(m=>cbChArr.some(c=>((cbChMthAgg[c]||{})[m]||{}).prog>0)).map(m=>`
-            <tr style="background:#fffbf0">
-              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
-              ${cbChArr.map(c=>{const v=((cbChMthAgg[c]||{})[m]||{}).prog||0;return`<td style="padding:7px 10px;text-align:right;color:#e65100;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
-              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#e65100;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(cbChArr.reduce((s,c)=>s+(((cbChMthAgg[c]||{})[m]||{}).prog||0),0))}</td>
-              <td style="border-bottom:1px solid #f0f0f0"></td>
-            </tr>`).join('')}
-            <tr style="background:#ffe0b2">
-              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#bf360c;font-size:12px;border-top:1px solid #ffb74d">Subtotal</td>
-              ${cbChArr.map(c=>{const v=(cbChAgg[c]||{}).prog||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
-              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${formatUSD(cbChTotProg)}</td>
-              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;border-top:1px solid #ffb74d">${cbChGrand>0?((cbChTotProg/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
-            </tr>
-            <tr style="background:#fce4ec;border-top:2px solid #e91e63">
-              <td colspan="${cbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#880e4f;font-size:11px;letter-spacing:.5px;text-transform:uppercase">📋 Pending to Claim</td>
-            </tr>
-            ${cbMths.filter(m=>cbChArr.some(c=>((cbChMthAgg[c]||{})[m]||{}).pend>0)).map(m=>`
-            <tr style="background:#fff8f8">
-              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
-              ${cbChArr.map(c=>{const v=((cbChMthAgg[c]||{})[m]||{}).pend||0;return`<td style="padding:7px 10px;text-align:right;color:#c62828;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
-              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(cbChArr.reduce((s,c)=>s+(((cbChMthAgg[c]||{})[m]||{}).pend||0),0))}</td>
-              <td style="border-bottom:1px solid #f0f0f0"></td>
-            </tr>`).join('')}
-            <tr style="background:#f8bbd0">
-              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#880e4f;font-size:12px;border-top:1px solid #f48fb1">Subtotal</td>
-              ${cbChArr.map(c=>{const v=(cbChAgg[c]||{}).pend||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
-              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${formatUSD(cbChTotPend)}</td>
-              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;border-top:1px solid #f48fb1">${cbChGrand>0?((cbChTotPend/cbChGrand)*100).toFixed(1)+'%':'—'}</td>
-            </tr>
+            ${claimChannelGroupRows({tableId:'iusClaimsChannelTable',prefix:'ius',bucket:'rec',label:'✅ Claim Raised & Received',months:cbMths,channels:cbChArr,matrix:cbChMthAgg,agg:cbChAgg,totalQty:cbChQtyRec,totalAmt:cbChTotRec,grandAmt:cbChGrand,color:'#1b5e20',barBg:'#e8f5e9',border:'#4caf50',subtotalBg:'#d7edd9'})}
+            ${claimChannelGroupRows({tableId:'iusClaimsChannelTable',prefix:'ius',bucket:'prog',label:'⏳ Claim Raised, Pending Receipt',months:cbMths,channels:cbChArr,matrix:cbChMthAgg,agg:cbChAgg,totalQty:cbChQtyProg,totalAmt:cbChTotProg,grandAmt:cbChGrand,color:'#bf360c',barBg:'#fff3e0',border:'#ff9800',subtotalBg:'#ffe8c4'})}
+            ${claimChannelGroupRows({tableId:'iusClaimsChannelTable',prefix:'ius',bucket:'pend',label:'📋 Pending to Claim',months:cbMths,channels:cbChArr,matrix:cbChMthAgg,agg:cbChAgg,totalQty:cbChQtyPend,totalAmt:cbChTotPend,grandAmt:cbChGrand,color:'#9f1239',barBg:'#fce7f3',border:'#e91e63',subtotalBg:'#f8d3e1'})}
           </tbody>
           <tfoot><tr style="background:#1b3a2d">
-            <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
-            ${cbChArr.map(c=>{const t=((cbChAgg[c]||{}).rec||0)+((cbChAgg[c]||{}).prog||0)+((cbChAgg[c]||{}).pend||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(cbChGrand)}</td>
+            <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px;background:#1b3a2d">Total Eligible Claims</td>
+            ${claimChannelGrandCells(cbChArr,cbChAgg,'#1b3a2d')}
+            <td style="padding:10px;text-align:right;font-weight:800;color:#fff">${formatNum(cbChQtyGrand)}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:800;color:#fff">${formatUSD(cbChGrand)}</td>
             <td style="padding:10px 10px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
         </table>
@@ -1887,40 +2185,51 @@ function renderDashboardOverview(data, lastUpdated) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
           <i class="fas fa-table" style="color:#4a148c"></i> Claims Bucket (Year-to-Date)
         </div>
-        <span style="font-size:11px;color:#bbb">US → US · ${u2uCbMths.length} months</span>
+        <span style="font-size:11px;color:#94a3b8">US → US · ${u2uCbMths.length} months · Qty + Amount</span>
       </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:220px">Claims Bucket</th>
-            ${u2uCbMths.map(m=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`).join('')}
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">YTD%</th>
-          </tr></thead>
+      <div class="claims-month-scroll">
+        <table class="claims-month-table">
+          <thead>
+          <tr>
+            <th rowspan="2" class="claims-label-col" style="padding:10px 16px;text-align:left">Claims Bucket</th>
+            ${claimMonthGroupHeaders(u2uCbMths)}
+            <th colspan="2" class="claims-total-head">Total</th>
+            <th rowspan="2" class="claims-total-head" style="padding:10px 14px;text-align:right!important">YTD%</th>
+          </tr>
+          <tr>
+            ${claimMonthMetricHeaders(u2uCbMths)}
+            <th class="claims-total-metric" style="border-left:3px solid #b9d2c4">Qty</th>
+            <th class="claims-total-metric">Amount</th>
+          </tr>
+          </thead>
           <tbody>
             <tr style="background:#f0fdf4">
-              <td style="padding:9px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px">✅ Claim Raised &amp; Received</td>
-              ${u2uCbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#2e7d32;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbAgg[m]||{}).rec>0?formatUSD((u2uCbAgg[m]||{}).rec):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbTotRec)}</td>
+              <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-size:12px;background:#f0fdf4">✅ Claim Raised &amp; Received</td>
+              ${claimMonthCells(u2uCbMths,u2uCbAgg,'rec','#2e7d32',true,'showU2UCBDrill')}
+              <td onclick="showU2UCBDrill('all','rec')" style="padding:9px 10px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatNum(u2uCbQtyRec)}</td>
+              <td onclick="showU2UCBDrill('all','rec')" style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(u2uCbTotRec)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#2e7d32;border-bottom:1px solid #e9ecef">${u2uCbGrand>0?((u2uCbTotRec/u2uCbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fffbf0">
-              <td style="padding:9px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px">⏳ Claim Raised, Pending Receipt</td>
-              ${u2uCbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#e65100;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbAgg[m]||{}).prog>0?formatUSD((u2uCbAgg[m]||{}).prog):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbTotProg)}</td>
+              <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-size:12px;background:#fffbf0">⏳ Claim Raised, Pending Receipt</td>
+              ${claimMonthCells(u2uCbMths,u2uCbAgg,'prog','#e65100',true,'showU2UCBDrill')}
+              <td onclick="showU2UCBDrill('all','prog')" style="padding:9px 10px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatNum(u2uCbQtyProg)}</td>
+              <td onclick="showU2UCBDrill('all','prog')" style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(u2uCbTotProg)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#e65100;border-bottom:1px solid #e9ecef">${u2uCbGrand>0?((u2uCbTotProg/u2uCbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
             <tr style="background:#fff8f8">
-              <td style="padding:9px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px">📋 Pending to Claim</td>
-              ${u2uCbMths.map(m=>`<td style="padding:9px 10px;text-align:right;border-bottom:1px solid #e9ecef;color:#c62828;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px">${(u2uCbAgg[m]||{}).pend>0?formatUSD((u2uCbAgg[m]||{}).pend):'<span style="color:#ccc">—</span>'}</td>`).join('')}
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums">${formatUSD(u2uCbTotPend)}</td>
+              <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-size:12px;background:#fff8f8">📋 Pending to Claim</td>
+              ${claimMonthCells(u2uCbMths,u2uCbAgg,'pend','#c62828',true,'showU2UCBDrill')}
+              <td onclick="showU2UCBDrill('all','pend')" style="padding:9px 10px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatNum(u2uCbQtyPend)}</td>
+              <td onclick="showU2UCBDrill('all','pend')" style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef;font-variant-numeric:tabular-nums;cursor:pointer" title="Click to see all rows">${formatUSD(u2uCbTotPend)}</td>
               <td style="padding:9px 14px;text-align:right;font-weight:700;color:#c62828;border-bottom:1px solid #e9ecef">${u2uCbGrand>0?((u2uCbTotPend/u2uCbGrand)*100).toFixed(2)+'%':'—'}</td>
             </tr>
           </tbody>
           <tfoot><tr style="background:#4a148c">
-            <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
-            ${u2uCbMths.map(m=>{const t=((u2uCbAgg[m]||{}).rec||0)+((u2uCbAgg[m]||{}).prog||0)+((u2uCbAgg[m]||{}).pend||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(u2uCbGrand)}</td>
+            <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px;background:#4a148c">Total Eligible Claims</td>
+            ${claimMonthTotalCells(u2uCbMths,u2uCbAgg,'#4a148c')}
+            <td style="padding:10px;text-align:right;font-weight:700;color:#fff">${formatNum(u2uCbQtyGrand)}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff">${formatUSD(u2uCbGrand)}</td>
             <td style="padding:10px 14px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
         </table>
@@ -1934,70 +2243,33 @@ function renderDashboardOverview(data, lastUpdated) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;display:flex;align-items:center;gap:7px">
           <i class="fas fa-layer-group" style="color:#4a148c"></i> Claims Bucket by Channel (To) &amp; Month
         </div>
-        <span style="font-size:11px;color:#bbb">US → US · ${u2uCbChArr.length} channels · ${u2uCbMths.length} months</span>
+        <span class="claims-table-hint"><i class="fas fa-chevron-down" aria-hidden="true"></i> Click a bucket to expand · ${u2uCbChArr.length} channels</span>
       </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:10px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:180px">Bucket / Month</th>
-            ${u2uCbChArr.map(c=>`<th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${c}</th>`).join('')}
-            <th style="padding:10px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-            <th style="padding:10px 10px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">%</th>
-          </tr></thead>
+      <div class="claims-month-scroll">
+        <table id="u2uClaimsChannelTable" class="claims-month-table claims-channel-table">
+          <thead>
+          <tr>
+            <th rowspan="2" class="claims-label-col" style="padding:10px 16px;text-align:left">Bucket / Month</th>
+            ${claimChannelGroupHeaders(u2uCbChArr)}
+            <th colspan="2" class="claims-total-head">Total</th>
+            <th rowspan="2" class="claims-total-head" style="padding:10px;text-align:right!important">%</th>
+          </tr>
+          <tr>
+            ${claimChannelMetricHeaders(u2uCbChArr)}
+            <th class="claims-total-metric" style="border-left:3px solid #b9d2c4">Qty</th>
+            <th class="claims-total-metric">Amount</th>
+          </tr>
+          </thead>
           <tbody>
-            <tr style="background:#e8f5e9;border-top:2px solid #4caf50">
-              <td colspan="${u2uCbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#1b5e20;font-size:11px;letter-spacing:.5px;text-transform:uppercase">✅ Claim Raised &amp; Received</td>
-            </tr>
-            ${u2uCbMths.filter(m=>u2uCbChArr.some(c=>((u2uCbChMthAgg[c]||{})[m]||{}).rec>0)).map(m=>`
-            <tr style="background:#f0fdf4">
-              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
-              ${u2uCbChArr.map(c=>{const v=((u2uCbChMthAgg[c]||{})[m]||{}).rec||0;return`<td style="padding:7px 10px;text-align:right;color:#2e7d32;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
-              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(u2uCbChArr.reduce((s,c)=>s+(((u2uCbChMthAgg[c]||{})[m]||{}).rec||0),0))}</td>
-              <td style="border-bottom:1px solid #f0f0f0"></td>
-            </tr>`).join('')}
-            <tr style="background:#c8e6c9">
-              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#1b5e20;font-size:12px;border-top:1px solid #a5d6a7">Subtotal</td>
-              ${u2uCbChArr.map(c=>{const v=(u2uCbChAgg[c]||{}).rec||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
-              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#1b5e20;font-variant-numeric:tabular-nums;border-top:1px solid #a5d6a7">${formatUSD(u2uCbChTotRec)}</td>
-              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#1b5e20;border-top:1px solid #a5d6a7">${u2uCbChGrand>0?((u2uCbChTotRec/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
-            </tr>
-            <tr style="background:#fff3e0;border-top:2px solid #ff9800">
-              <td colspan="${u2uCbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#bf360c;font-size:11px;letter-spacing:.5px;text-transform:uppercase">⏳ Claim Raised, Pending Receipt</td>
-            </tr>
-            ${u2uCbMths.filter(m=>u2uCbChArr.some(c=>((u2uCbChMthAgg[c]||{})[m]||{}).prog>0)).map(m=>`
-            <tr style="background:#fffbf0">
-              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
-              ${u2uCbChArr.map(c=>{const v=((u2uCbChMthAgg[c]||{})[m]||{}).prog||0;return`<td style="padding:7px 10px;text-align:right;color:#e65100;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
-              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#e65100;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(u2uCbChArr.reduce((s,c)=>s+(((u2uCbChMthAgg[c]||{})[m]||{}).prog||0),0))}</td>
-              <td style="border-bottom:1px solid #f0f0f0"></td>
-            </tr>`).join('')}
-            <tr style="background:#ffe0b2">
-              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#bf360c;font-size:12px;border-top:1px solid #ffb74d">Subtotal</td>
-              ${u2uCbChArr.map(c=>{const v=(u2uCbChAgg[c]||{}).prog||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
-              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;border-top:1px solid #ffb74d">${formatUSD(u2uCbChTotProg)}</td>
-              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#e65100;border-top:1px solid #ffb74d">${u2uCbChGrand>0?((u2uCbChTotProg/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
-            </tr>
-            <tr style="background:#fce4ec;border-top:2px solid #e91e63">
-              <td colspan="${u2uCbChArr.length+3}" style="padding:7px 16px;font-weight:700;color:#880e4f;font-size:11px;letter-spacing:.5px;text-transform:uppercase">📋 Pending to Claim</td>
-            </tr>
-            ${u2uCbMths.filter(m=>u2uCbChArr.some(c=>((u2uCbChMthAgg[c]||{})[m]||{}).pend>0)).map(m=>`
-            <tr style="background:#fff8f8">
-              <td style="padding:7px 16px 7px 26px;color:#444;font-size:12px;border-bottom:1px solid #f0f0f0">${m}</td>
-              ${u2uCbChArr.map(c=>{const v=((u2uCbChMthAgg[c]||{})[m]||{}).pend||0;return`<td style="padding:7px 10px;text-align:right;color:#c62828;font-variant-numeric:tabular-nums;font-size:12px;border-bottom:1px solid #f0f0f0">${v>0?formatUSD(v):'<span style="color:#ddd">—</span>'}</td>`}).join('')}
-              <td style="padding:7px 14px;text-align:right;font-weight:600;color:#c62828;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${formatUSD(u2uCbChArr.reduce((s,c)=>s+(((u2uCbChMthAgg[c]||{})[m]||{}).pend||0),0))}</td>
-              <td style="border-bottom:1px solid #f0f0f0"></td>
-            </tr>`).join('')}
-            <tr style="background:#f8bbd0">
-              <td style="padding:8px 16px 8px 26px;font-weight:700;color:#880e4f;font-size:12px;border-top:1px solid #f48fb1">Subtotal</td>
-              ${u2uCbChArr.map(c=>{const v=(u2uCbChAgg[c]||{}).pend||0;return`<td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${v>0?formatUSD(v):'<span style="color:#bbb">—</span>'}</td>`}).join('')}
-              <td style="padding:8px 14px;text-align:right;font-weight:700;color:#c62828;font-variant-numeric:tabular-nums;border-top:1px solid #f48fb1">${formatUSD(u2uCbChTotPend)}</td>
-              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#c62828;border-top:1px solid #f48fb1">${u2uCbChGrand>0?((u2uCbChTotPend/u2uCbChGrand)*100).toFixed(1)+'%':'—'}</td>
-            </tr>
+            ${claimChannelGroupRows({tableId:'u2uClaimsChannelTable',prefix:'u2u',bucket:'rec',label:'✅ Claim Raised & Received',months:u2uCbMths,channels:u2uCbChArr,matrix:u2uCbChMthAgg,agg:u2uCbChAgg,totalQty:u2uCbChQtyRec,totalAmt:u2uCbChTotRec,grandAmt:u2uCbChGrand,color:'#1b5e20',barBg:'#e8f5e9',border:'#4caf50',subtotalBg:'#d7edd9'})}
+            ${claimChannelGroupRows({tableId:'u2uClaimsChannelTable',prefix:'u2u',bucket:'prog',label:'⏳ Claim Raised, Pending Receipt',months:u2uCbMths,channels:u2uCbChArr,matrix:u2uCbChMthAgg,agg:u2uCbChAgg,totalQty:u2uCbChQtyProg,totalAmt:u2uCbChTotProg,grandAmt:u2uCbChGrand,color:'#bf360c',barBg:'#fff3e0',border:'#ff9800',subtotalBg:'#ffe8c4'})}
+            ${claimChannelGroupRows({tableId:'u2uClaimsChannelTable',prefix:'u2u',bucket:'pend',label:'📋 Pending to Claim',months:u2uCbMths,channels:u2uCbChArr,matrix:u2uCbChMthAgg,agg:u2uCbChAgg,totalQty:u2uCbChQtyPend,totalAmt:u2uCbChTotPend,grandAmt:u2uCbChGrand,color:'#9f1239',barBg:'#fce7f3',border:'#e91e63',subtotalBg:'#f8d3e1'})}
           </tbody>
           <tfoot><tr style="background:#4a148c">
-            <td style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px">Total Eligible Claims</td>
-            ${u2uCbChArr.map(c=>{const t=((u2uCbChAgg[c]||{}).rec||0)+((u2uCbChAgg[c]||{}).prog||0)+((u2uCbChAgg[c]||{}).pend||0);return`<td style="padding:10px 10px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;font-size:12px">${t>0?formatUSD(t):'<span style="opacity:.5">—</span>'}</td>`}).join('')}
-            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${formatUSD(u2uCbChGrand)}</td>
+            <td class="claims-label-col" style="padding:10px 16px;font-weight:700;color:#fff;font-size:12px;background:#4a148c">Total Eligible Claims</td>
+            ${claimChannelGrandCells(u2uCbChArr,u2uCbChAgg,'#4a148c')}
+            <td style="padding:10px;text-align:right;font-weight:800;color:#fff">${formatNum(u2uCbChQtyGrand)}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:800;color:#fff">${formatUSD(u2uCbChGrand)}</td>
             <td style="padding:10px 10px;text-align:right;font-weight:700;color:rgba(255,255,255,.7)">100%</td>
           </tr></tfoot>
         </table>

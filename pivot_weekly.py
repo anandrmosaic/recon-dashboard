@@ -1,5 +1,5 @@
 """
-Weekly Pivot Report — Aug 28–Sep 3 2026  (Week 36)
+Weekly Pivot Report — Sep 11–Sep 17 2026  (Week 38)
 Generates Excel pivot: cases raised by channel, recovery status, amounts
 """
 import sys, os, json
@@ -25,10 +25,10 @@ SHEET_ID = CONFIG['recon_sheet_id']   # India→US and US→US both live here
 creds = get_sheets_credentials(CF, TF)
 
 # ── Date range ──────────────────────────────────────────────────────────────
-START        = date(2026, 8, 28)           # Week 36 — Thu Aug 28
-END          = date(2026, 9,  3)           # Week 36 — Wed Sep 3
-MID_WK_END   = date(2026, 8, 27)          # W35 end (Aug 27)
-LAST_WK_END  = date(2026, 8, 20)          # W34 end (Aug 20)
+START        = date(2026, 9, 11)           # Week 38 — Thu Sep 11
+END          = date(2026, 9, 17)           # Week 38 — Wed Sep 17
+MID_WK_END   = date(2026, 9, 10)          # W37 end (Sep 10)
+LAST_WK_END  = date(2026, 9,  3)          # W36 end (Sep 3)
 WEEK_NUM     = START.isocalendar()[1]
 MID_WEEK     = MID_WK_END.isocalendar()[1]
 PREV_WEEK    = LAST_WK_END.isocalendar()[1]

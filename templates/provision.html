@@ -207,8 +207,8 @@ function addCarrierRow(carrier, rate) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>
-      <input type="text" class="carrier-name-input" value="${carrier}"
-        style="border:none;background:transparent;font-weight:600;font-size:13px;width:100%;outline:none;">
+      <input type="text" class="carrier-name-input" value="${carrier}" placeholder="e.g. Bluedart / DHL / FedEx"
+        style="border:1.5px solid #d0d8e4;border-radius:5px;padding:6px 10px;font-weight:600;font-size:13px;width:100%;outline:none;background:#fff;">
     </td>
     <td style="display:flex;align-items:center;gap:8px;">
       <input type="number" class="rate-input" min="0" step="0.01" placeholder="e.g. 590.00" value="${rate || ''}">
@@ -277,8 +277,42 @@ async function fetchCarriers() {
 $('sel-month').addEventListener('change', fetchCarriers);
 $('sel-year').addEventListener('change',  fetchCarriers);
 
-// Finance file just stored for generate
-$('finance-file').addEventListener('change', () => {});
+// When finance file is selected, detect carriers from it and populate rate table
+$('finance-file').addEventListener('change', async () => {
+  const file = $('finance-file').files[0];
+  if (!file) return;
+
+  // Only auto-populate if no carriers are in the table yet
+  const hasRows = $('rate-tbody').querySelectorAll('tr').length > 0;
+
+  const fd = new FormData();
+  fd.append('finance_file', file);
+  try {
+    const res  = await fetch('/api/provision/detect-carriers-from-finance', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.carriers && data.carriers.length > 0) {
+      data.carriers.forEach(c => addCarrierRow(c, ''));
+      $('rate-table').classList.remove('hidden');
+      $('rate-actions').classList.remove('hidden');
+      $('rate-actions').style.display = 'flex';
+      $('fetch-status').classList.add('hidden');
+    } else if (!hasRows) {
+      // No carriers from file either — show empty row for manual entry
+      addCarrierRow('', '');
+      $('rate-table').classList.remove('hidden');
+      $('rate-actions').classList.remove('hidden');
+      $('rate-actions').style.display = 'flex';
+    }
+  } catch (e) {
+    if (!hasRows) {
+      addCarrierRow('', '');
+      $('rate-table').classList.remove('hidden');
+      $('rate-actions').classList.remove('hidden');
+      $('rate-actions').style.display = 'flex';
+    }
+  }
+  $('card-rates').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 
 // ── Add carrier row manually ───────────────────────────────────────────────────
 $('btn-add-row').addEventListener('click', () => {

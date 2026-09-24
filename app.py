@@ -54,6 +54,9 @@ def refresh_data():
         # ── Internal US 2 US tab ──────────────────────────────────────────────
         try:
             data['us2us'] = get_us2us_data(creds, RECON_ID)
+            for row in data['us2us'].get('rows', []):
+                if not row.get('case_close_date'):
+                    row['case_close_date'] = row.get('case_resolve_date', '')
             print(f"[Data] US2US loaded: {len(data['us2us'].get('rows', []))} rows")
         except Exception as e:
             print(f"[Data] US2US failed: {e}")

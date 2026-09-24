@@ -609,6 +609,13 @@ def get_us2us_data(creds, sheet_id):
             if kw in h: return i
         return -1
 
+    def fc_any(*kws):
+        for kw in kws:
+            idx = fc(kw)
+            if idx >= 0:
+                return idx
+        return -1
+
     year_col     = fc('year')
     month_col    = fc('month')
     from_ch_col  = fc('from channel')
@@ -624,8 +631,8 @@ def get_us2us_data(creds, sheet_id):
     diff_col      = fc('sum difference')
     exp_col       = fc('expected reimburs')
     act_col       = fc('amt recov')
-    raise_col     = fc('case raised date')
-    resolve_col   = fc('case resolve date')
+    raise_col     = fc_any('case raise date', 'case raised date')
+    close_col     = fc_any('case close date', 'case resolve date', 'case resolved date')
     freight_col   = fc('freight')
     grn_col       = fc('inwarded by channel')
     sku_col       = fc('sku')
@@ -735,7 +742,8 @@ def get_us2us_data(creds, sheet_id):
             'pending':              round(max(0, exp - act), 2),
             'freight':              round(safe_float(g(row, freight_col)), 2),
             'case_raise_date':      str(g(row, raise_col)).strip(),
-            'case_resolve_date':    str(g(row, resolve_col)).strip(),
+            'case_close_date':      str(g(row, close_col)).strip(),
+            'case_resolve_date':    str(g(row, close_col)).strip(),
         })
 
     months_present = sorted(
@@ -800,6 +808,13 @@ def get_india_us_data(creds, sheet_id):
             if kw in h: return i
         return -1
 
+    def fc_any(*kws):
+        for kw in kws:
+            idx = fc(kw)
+            if idx >= 0:
+                return idx
+        return -1
+
     month_col       = fc('month')
     bucket_col      = fc('bucket')
     sub_col         = fc('sub remark')
@@ -813,8 +828,13 @@ def get_india_us_data(creds, sheet_id):
     exp_col         = fc('expected reimburs')
     act_col         = fc('actual reimburs')
     status_col      = fc('reimbursement status')
-    raise_col       = fc('case raise date')
-    close_col       = fc('case close date')
+    raise_col       = fc_any('case raise date', 'case raised date')
+    close_col       = fc_any('case close date', 'case resolve date', 'case resolved date')
+    units_recovered_col = fc('units recovered')
+    if units_recovered_col < 0:
+        units_recovered_col = fc('units reimbursed')
+    if units_recovered_col < 0:
+        units_recovered_col = 24  # column Y
     lost_col        = fc('lost stock')
     # Exact-match 'channel' first — avoids picking up 'Sub Channel', 'Sales Channel', etc.
     # that appear before column AM.  Fallback to substring, then hardcode AM (col 39 = idx 38).
@@ -936,6 +956,7 @@ def get_india_us_data(creds, sheet_id):
             'channel_recovered':    0.0 if is_carrier_pay else round(act, 2),
             'case_raise_date':      str(g(row, raise_col)).strip(),
             'case_close_date':      str(g(row, close_col)).strip(),
+            'units_recovered':      int(safe_float(g(row, units_recovered_col))),
             'lost_stock':           int(safe_float(g(row, lost_col))),
             'expected':             round(exp, 2),
             'actual':               round(act, 2),
