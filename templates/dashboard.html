@@ -454,6 +454,13 @@
       white-space: nowrap;
     }
 
+    /* The month matrix uses light tinted metric bands, so keep Qty/Amount
+       labels dark for clear contrast instead of inheriting white table text. */
+    #mainContent table thead th.claims-metric-head {
+      color: #243244 !important;
+      font-weight: 800 !important;
+    }
+
     /* Smooth table-row hover everywhere */
     #mainContent table tbody tr { transition: background 0.13s ease; }
 
