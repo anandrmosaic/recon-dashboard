@@ -331,6 +331,96 @@
     }
     .claims-channel-table .claims-subtotal-row td { border-top-width: 2px !important; }
 
+    /* ── Operational pivot views ──────────────────────────────────────── */
+    .ops-pivot-card {
+      background: #fff; border: 1px solid #e9ecef; border-radius: 14px;
+      overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.06); margin-bottom: 16px;
+    }
+    .ops-pivot-tabs { display:flex; gap:7px; flex-wrap:wrap; padding:12px 18px 0; }
+    .ops-pivot-tab {
+      border:1px solid #dbe3ea; background:#f8fafc; color:#475569; border-radius:9px;
+      padding:7px 11px; font-size:11px; font-weight:700; cursor:pointer; transition:all .16s ease;
+    }
+    .ops-pivot-tab:hover { border-color:#94a3b8; background:#f1f5f9; }
+    .ops-pivot-tab.active { background:#1b3a2d; border-color:#1b3a2d; color:#fff; box-shadow:0 2px 5px rgba(27,58,45,.2); }
+    .ops-pivot-panel { padding:12px 18px 16px; }
+    .ops-pivot-panel[hidden] { display:none; }
+    .ops-pivot-table-wrap { overflow-x:auto; }
+    .ops-pivot-table { width:100%; border-collapse:separate; border-spacing:0; min-width:560px; font-size:12px; font-variant-numeric:tabular-nums; }
+    .ops-pivot-table th { padding:8px 12px; background:#173d2c; color:#fff; text-align:right; font-size:10px; text-transform:uppercase; letter-spacing:.45px; white-space:nowrap; }
+    .ops-pivot-table th:first-child { text-align:left; }
+    .ops-pivot-table td { padding:8px 12px; border-bottom:1px solid #edf1f4; text-align:right; color:#334155; }
+    .ops-pivot-table td:first-child { text-align:left; }
+    .ops-pivot-month-row td { background:#f0f7f3; color:#173d2c; font-weight:800; border-top:1px solid #d8e9df; }
+    .ops-pivot-month-row td:not(:first-child) { color:#173d2c; }
+    .ops-pivot-channel-row td { background:#fff; color:#475569; }
+    .ops-pivot-channel-row td:first-child { padding-left:32px; color:#64748b; font-weight:600; }
+    .ops-pivot-channel-row:hover td { background:#f8fafc; }
+    .ops-pivot-toggle { border:0; background:transparent; color:inherit; cursor:pointer; font:inherit; padding:0; display:inline-flex; align-items:center; gap:8px; }
+    .ops-pivot-chevron { width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; background:#dcebe2; font-size:9px; transition:transform .16s ease; }
+    .ops-pivot-month-row[aria-expanded="true"] .ops-pivot-chevron { transform:rotate(90deg); }
+    .ops-pivot-total-row td { background:#173d2c; color:#fff !important; font-weight:800; border-bottom:0; }
+    .ops-pivot-total-row td:first-child { color:#fff !important; }
+    .ops-pivot-note { color:#94a3b8; font-size:10px; margin:10px 0 0; }
+    .ops-pivot-kicker { color:#94a3b8; font-size:10px; margin:2px 18px 0; }
+    @media (max-width: 700px) {
+      .ops-pivot-tabs, .ops-pivot-panel { padding-left:12px; padding-right:12px; }
+      .ops-pivot-kicker { margin-left:12px; margin-right:12px; }
+    }
+    .ops-analytics-grid {
+      display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.25fr);
+      gap:10px; align-items:start; margin-bottom:12px;
+    }
+    .ops-analytics-card { min-width:0; }
+    .ops-analytics-grid .ops-pivot-card { height:100%; margin-bottom:0; }
+    .ops-analytics-grid .ops-pivot-panel { max-height:270px; overflow:auto; }
+    .ops-analytics-grid .ops-pivot-table { min-width:520px; }
+    @media (max-width: 1200px) {
+      .ops-analytics-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+      .ops-analytics-grid .ops-pivot-slot { grid-column:1 / -1; }
+      .ops-analytics-grid .ops-pivot-panel { max-height:none; }
+    }
+    @media (max-width: 700px) {
+      .ops-analytics-grid { grid-template-columns:1fr; gap:10px; }
+      .ops-analytics-grid .ops-pivot-slot { grid-column:auto; }
+    }
+    .bottom-insights-grid {
+      display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr);
+      gap:12px; align-items:start; margin-bottom:16px;
+    }
+    .bottom-insights-grid > * { min-width:0; }
+    .bottom-insights-grid .bottom-ups-panel > div { margin-bottom:0 !important; }
+    .bottom-bucket-panel { padding:14px !important; }
+    .bottom-bucket-panel .bucket-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:8px !important; }
+    .bottom-bucket-panel .bucket-kpi-card { padding:11px !important; border-radius:10px !important; }
+    .bottom-bucket-panel .bucket-kpi-card .bucket-kpi-value { font-size:24px !important; }
+    @media (max-width: 1050px) {
+      .bottom-insights-grid { grid-template-columns:1fr; }
+    }
+    /* ── Dashboard workspace: primary analysis left, action context right ── */
+    .dashboard-workspace-grid {
+      display:grid; grid-template-columns:minmax(0,1.75fr) minmax(360px,.95fr);
+      gap:12px; align-items:start; margin-bottom:16px;
+    }
+    .dashboard-main-column, .dashboard-side-column { min-width:0; }
+    .dashboard-chart-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+    .dashboard-main-column .bottom-ups-panel > div { margin-bottom:0 !important; }
+    .dashboard-side-column .ops-pivot-card { margin-bottom:12px; }
+    .dashboard-side-column .ops-pivot-panel { max-height:430px; }
+    .dashboard-side-column .bucket-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:8px !important; }
+    .ups-summary-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:10px 12px 12px; background:#fafbff; border-top:1px solid #e6e9f4; }
+    .ups-summary-item { min-width:0; padding:8px 9px; border-radius:9px; background:#fff; border:1px solid #e5e7eb; }
+    .ups-summary-label { font-size:9px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:.35px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ups-summary-value { margin-top:3px; font-size:19px; line-height:1; font-weight:800; font-variant-numeric:tabular-nums; }
+    @media (max-width: 700px) { .ups-summary-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width: 1050px) {
+      .dashboard-workspace-grid { grid-template-columns:1fr; }
+      .dashboard-side-column .ops-pivot-panel { max-height:none; }
+    }
+    @media (max-width: 700px) {
+      .dashboard-chart-pair { grid-template-columns:1fr; }
+    }
+
     /* ── Badges ── */
     .badge-lost { background: var(--red-soft) !important; color: var(--red) !important; padding: 3px 9px; border-radius: var(--r-full); font-size: 11px; font-weight: 700; border: 1px solid var(--red-mid); }
     .badge-recovered { background: var(--green-soft) !important; color: var(--green-val) !important; padding: 3px 9px; border-radius: var(--r-full); font-size: 11px; font-weight: 700; border: 1px solid var(--green-mid); }
@@ -1355,6 +1445,109 @@ function renderInboundRecon(data, lastUpdated) {
   if (ib) { ib.textContent = total; ib.style.display = total > 0 ? 'inline' : 'none'; }
 }
 
+// ── Operational pivot views ───────────────────────────────────────────────
+// One source-of-truth row model powers three compact Month → Channel pivots.
+function toggleOpsPivotGroup(groupId, button) {
+  const monthRow = button.closest('tr');
+  const isOpen = monthRow.getAttribute('aria-expanded') === 'true';
+  monthRow.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+  document.querySelectorAll(`[data-ops-parent="${groupId}"]`).forEach(row => {
+    row.hidden = isOpen;
+  });
+}
+
+function setOpsPivotView(view, button) {
+  document.querySelectorAll('.ops-pivot-tab').forEach(btn => {
+    const active = btn === button;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('.ops-pivot-panel').forEach(panel => {
+    panel.hidden = panel.dataset.opsView !== view;
+  });
+}
+
+function buildOperationalPivot(rows, sourceLabel) {
+  const order = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const model = { flow:{}, grn:{}, claims:{} };
+  const ensure = (view, month, channel) => {
+    if (!model[view][month]) model[view][month] = { _total:{}, _channels:{} };
+    if (!model[view][month]._channels[channel]) model[view][month]._channels[channel] = {};
+    return [model[view][month]._total, model[view][month]._channels[channel]];
+  };
+  const add = (obj, key, value) => { obj[key] = (obj[key] || 0) + (Number(value) || 0); };
+  const bucketOf = r => String(r.bucket_key || r.bucket || '').toLowerCase().replace(/\s+/g, '_');
+  const channelOf = r => r.channel || r.to_channel || r.from_channel || 'Other';
+  const shortBuckets = new Set(['short_grn_pending','short_grn_progress','short_grn_awaiting_ibr','pending','in_progress','partial']);
+  const progressBuckets = new Set(['short_grn_progress','short_grn_awaiting_ibr','in_progress','partial']);
+
+  (rows || []).forEach(r => {
+    const month = r.month;
+    if (!month) return;
+    const channel = channelOf(r);
+    const bucket = bucketOf(r);
+    const qty = Math.max(0, Number(r.qty) || 0);
+    const grn = Math.max(0, Number(r.grn) || 0);
+    const diff = Math.max(0, Number(r.diff) || 0);
+    const [flowT, flowC] = ensure('flow', month, channel);
+    if (bucket === 'closed') { add(flowT,'closed',qty); add(flowC,'closed',qty); }
+    else if (bucket === 'intransit') { add(flowT,'intransit',qty); add(flowC,'intransit',qty); }
+    else if (shortBuckets.has(bucket)) { add(flowT,'short',qty); add(flowC,'short',qty); }
+
+    if (!shortBuckets.has(bucket)) return;
+    const [grnT, grnC] = ensure('grn', month, channel);
+    add(grnT,'sent',qty); add(grnC,'sent',qty);
+    add(grnT,'grn',grn); add(grnC,'grn',grn);
+    add(grnT,'diff',diff); add(grnC,'diff',diff);
+    const [claimT, claimC] = ensure('claims', month, channel);
+    if (progressBuckets.has(bucket)) { add(claimT,'raised',diff); add(claimC,'raised',diff); }
+    else { add(claimT,'pending',diff); add(claimC,'pending',diff); }
+  });
+
+  const months = Object.keys(model.flow).sort((a,b) => order.indexOf(a) - order.indexOf(b));
+  const channelsFor = month => Object.keys(model.flow[month]?._channels || {}).sort();
+  const fmt = value => (Number(value) || 0) > 0 ? formatNum(value) : '—';
+  const views = [
+    { key:'flow', label:'Shipment Flow', icon:'fa-truck-moving', note:'Units by operational status. Expand a month to see channel contribution.', cols:[['closed','Closed'],['short','Short GRN'],['intransit','Intransit'],['grand','Grand Total']] },
+    { key:'grn', label:'GRN Reconciliation', icon:'fa-boxes-stacked', note:'Short-GRN units compared with GRN completed and the remaining final difference.', cols:[['sent','Final Sent Qty'],['grn','GRN Done'],['diff','Final Diff']] },
+    { key:'claims', label:'Claim Exposure', icon:'fa-file-circle-exclamation', note:'Final difference split between raised-but-not-received and still pending to claim.', cols:[['raised','Claim Raised but not Received'],['pending','Pending to Claim'],['grand','Grand Total']] },
+  ];
+
+  const tableFor = view => {
+    const body = [];
+    const grand = {};
+    months.forEach((month, mi) => {
+      const source = model[view.key][month] || { _total:{}, _channels:{} };
+      const channels = channelsFor(month);
+      const vals = {};
+      view.cols.forEach(([key]) => {
+        vals[key] = key === 'grand' ? view.cols.slice(0,-1).reduce((s,[k]) => s + (source._total[k]||0), 0) : (source._total[key]||0);
+        add(grand, key, vals[key]);
+      });
+      const gid = `ops-${view.key}-${mi}`;
+      body.push(`<tr class="ops-pivot-month-row" aria-expanded="false"><td><button class="ops-pivot-toggle" onclick="toggleOpsPivotGroup('${gid}',this)" aria-label="Expand ${month}"><span class="ops-pivot-chevron">›</span>${month}</button></td>${view.cols.map(([key]) => `<td>${fmt(vals[key])}</td>`).join('')}</tr>`);
+      channels.forEach(channel => {
+        const channelData = source._channels[channel] || {};
+        body.push(`<tr class="ops-pivot-channel-row" data-ops-parent="${gid}" hidden><td>${channel}</td>${view.cols.map(([key]) => {
+          const value = key === 'grand' ? view.cols.slice(0,-1).reduce((s,[k]) => s + (channelData[k]||0), 0) : (channelData[key]||0);
+          return `<td>${fmt(value)}</td>`;
+        }).join('')}</tr>`);
+      });
+    });
+    body.push(`<tr class="ops-pivot-total-row"><td>Grand Total</td>${view.cols.map(([key]) => `<td>${fmt(grand[key])}</td>`).join('')}</tr>`);
+    return `<div class="ops-pivot-table-wrap"><table class="ops-pivot-table"><thead><tr><th>Month / Channel</th>${view.cols.map(([,label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>${body.join('')}</tbody></table></div><div class="ops-pivot-note">${view.note}</div>`;
+  };
+
+  return `<div class="ops-pivot-card">
+    <div style="padding:13px 18px 0;display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#64748b;display:flex;align-items:center;gap:7px"><i class="fas fa-table" style="color:#1b3a2d"></i> Operational Pivot Views</div>
+      <span class="ops-pivot-kicker">${sourceLabel} · ${months.length} months · click a month to expand channels</span>
+    </div>
+    <div class="ops-pivot-tabs" role="tablist" aria-label="Operational pivot views">${views.map((view,i) => `<button class="ops-pivot-tab${i===0?' active':''}" role="tab" aria-selected="${i===0?'true':'false'}" onclick="setOpsPivotView('${view.key}',this)"><i class="fas ${view.icon}" style="margin-right:5px"></i>${view.label}</button>`).join('')}</div>
+    ${views.map((view,i) => `<div class="ops-pivot-panel" data-ops-view="${view.key}" role="tabpanel"${i===0?'':' hidden'}>${tableFor(view)}</div>`).join('')}
+  </div>`;
+}
+
 
 // ╔═══════════════════════════════════════════════════════════════════════════╗
 // ║  DASHBOARD OVERVIEW TAB                                                  ║
@@ -1392,6 +1585,18 @@ function renderDashboardOverview(data, lastUpdated) {
 
   // ── Compute totals ──────────────────────────────────────────────────────
   let totalShipments, totalExpected, totalRecovered, buckets, actKey, bkKeys, bkLabels;
+  // Bucket cards show confirmed shortage units (Final Diff / Sum Difference),
+  // rather than the original shipment quantity. Negative differences are over-receipts.
+  const sumPositiveDiff = bucketKeys => rows.reduce((sum, r) => {
+    const keys = Array.isArray(bucketKeys) ? bucketKeys : [bucketKeys];
+    return keys.includes(r.bucket_key) ? sum + Math.max(0, Number(r.diff) || 0) : sum;
+  }, 0);
+  const pendingDiffQty = _dashView === 'india_us'
+    ? sumPositiveDiff(['short_grn_pending', 'short_grn_awaiting_ibr'])
+    : sumPositiveDiff('pending');
+  const progressDiffQty = _dashView === 'india_us'
+    ? sumPositiveDiff('short_grn_progress')
+    : sumPositiveDiff(['in_progress', 'partial']);
 
   if (_dashView === 'india_us') {
     const c  = kpis.closed             || {};
@@ -1404,8 +1609,8 @@ function renderDashboardOverview(data, lastUpdated) {
     buckets = [
       { label:'✅ Closed',            key:'closed',             count:c.count||0,  qty:c.qty||0,  exp:c.expected||0,  rec:c.actual||0,  color:'#4caf50', dark:'#2e7d32' },
       { label:'🚚 Intransit',          key:'intransit',          count:it.count||0, qty:it.qty||0, exp:0,              rec:0,            color:'#42a5f5', dark:'#0277bd' },
-      { label:'⏳ Pending to Claim',   key:'short_grn_pending',  count:sp.count||0, qty:sp.qty||0, exp:sp.expected||0, rec:0,            color:'#ffa726', dark:'#e65100' },
-      { label:'🔧 Case In Progress',   key:'short_grn_progress', count:sg.count||0, qty:sg.qty||0, exp:sg.expected||0, rec:sg.actual||0, color:'#ef5350', dark:'#c62828' },
+      { label:'⏳ Pending to Claim',   key:'short_grn_pending',  count:sp.count||0, qty:pendingDiffQty,  exp:sp.expected||0, rec:0,            color:'#ffa726', dark:'#e65100' },
+      { label:'🔧 Case In Progress',   key:'short_grn_progress', count:sg.count||0, qty:progressDiffQty, exp:sg.expected||0, rec:sg.actual||0, color:'#ef5350', dark:'#c62828' },
     ];
     actKey  = 'actual';
     bkKeys  = ['closed','intransit','short_grn_pending','short_grn_progress'];
@@ -1421,8 +1626,8 @@ function renderDashboardOverview(data, lastUpdated) {
     buckets = [
       { label:'✅ Closed',            key:'closed',      count:c.count||0,  qty:c.qty||0,  exp:c.expected||0,   rec:c.recovered||0, color:'#4caf50', dark:'#2e7d32' },
       { label:'🚚 Intransit',          key:'intransit',   count:it.count||0, qty:it.qty||0, exp:0,               rec:0,             color:'#42a5f5', dark:'#0277bd' },
-      { label:'⏳ Pending to Claim',   key:'pending',     count:p.count||0,  qty:p.qty||0,  exp:p.expected||0,   rec:0,             color:'#ffa726', dark:'#e65100' },
-      { label:'🔧 Case In Progress',   key:'in_progress', count:g.count||0,  qty:g.qty||0,  exp:g.expected||0,   rec:g.recovered||0,color:'#ef5350', dark:'#c62828' },
+      { label:'⏳ Pending to Claim',   key:'pending',     count:p.count||0,  qty:pendingDiffQty,  exp:p.expected||0,   rec:0,             color:'#ffa726', dark:'#e65100' },
+      { label:'🔧 Case In Progress',   key:'in_progress', count:g.count||0,  qty:progressDiffQty, exp:g.expected||0,   rec:g.recovered||0,color:'#ef5350', dark:'#c62828' },
     ];
     actKey  = 'recovered';
     bkKeys  = ['closed','intransit','pending','in_progress'];
@@ -1862,11 +2067,11 @@ function renderDashboardOverview(data, lastUpdated) {
 
   // ── Bucket cards HTML ──────────────────────────────────────────────────
   const bucketCardsHtml = buckets.map(b => `
-    <div style="border-radius:12px;padding:16px;background:#fff;border:1px solid #e9ecef;
+    <div class="bucket-kpi-card" style="border-radius:12px;padding:16px;background:#fff;border:1px solid #e9ecef;
                 border-left:5px solid ${b.color};box-shadow:0 2px 8px rgba(0,0,0,.05);
                 display:flex;flex-direction:column;gap:4px">
       <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px">${b.label}</div>
-      <div style="font-size:32px;font-weight:800;color:${b.dark};line-height:1;font-family:'Plus Jakarta Sans',sans-serif">${(b.count).toLocaleString()}</div>
+      <div class="bucket-kpi-value" style="font-size:32px;font-weight:800;color:${b.dark};line-height:1;font-family:'Plus Jakarta Sans',sans-serif">${(b.count).toLocaleString()}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
         <span style="font-size:10px;background:${b.color}18;color:${b.dark};padding:2px 7px;border-radius:10px;font-weight:600">${(b.qty||0).toLocaleString()} units</span>
         ${b.exp > 0 ? `<span style="font-size:10px;background:#fff3e0;color:#e65100;padding:2px 7px;border-radius:10px;font-weight:600">${formatUSD(b.exp)} exp</span>` : ''}
@@ -2012,7 +2217,18 @@ function renderDashboardOverview(data, lastUpdated) {
         </tr></tfoot>
       </table>
     </div>
+    <div class="ups-summary-strip" aria-label="UPS claims status summary">
+      <div class="ups-summary-item"><div class="ups-summary-label">Total Claims</div><div class="ups-summary-value" style="color:#283593">${_upsAll.length}</div></div>
+      <div class="ups-summary-item"><div class="ups-summary-label">Settled</div><div class="ups-summary-value" style="color:#2e7d32">${_upsStAll.length}</div></div>
+      <div class="ups-summary-item"><div class="ups-summary-label">Approved</div><div class="ups-summary-value" style="color:#f57f17">${_upsAppAll.length}</div></div>
+      <div class="ups-summary-item"><div class="ups-summary-label">Declined</div><div class="ups-summary-value" style="color:#b71c1c">${_upsDecl}</div></div>
+    </div>
   </div>` : '';
+
+  const opsPivotHtml = buildOperationalPivot(
+    rows,
+    _dashView === 'india_us' ? 'India → US' : 'Internal US 2 US'
+  );
 
   document.getElementById('mainContent').innerHTML = `
   <div style="padding:20px 24px">
@@ -2085,7 +2301,6 @@ function renderDashboardOverview(data, lastUpdated) {
       </div>
 
     </div>
-
 
     <!-- Claims Bucket (India→US only) -->
     ${_dashView === 'india_us' && cbMths.length > 0 ? `
@@ -2283,36 +2498,44 @@ function renderDashboardOverview(data, lastUpdated) {
       </div>
     </div>` : ''}
 
-    <!-- Charts -->
-    <div style="display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-bottom:16px">
+    <!-- Analytics workspace: charts + UPS left, pivot + bucket context right -->
+    <div class="dashboard-workspace-grid">
+      <div class="dashboard-main-column">
+        <div class="dashboard-chart-pair">
 
-      <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
-        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <div class="ops-analytics-card" style="background:#fff;border-radius:14px;padding:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:9px;display:flex;align-items:center;gap:7px">
           <i class="fas fa-chart-bar" style="color:#1b3a2d"></i> Monthly Shipment Status
           <span style="margin-left:auto;font-size:10px;color:#ccc;font-weight:400">${sortedMonths.length} months</span>
         </div>
-        <div style="position:relative;height:230px"><canvas id="dashShipChart"></canvas></div>
+        <div style="position:relative;height:200px"><canvas id="dashShipChart"></canvas></div>
       </div>
 
-      <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
-        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <div class="ops-analytics-card" style="background:#fff;border-radius:14px;padding:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:9px;display:flex;align-items:center;gap:7px">
           <i class="fas fa-chart-line" style="color:#1b3a2d"></i> Recovery Trend
         </div>
-        <div style="position:relative;height:230px"><canvas id="dashRecovChart"></canvas></div>
+        <div style="position:relative;height:200px"><canvas id="dashRecovChart"></canvas></div>
       </div>
 
-    </div>
+        </div>
 
-    ${upsIUSTbl}
-
-    <!-- Bucket Breakdown -->
-    <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
-      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:7px">
-        <i class="fas fa-layer-group" style="color:#1b3a2d"></i> Bucket Breakdown
-        <span style="margin-left:auto;font-size:10px;color:#bbb;font-weight:400;text-transform:none">Unique IBR / shipment count × child SKU qty</span>
+        <div class="bottom-ups-panel">${upsIUSTbl}</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-        ${bucketCardsHtml}
+
+      <div class="dashboard-side-column">
+        <div class="ops-pivot-slot">${opsPivotHtml}</div>
+
+        <!-- Bucket Breakdown -->
+        <div class="bottom-bucket-panel" style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:7px">
+          <i class="fas fa-layer-group" style="color:#1b3a2d"></i> Bucket Breakdown
+          <span style="margin-left:auto;font-size:10px;color:#bbb;font-weight:400;text-transform:none">IBR / SKU qty</span>
+        </div>
+          <div class="bucket-kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+            ${bucketCardsHtml}
+          </div>
+        </div>
       </div>
     </div>
 
