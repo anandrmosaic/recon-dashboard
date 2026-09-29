@@ -19,7 +19,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel, get_shipbob_summary_pivot
+from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel, get_shipbob_summary_pivot, calculate_overview_metrics
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -79,13 +79,22 @@ def add_security_headers(response):
 with open('config.json') as f:
     CONFIG = json.load(f)
 
-_cache = {'data': None, 'last_updated': None}
+_cache = {
+    'data': None,
+    'last_updated': None,
+    'last_attempted': None,
+    'last_error': None,
+    'refresh_errors': [],
+}
 
 CF = CONFIG.get('credentials_file')
 TF = CONFIG.get('token_file')
 
 
 def refresh_data():
+    attempt_time = datetime.now()
+    _cache['last_attempted'] = attempt_time.strftime('%d %b %Y, %I:%M %p IST')
+    refresh_errors = []
     try:
         creds    = get_sheets_credentials(CF, TF)
         RECON_ID = CONFIG.get('recon_sheet_id')
@@ -98,6 +107,7 @@ def refresh_data():
             print(f"[Data] India→US loaded: {len(data['india_us'].get('rows', []))} rows")
         except Exception as e:
             print(f"[Data] India→US failed: {e}")
+            refresh_errors.append(f"India → US: {e}")
             data['india_us'] = {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
 
         # ── Internal US 2 US tab ──────────────────────────────────────────────
@@ -109,6 +119,7 @@ def refresh_data():
             print(f"[Data] US2US loaded: {len(data['us2us'].get('rows', []))} rows")
         except Exception as e:
             print(f"[Data] US2US failed: {e}")
+            refresh_errors.append(f"Internal US 2 US: {e}")
             data['us2us'] = {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
 
         # ── UPS Claims (untouched) ────────────────────────────────────────────
@@ -116,6 +127,7 @@ def refresh_data():
             data['ups_claims'] = get_ups_claims_data(creds, RECON_ID)
         except Exception as e:
             print(f"[Data] UPS claims failed: {e}")
+            refresh_errors.append(f"UPS Claims: {e}")
             data['ups_claims'] = {'summary': {}, 'claims': []}
 
         # ── ShipBob D2C Claims ────────────────────────────────────────────────
@@ -129,16 +141,24 @@ def refresh_data():
             print(f"[Data] ShipBob D2C loaded: {len(d2c.get('rows', []))} claim rows")
         except Exception as e:
             print(f"[Data] ShipBob D2C failed: {e}")
+            refresh_errors.append(f"ShipBob D2C: {e}")
             data['shipbob_d2c'] = {'rows': [], 'monthly': {}, 'kpis': {}, 'months': [], 'channels': {},
                                    'pivot1': {}, 'pivot1_months': []}
 
-        _cache['data'] = None
-        gc.collect()
+        # Enrich both sources with shared, backend-owned metrics. Keep the
+        # previous good snapshot available if a future refresh fails entirely.
+        data['india_us']['overview_metrics'] = calculate_overview_metrics(data['india_us'])
+        data['us2us']['overview_metrics'] = calculate_overview_metrics(data['us2us'])
         _cache['data'] = data
         _cache['last_updated'] = datetime.now().strftime('%d %b %Y, %I:%M %p IST')
+        _cache['last_error'] = None
+        _cache['refresh_errors'] = refresh_errors
+        gc.collect()
         print(f"[Data] Refreshed at {_cache['last_updated']}")
     except Exception as e:
         print(f"[Data] Refresh error: {e}")
+        _cache['last_error'] = str(e)
+        _cache['refresh_errors'] = refresh_errors or [str(e)]
 
 
 def send_scheduled_email():
@@ -219,9 +239,20 @@ def api_debug_header():
 def api_data():
     if not _cache['data']:
         refresh_data()
+    age_seconds = None
+    if _cache.get('last_updated'):
+        try:
+            age_seconds = max(0, int((datetime.now() - datetime.strptime(_cache['last_updated'], '%d %b %Y, %I:%M %p IST')).total_seconds()))
+        except Exception:
+            age_seconds = None
     return jsonify({
         'data': _cache['data'],
         'last_updated': _cache['last_updated']
+        , 'last_attempted': _cache.get('last_attempted')
+        , 'refresh_errors': _cache.get('refresh_errors', [])
+        , 'refresh_error': _cache.get('last_error')
+        , 'cache_age_seconds': age_seconds
+        , 'cache_stale': bool(age_seconds is not None and age_seconds > 3600)
     })
 
 

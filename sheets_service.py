@@ -14,6 +14,29 @@ def safe_float(val):
         return 0.0
 
 
+def calculate_overview_metrics(source_data):
+    """Return shared shortage metrics for dashboard and future email consumers.
+
+    Difference fields are source-of-truth quantities: India→US uses Final Diff
+    and US 2 US uses Sum Difference. Only positive values represent unresolved
+    shortage units; negative values are over-receipts.
+    """
+    rows = (source_data or {}).get('rows', [])
+    pending_keys = {'short_grn_pending', 'short_grn_awaiting_ibr', 'pending'}
+    progress_keys = {'short_grn_progress', 'in_progress', 'partial'}
+
+    def positive_sum(keys):
+        return int(sum(max(0, safe_float(row.get('diff', 0)))
+                       for row in rows
+                       if row.get('bucket_key') in keys))
+
+    return {
+        'pending_diff_qty': positive_sum(pending_keys),
+        'progress_diff_qty': positive_sum(progress_keys),
+        'total_positive_diff_qty': positive_sum(pending_keys | progress_keys),
+    }
+
+
 def get_sheet_data(creds, sheet_id, awb_tab, recon_tab=None, data_since=None):
     service = build('sheets', 'v4', credentials=creds)
 
@@ -421,12 +444,29 @@ def get_ups_claims_data(creds, sheet_id):
         return {'summary': {}, 'claims': []}
     service = build('sheets', 'v4', credentials=creds)
 
-    # Read AWB Master (UPS) - col A = AWB, col B = TRUE/FALSE, row 1 has counts in cols F-H
+    # Read AWB Master (UPS). Header matching is preferred; the legacy A:H
+    # positions remain safe fallbacks for the current sheet layout.
     master_result = service.spreadsheets().values().get(
         spreadsheetId=sheet_id,
-        range="'AWB Master (ups)'!A1:H1000"
+        range="'AWB Master (ups)'!A1:Z1000"
     ).execute()
     master_rows = master_result.get('values', [])
+
+    def find_header_index(headers, candidates, fallback=-1):
+        normalized = [str(h).strip().lower() for h in headers]
+        for candidate in candidates:
+            candidate = candidate.lower()
+            exact = next((i for i, h in enumerate(normalized) if h == candidate), None)
+            if exact is not None:
+                return exact
+            contains = next((i for i, h in enumerate(normalized) if candidate in h), None)
+            if contains is not None:
+                return contains
+        return fallback
+
+    master_headers = master_rows[0] if master_rows else []
+    master_awb_col = find_header_index(master_headers, ['parent awb', 'shipment awb', 'awb', 'tracking'], 0)
+    master_status_col = find_header_index(master_headers, ['form received', 'claim form', 'tracking status', 'tracking'], 1)
 
     total_awbs = 0
     claim_filed = 0
@@ -442,34 +482,52 @@ def get_ups_claims_data(creds, sheet_id):
             try: total_awbs = int(str(master_rows[1][7]).replace(',','').strip())
             except: pass
 
-    # Count AWBs with FALSE tracking (col B = FALSE → no claim form received)
+    # Count AWBs with FALSE tracking (legacy col B = FALSE → no claim form received)
     false_tracking_awbs = []
     for r in master_rows[1:]:
-        if len(r) >= 2 and str(r[1]).strip().upper() == 'FALSE' and str(r[0]).strip():
-            false_tracking_awbs.append(str(r[0]).strip())
+        awb = str(r[master_awb_col]).strip() if master_awb_col < len(r) else ''
+        status = str(r[master_status_col]).strip().upper() if master_status_col < len(r) else ''
+        if status == 'FALSE' and awb:
+            false_tracking_awbs.append(awb)
     false_tracking_count = len(false_tracking_awbs)
 
-    # Read UPS Claim tab — col H = remark/notes
+    # Read UPS Claim tab. Match fields by header name so inserted columns do
+    # not shift claim parsing; current A:H positions remain fallbacks.
     claim_result = service.spreadsheets().values().get(
         spreadsheetId=sheet_id,
-        range="'UPS Claim'!A1:H500"
+        range="'UPS Claim'!A1:Z500"
     ).execute()
     claim_rows = claim_result.get('values', [])
 
     claims = []
     if len(claim_rows) > 1:
+        claim_headers = claim_rows[0]
+        claim_cols = {
+            'parent_awb': find_header_index(claim_headers, ['parent awb', 'shipment awb', 'awb'], 0),
+            'lost_awb': find_header_index(claim_headers, ['lost awb', 'lost shipment', 'tracking'], 1),
+            'lost_qty': find_header_index(claim_headers, ['lost qty', 'lost quantity', 'quantity'], 2),
+            'claim_amount': find_header_index(claim_headers, ['claim amount', 'amount'], 3),
+            'form_received': find_header_index(claim_headers, ['form received', 'claim form', 'form'], 4),
+            'approved_date': find_header_index(claim_headers, ['approved date', 'approval date'], 5),
+            'settled_date': find_header_index(claim_headers, ['settled date', 'settlement date'], 6),
+            'remark': find_header_index(claim_headers, ['remark', 'notes', 'comments'], 7),
+        }
+
+        def claim_value(row, field):
+            idx = claim_cols[field]
+            return str(row[idx]).strip() if 0 <= idx < len(row) else ''
+
         for row in claim_rows[1:]:
-            if not row or not str(row[0]).strip():
+            if not row or not claim_value(row, 'parent_awb'):
                 continue
-            padded = row + [''] * max(0, 8 - len(row))
-            parent_awb    = str(padded[0]).strip()
-            lost_awb      = str(padded[1]).strip()
-            lost_qty      = str(padded[2]).strip()
-            claim_amount  = str(padded[3]).strip()
-            form_received = str(padded[4]).strip()
-            approved_date = str(padded[5]).strip()
-            settled_date  = str(padded[6]).strip()
-            remark        = str(padded[7]).strip()
+            parent_awb    = claim_value(row, 'parent_awb')
+            lost_awb      = claim_value(row, 'lost_awb')
+            lost_qty      = claim_value(row, 'lost_qty')
+            claim_amount  = claim_value(row, 'claim_amount')
+            form_received = claim_value(row, 'form_received')
+            approved_date = claim_value(row, 'approved_date')
+            settled_date  = claim_value(row, 'settled_date')
+            remark        = claim_value(row, 'remark')
 
             remark_lower = remark.lower()
             # Determine state — priority order is critical

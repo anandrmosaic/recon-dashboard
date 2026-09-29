@@ -84,6 +84,9 @@
     .header-sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
     .header-right { display: flex; align-items: center; gap: 10px; }
     .last-updated { color: rgba(255,255,255,0.45); font-size: 11px; }
+    .data-health { font-size: 10px; font-weight: 700; color: #a5d6a7; white-space: nowrap; }
+    .data-health.warn { color: #ffcc80; }
+    .data-health.error { color: #ef9a9a; }
     .btn-refresh {
       background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
       color: #fff; padding: 7px 16px; border-radius: var(--r-full);
@@ -771,6 +774,7 @@
 
   <div class="header-right">
     <span class="last-updated" id="lastUpdated">Loading...</span>
+    <span class="data-health" id="dataHealth" aria-live="polite">Checking data</span>
     <button class="btn-refresh" onclick="refreshData()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
     <a class="btn-logout" href="/logout"><i class="fas fa-sign-out-alt me-1"></i>Logout</a>
   </div>
@@ -1599,11 +1603,11 @@ function renderDashboardOverview(data, lastUpdated) {
     return keys.includes(r.bucket_key) ? sum + Math.max(0, Number(r.diff) || 0) : sum;
   }, 0);
   const pendingDiffQty = _dashView === 'india_us'
-    ? sumPositiveDiff(['short_grn_pending', 'short_grn_awaiting_ibr'])
-    : sumPositiveDiff('pending');
+    ? Number((src.overview_metrics || {}).pending_diff_qty ?? sumPositiveDiff(['short_grn_pending', 'short_grn_awaiting_ibr']))
+    : Number((src.overview_metrics || {}).pending_diff_qty ?? sumPositiveDiff('pending'));
   const progressDiffQty = _dashView === 'india_us'
-    ? sumPositiveDiff('short_grn_progress')
-    : sumPositiveDiff(['in_progress', 'partial']);
+    ? Number((src.overview_metrics || {}).progress_diff_qty ?? sumPositiveDiff('short_grn_progress'))
+    : Number((src.overview_metrics || {}).progress_diff_qty ?? sumPositiveDiff(['in_progress', 'partial']));
 
   if (_dashView === 'india_us') {
     const c  = kpis.closed             || {};
@@ -6778,6 +6782,28 @@ function exportDiscrepancy() {
 
 // ── Data loading ───────────────────────────────────────────────────────────
 
+function updateDataHealth(meta) {
+  const el = document.getElementById('dataHealth');
+  if (!el) return;
+  const errors = meta?.refresh_errors || [];
+  const age = Number(meta?.cache_age_seconds);
+  el.classList.remove('warn', 'error');
+  if (meta?.refresh_error) {
+    el.textContent = 'Data refresh failed';
+    el.classList.add('error');
+  } else if (errors.length) {
+    el.textContent = `Partial refresh · ${errors.length} source${errors.length === 1 ? '' : 's'} affected`;
+    el.classList.add('warn');
+  } else if (meta?.cache_stale || (Number.isFinite(age) && age > 3600)) {
+    el.textContent = 'Data may be stale';
+    el.classList.add('warn');
+  } else {
+    el.textContent = 'Data current';
+  }
+  if (errors.length) el.dataset.tooltip = errors.join(' | ');
+  else el.removeAttribute('data-tooltip');
+}
+
 async function loadData() {
   try {
     const res = await fetch('/api/data');
@@ -6785,6 +6811,7 @@ async function loadData() {
     if (json.data) {
       _rawData = json.data;
       _lastUpdated = json.last_updated;
+      updateDataHealth(json);
 
       // Inbound Recon badge: combined India→US + US2US action needed
       const iusKpis  = (_rawData.india_us || {}).kpis || {};
@@ -6813,6 +6840,7 @@ async function loadData() {
         '<div class="loading"><p style="color:#c62828">Failed to load data. Check Google Sheets connection.</p></div>';
     }
   } catch(e) {
+    updateDataHealth({refresh_error: e.message});
     document.getElementById('mainContent').innerHTML =
       '<div class="loading"><p style="color:#c62828">Error: ' + e.message + '</p>' +
       '<pre style="font-size:10px;text-align:left;margin-top:10px;color:#555;white-space:pre-wrap">' + (e.stack||'no stack') + '</pre></div>';
@@ -6859,6 +6887,7 @@ document.addEventListener('click', e => {
 loadData();
 setInterval(() => fetch('/api/refresh').then(() => {
   fetch('/api/data').then(r => r.json()).then(j => {
+    updateDataHealth(j);
     if (j.data) { _rawData = j.data; _lastUpdated = j.last_updated; applyAndRender(); }
   });
 }), 20 * 60 * 1000);
