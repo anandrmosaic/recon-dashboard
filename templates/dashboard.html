@@ -2673,10 +2673,18 @@ function renderCaseHealth(data, lastUpdated) {
   const closedCases = casedRows.filter(r => r[closeKey] && r[closeKey].trim());
   const openCases   = casedRows.filter(r => !r[closeKey] || !r[closeKey].trim());
 
-  const daysToClose = closedCases.map(r => {
+  // Average close time is a case/shipment metric, not a raw-SKU-row metric.
+  // A single shipment can have several SKU rows, so count one valid interval
+  // per month + channel + label, matching the Case Health detail table.
+  const closeCaseKey = r => `${r.month||''}|${r.channel||r.to_channel||r.from_channel||'Other'}|${r.label||r.from_label||r.awb||r.row_index}`;
+  const closeDaysByCase = new Map();
+  closedCases.forEach(r => {
     const rd = _parseDate(r.case_raise_date), cd = _parseDate(r[closeKey]);
-    return (rd && cd) ? Math.max(0, Math.round((cd - rd) / 86400000)) : null;
-  }).filter(d => d !== null);
+    if (rd && cd && cd >= rd && !closeDaysByCase.has(closeCaseKey(r))) {
+      closeDaysByCase.set(closeCaseKey(r), Math.max(0, Math.round((cd - rd) / 86400000)));
+    }
+  });
+  const daysToClose = [...closeDaysByCase.values()];
 
   const avgDTC     = daysToClose.length ? Math.round(daysToClose.reduce((a,b)=>a+b,0)/daysToClose.length) : 0;
   const medDTC     = daysToClose.length ? daysToClose.slice().sort((a,b)=>a-b)[Math.floor(daysToClose.length/2)] : 0;
@@ -2703,6 +2711,95 @@ function renderCaseHealth(data, lastUpdated) {
     mOpened[r.month] = (mOpened[r.month]||0) + 1;
     if (r[closeKey] && r[closeKey].trim()) mClosed[r.month] = (mClosed[r.month]||0) + 1;
   });
+
+  // ── Monthly case health by channel (Overview) ────────────────────────
+  // Keep this at case/shipment level where possible so multiple SKU rows do
+  // not inflate the shipment and case counts. Quantity and money remain sums
+  // of the source rows, matching the operational pivot definitions.
+  const channelRank = {Amazon: 0, ShipBob: 1, TikTok: 2, Walmart: 3};
+  const caseHealthByMonth = {};
+  const makeCaseHealthBucket = () => ({
+    affectedLabels: new Set(), raisedLabels: new Set(), closedLabels: new Set(), receivedLabels: new Set(),
+    closeDaysByLabel: new Map(), affectedQty: 0, recoveredUnits: 0,
+    expectedAmount: 0, recoveredAmount: 0
+  });
+  const caseHealthChannel = r => r.channel || r.to_channel || r.from_channel || 'Other';
+  const caseHealthLabel = r => r.label || r.from_label || r.awb || String(r.row_index || 'row');
+  rows.forEach(r => {
+    if (!r.month) return;
+    const raised = !!(r.case_raise_date && r.case_raise_date.trim());
+    const expected = Number(r.expected) || 0;
+    const diff = Number(r.diff) || 0;
+    const affected = diff > 0 || raised || expected > 0;
+    if (!affected) return;
+    const channel = caseHealthChannel(r);
+    if (!caseHealthByMonth[r.month]) caseHealthByMonth[r.month] = {};
+    if (!caseHealthByMonth[r.month][channel]) caseHealthByMonth[r.month][channel] = makeCaseHealthBucket();
+    const b = caseHealthByMonth[r.month][channel];
+    const label = caseHealthLabel(r);
+    b.affectedLabels.add(label);
+    if (raised) b.raisedLabels.add(label);
+    if (raised && r[closeKey] && r[closeKey].trim()) b.closedLabels.add(label);
+    const recoveredAmount = isIUS ? (Number(r.actual) || 0) : (Number(r.recovered) || 0);
+    if (recoveredAmount > 0 || (Number(r.units_recovered) || 0) > 0) b.receivedLabels.add(label);
+    b.affectedQty += Math.max(0, diff);
+    b.recoveredUnits += Math.max(0, Number(r.units_recovered) || 0);
+    b.expectedAmount += expected;
+    b.recoveredAmount += recoveredAmount;
+    const rd = raised ? _parseDate(r.case_raise_date) : null;
+    const cd = r[closeKey] && r[closeKey].trim() ? _parseDate(r[closeKey]) : null;
+    if (rd && cd && cd >= rd && !b.closeDaysByLabel.has(label)) {
+      b.closeDaysByLabel.set(label, Math.round((cd - rd) / 86400000));
+    }
+  });
+  const caseHealthMetric = b => {
+    const days = [...b.closeDaysByLabel.values()];
+    return {
+      affected: b.affectedLabels.size,
+      raised: b.raisedLabels.size,
+      closed: b.closedLabels.size,
+      active: Math.max(0, b.raisedLabels.size - b.closedLabels.size),
+      received: b.receivedLabels.size,
+      avgClose: days.length ? Math.round(days.reduce((a,v)=>a+v,0) / days.length) : null,
+      affectedQty: b.affectedQty,
+      recoveredUnits: b.recoveredUnits,
+      expected: b.expectedAmount,
+      recovered: b.recoveredAmount
+    };
+  };
+  const emptyCaseHealthMetric = () => ({affected:0,raised:0,closed:0,active:0,received:0,avgClose:null,affectedQty:0,recoveredUnits:0,expected:0,recovered:0});
+  const mergeCaseHealth = (a, b) => ({
+    affected: a.affected + b.affected, raised: a.raised + b.raised, closed: a.closed + b.closed, active: a.active + b.active, received: a.received + b.received,
+    avgClose: null, affectedQty: a.affectedQty + b.affectedQty, recoveredUnits: a.recoveredUnits + b.recoveredUnits,
+    expected: a.expected + b.expected, recovered: a.recovered + b.recovered
+  });
+  const caseHealthRows = [];
+  sortedMonths.forEach(month => {
+    const channelMap = caseHealthByMonth[month] || {};
+    const channels = Object.keys(channelMap).sort((a,b) => (channelRank[a] ?? 99) - (channelRank[b] ?? 99) || a.localeCompare(b));
+    if (!channels.length) return;
+    const channelMetrics = channels.map(ch => ({channel: ch, metric: caseHealthMetric(channelMap[ch])}));
+    let monthTotal = emptyCaseHealthMetric();
+    channelMetrics.forEach(x => { monthTotal = mergeCaseHealth(monthTotal, x.metric); });
+    const closeDays = [];
+    channels.forEach(ch => closeDays.push(...[...channelMap[ch].closeDaysByLabel.values()]));
+    monthTotal.avgClose = closeDays.length ? Math.round(closeDays.reduce((a,v)=>a+v,0) / closeDays.length) : null;
+    caseHealthRows.push({month, channel: null, metric: monthTotal});
+    channelMetrics.forEach(x => caseHealthRows.push({month, channel: x.channel, metric: x.metric}));
+  });
+  const allCaseHealth = caseHealthRows.filter(x => !x.channel).reduce((a,x) => mergeCaseHealth(a,x.metric), emptyCaseHealthMetric());
+  const allCloseDays = [];
+  Object.values(caseHealthByMonth).forEach(chMap => Object.values(chMap).forEach(b => allCloseDays.push(...[...b.closeDaysByLabel.values()])));
+  allCaseHealth.avgClose = allCloseDays.length ? Math.round(allCloseDays.reduce((a,v)=>a+v,0) / allCloseDays.length) : null;
+
+  // Keep channel detail collapsed so the overview stays compact.
+  window.toggleCaseHealthMonth = (monthId, button) => {
+    document.querySelectorAll(`[data-case-health-parent="${monthId}"]`).forEach(row => {
+      const open = row.style.display !== 'none';
+      row.style.display = open ? 'none' : 'table-row';
+    });
+    if (button) button.textContent = button.textContent === '＋' ? '−' : '＋';
+  };
 
   // ── Top open cases (Overview, oldest first) ────────────────────────────
   const topOpen = openCases
@@ -2934,6 +3031,60 @@ function renderCaseHealth(data, lastUpdated) {
       <div style="background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0">
         ${secHdr('fa-chart-line','Monthly Case Trend')}
         <div style="position:relative;height:195px"><canvas id="caseTrendChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Monthly case health by channel -->
+    <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0;margin-bottom:16px">
+      <div style="padding:14px 18px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        ${secHdr('fa-chart-bar','Monthly Case Health by Channel')}
+        <span style="font-size:10px;color:#999;text-align:right">Affected = positive Final Diff · close days use raise → close date</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:820px">
+          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
+            ${['Month / Channel','Affected Shipments','Cases Raised','Cases Closed','Active Cases','Claims Received','Avg Closure Days','Affected Qty','Recovered Units','Expected Recovery','Recovered Amount','Recovery Rate'].map((h,i)=>`<th style="padding:7px 8px;color:rgba(255,255,255,.9);font-size:9px;font-weight:700;text-align:${i===0?'left':'right'};white-space:nowrap">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${caseHealthRows.map((x,i) => {
+              const v = x.metric, total = !x.channel;
+              const bg = total ? '#edf7f1' : (i%2 ? '#fff' : '#fafafa');
+              const monthId = 'case-health-' + x.month.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+              const label = total
+                ? `<button type="button" data-case-health-toggle="${monthId}" style="border:0;background:#dceee4;color:#1b3a2d;border-radius:5px;width:20px;height:20px;line-height:18px;padding:0;margin-right:7px;font-weight:800;cursor:pointer" aria-label="Expand ${x.month}">＋</button><strong>${x.month}</strong>`
+                : `<span style="padding-left:28px;color:#536b5e">↳ ${x.channel}</span>`;
+              const num = (n, zero='—') => n ? formatNum(n) : zero;
+              return `<tr ${total?'':`data-case-health-parent="${monthId}"`} style="${total?'':'display:none;'}background:${bg};border-bottom:1px solid #edf0ee;${total?'font-weight:700':''}">
+                <td style="padding:6px 8px;font-size:${total?'11':'10'}px;color:${total?'#1b3a2d':'#52665a'};white-space:nowrap">${label}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px">${num(v.affected)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px">${num(v.raised)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px;color:#2e7d32">${num(v.closed)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px;color:#c62828">${num(v.active)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px;color:#2e7d32">${num(v.received)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px">${v.avgClose === null ? '—' : v.avgClose+'d'}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px;color:#bf360c">${num(v.affectedQty)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px;color:#2e7d32">${isIUS ? num(v.recoveredUnits) : '—'}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px">${formatUSD(v.expected)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px;color:#2e7d32">${formatUSD(v.recovered)}</td>
+                <td style="padding:6px 8px;text-align:right;font-size:10px;color:#2e7d32;font-weight:700">${v.expected > 0 ? ((v.recovered / v.expected) * 100).toFixed(1)+'%' : '—'}</td>
+              </tr>`;
+            }).join('') || `<tr><td colspan="12" style="text-align:center;padding:22px;color:#999">No affected case data available for this view</td></tr>`}
+            <tr style="background:#1b3a2d;color:#fff;font-weight:800">
+              <td style="padding:7px 8px;font-size:10px">Grand Total</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatNum(allCaseHealth.affected)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatNum(allCaseHealth.raised)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatNum(allCaseHealth.closed)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatNum(allCaseHealth.active)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatNum(allCaseHealth.received)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${allCaseHealth.avgClose === null ? '—' : allCaseHealth.avgClose+'d'}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatNum(allCaseHealth.affectedQty)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${isIUS ? formatNum(allCaseHealth.recoveredUnits) : '—'}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatUSD(allCaseHealth.expected)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${formatUSD(allCaseHealth.recovered)}</td>
+              <td style="padding:7px 8px;text-align:right;font-size:10px">${allCaseHealth.expected > 0 ? ((allCaseHealth.recovered / allCaseHealth.expected) * 100).toFixed(1)+'%' : '—'}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -3243,6 +3394,20 @@ function renderCaseHealth(data, lastUpdated) {
   `}
 
   </div>`;
+
+  // Bind after rendering so the controls work even when the dashboard script
+  // is isolated from inline event-handler scope by the browser.
+  if (_caseSubView === 'overview') {
+    document.querySelectorAll('[data-case-health-toggle]').forEach(button => {
+      button.addEventListener('click', () => {
+        const monthId = button.getAttribute('data-case-health-toggle');
+        document.querySelectorAll(`[data-case-health-parent="${monthId}"]`).forEach(row => {
+          row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+        });
+        button.textContent = button.textContent === '＋' ? '−' : '＋';
+      });
+    });
+  }
 
   // ── Case trend chart (Overview only) ─────────────────────────────────
   if (_caseSubView === 'overview') {

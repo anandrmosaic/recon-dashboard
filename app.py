@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import socket
+import sys
 import threading
 from datetime import datetime
 from flask import Flask, jsonify, render_template, request, redirect, session, url_for
@@ -22,6 +23,15 @@ from auth import get_sheets_credentials, get_gmail_credentials
 from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel, get_shipbob_summary_pivot, calculate_overview_metrics
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
+
+# Windows terminals may use a legacy code page that cannot print Unicode
+# status labels (for example, the India→US arrow). Prevent logging from
+# aborting the background data refresh; payload contents are unchanged.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, ValueError):
+        pass
 
 app = Flask(__name__)
 # Only auto-reload templates in local dev, not on Render (saves memory)
