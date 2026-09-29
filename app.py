@@ -1,10 +1,11 @@
 import gc
+import hmac
 import json
 import os
 import socket
 import threading
 from datetime import datetime
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, redirect, session, url_for
 
 # IPv6 is unavailable on this network; force IPv4 for all outbound connections
 # (httplib2 / googleapiclient pick AAAA records first, which then time out)
@@ -26,6 +27,54 @@ app = Flask(__name__)
 # Only auto-reload templates in local dev, not on Render (saves memory)
 if os.environ.get('RENDER') is None:
     app.config['TEMPLATES_AUTO_RELOAD'] = True
+
+# ── Dashboard authentication ────────────────────────────────────────────────
+# Credentials are supplied by the host environment, never committed to Git.
+# Local development has a deliberately obvious temporary password so the app
+# remains usable before local environment variables are configured. Render is
+# fail-closed until DASHBOARD_USERNAME, DASHBOARD_PASSWORD and FLASK_SECRET_KEY
+# are set in the service environment.
+_is_render = bool(os.environ.get('RENDER'))
+AUTH_USERNAME = os.environ.get('DASHBOARD_USERNAME', '' if _is_render else 'admin')
+AUTH_PASSWORD = os.environ.get('DASHBOARD_PASSWORD', '' if _is_render else 'change-me-now')
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', '' if _is_render else 'local-dashboard-dev-key-change-me')
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=_is_render,
+    PERMANENT_SESSION_LIFETIME=28800,  # 8 hours
+)
+
+
+@app.before_request
+def require_dashboard_login():
+    """Protect the dashboard and every data/action endpoint with one session."""
+    if request.endpoint in {'login', 'static'}:
+        return None
+
+    # Never expose an unconfigured production service by accident.
+    if not AUTH_USERNAME or not AUTH_PASSWORD or not app.secret_key:
+        message = 'Dashboard authentication is not configured. Set DASHBOARD_USERNAME, DASHBOARD_PASSWORD and FLASK_SECRET_KEY.'
+        if request.path.startswith('/api/'):
+            return jsonify({'status': 'error', 'message': message}), 503
+        return message, 503
+
+    if session.get('authenticated') is True:
+        return None
+
+    if request.path.startswith('/api/'):
+        return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
+    return redirect(url_for('login', next=request.full_path))
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if request.path.startswith('/api/'):
+        response.headers.setdefault('Cache-Control', 'no-store')
+    return response
 
 with open('config.json') as f:
     CONFIG = json.load(f)
@@ -111,6 +160,34 @@ def send_scheduled_email():
 @app.route('/')
 def dashboard():
     return render_template('dashboard.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    next_url = request.args.get('next') or request.form.get('next') or '/'
+    # Only allow local redirects; never turn this into an open redirector.
+    if not next_url.startswith('/') or next_url.startswith('//'):
+        next_url = '/'
+
+    if request.method == 'POST':
+        username = str(request.form.get('username', '')).strip()
+        password = str(request.form.get('password', ''))
+        valid = AUTH_USERNAME and AUTH_PASSWORD and hmac.compare_digest(username, AUTH_USERNAME) and hmac.compare_digest(password, AUTH_PASSWORD)
+        if valid:
+            session.clear()
+            session.permanent = True
+            session['authenticated'] = True
+            session['username'] = username
+            return redirect(next_url)
+        return render_template('login.html', error='Invalid username or password.', next_url=next_url), 401
+
+    return render_template('login.html', error='', next_url=next_url)
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 
 @app.route('/api/debug-header')

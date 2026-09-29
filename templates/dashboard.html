@@ -92,6 +92,12 @@
       display: flex; align-items: center; gap: 5px; backdrop-filter: blur(4px);
     }
     .btn-refresh:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.35); }
+    .btn-logout {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.82); padding: 7px 13px; border-radius: var(--r-full);
+      font-size: 11px; font-weight: 600; text-decoration: none; transition: all var(--t-base);
+    }
+    .btn-logout:hover { background: rgba(198,40,40,0.75); border-color: rgba(255,255,255,0.4); color: #fff; }
 
     /* Hero Stats Strip inside header */
     .hero-stats {
@@ -766,6 +772,7 @@
   <div class="header-right">
     <span class="last-updated" id="lastUpdated">Loading...</span>
     <button class="btn-refresh" onclick="refreshData()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+    <a class="btn-logout" href="/logout"><i class="fas fa-sign-out-alt me-1"></i>Logout</a>
   </div>
 </div>
 
