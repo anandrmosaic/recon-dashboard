@@ -306,12 +306,22 @@
       background: #244b39 !important; color: #fff !important;
       text-align: center !important; border-left: 3px solid #fff;
     }
-    .claims-month-table .claims-total-metric {
-      background: #e6f1eb !important; color: #173d2c !important;
-      text-align: right !important; padding: 6px 10px !important;
-      font-size: 10px !important; font-weight: 800 !important;
-      text-transform: uppercase; letter-spacing: .6px;
-    }
+.claims-month-table .claims-total-metric {
+  background: #e6f1eb !important;
+  color: #173d2c !important;
+  -webkit-text-fill-color: #173d2c !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+  text-align: right !important; padding: 6px 10px !important;
+  font-size: 10px !important; font-weight: 900 !important;
+  text-transform: uppercase; letter-spacing: .6px;
+}
+.claims-month-table thead .claims-total-metric,
+.claims-month-table thead th.claims-total-metric {
+  color: #173d2c !important;
+  -webkit-text-fill-color: #173d2c !important;
+  font-weight: 900 !important;
+}
     .claims-month-table tbody .claims-label-col { background: inherit; }
     .claims-month-table tfoot .claims-label-col { background: inherit; }
     .claims-month-table tfoot .claims-month-cell {
@@ -354,10 +364,27 @@
     .ops-pivot-tab.active { background:#1b3a2d; border-color:#1b3a2d; color:#fff; box-shadow:0 2px 5px rgba(27,58,45,.2); }
     .ops-pivot-panel { padding:12px 18px 16px; }
     .ops-pivot-panel[hidden] { display:none; }
-    .ops-pivot-table-wrap { overflow-x:auto; }
+    .ops-pivot-table-wrap {
+      max-height: 285px;
+      overflow-x: auto;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+    }
     .ops-pivot-table { width:100%; border-collapse:separate; border-spacing:0; min-width:560px; font-size:12px; font-variant-numeric:tabular-nums; }
-    .ops-pivot-table th { padding:8px 12px; background:#173d2c; color:#fff; text-align:right; font-size:10px; text-transform:uppercase; letter-spacing:.45px; white-space:nowrap; }
-    .ops-pivot-table th:first-child { text-align:left; }
+    .ops-pivot-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      padding:8px 12px;
+      background:#173d2c;
+      color:#fff;
+      text-align:right;
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:.45px;
+      white-space:nowrap;
+    }
+    .ops-pivot-table thead th:first-child { text-align:left; }
     .ops-pivot-table td { padding:8px 12px; border-bottom:1px solid #edf1f4; text-align:right; color:#334155; }
     .ops-pivot-table td:first-child { text-align:left; }
     .ops-pivot-month-row td { background:#f0f7f3; color:#173d2c; font-weight:800; border-top:1px solid #d8e9df; }
@@ -368,7 +395,16 @@
     .ops-pivot-toggle { border:0; background:transparent; color:inherit; cursor:pointer; font:inherit; padding:0; display:inline-flex; align-items:center; gap:8px; }
     .ops-pivot-chevron { width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; background:#dcebe2; font-size:9px; transition:transform .16s ease; }
     .ops-pivot-month-row[aria-expanded="true"] .ops-pivot-chevron { transform:rotate(90deg); }
-    .ops-pivot-total-row td { background:#173d2c; color:#fff !important; font-weight:800; border-bottom:0; }
+    .ops-pivot-total-row td {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      background:#173d2c;
+      color:#fff !important;
+      font-weight:800;
+      border-bottom:0;
+      box-shadow: 0 -1px 0 rgba(255,255,255,.12);
+    }
     .ops-pivot-total-row td:first-child { color:#fff !important; }
     .ops-pivot-note { color:#94a3b8; font-size:10px; margin:10px 0 0; }
     .ops-pivot-kicker { color:#94a3b8; font-size:10px; margin:2px 18px 0; }
@@ -382,7 +418,8 @@
     }
     .ops-analytics-card { min-width:0; }
     .ops-analytics-grid .ops-pivot-card { height:100%; margin-bottom:0; }
-    .ops-analytics-grid .ops-pivot-panel { max-height:270px; overflow:auto; }
+    .ops-analytics-grid .ops-pivot-panel { max-height:none; overflow:visible; min-height:0; }
+    .ops-analytics-grid .ops-pivot-table-wrap { max-height:285px; overflow:auto; }
     .ops-analytics-grid .ops-pivot-table { min-width:520px; }
     @media (max-width: 1200px) {
       .ops-analytics-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }

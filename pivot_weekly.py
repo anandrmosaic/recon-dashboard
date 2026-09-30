@@ -5,9 +5,10 @@ Generates Excel pivot: cases raised by channel, recovery status, amounts
 import sys, os, json
 sys.path.insert(0, r'C:\Users\Admin\recon-dashboard')
 
-from sheets_service import get_india_us_data, get_us2us_data
+from sheets_service import (get_india_us_data, get_us2us_data,
+                            get_shipbob_d2c_data, get_ups_claims_data)
 from auth import get_sheets_credentials
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from collections import defaultdict
 import openpyxl
 from openpyxl.styles import (PatternFill, Font, Alignment, Border, Side,
@@ -25,16 +26,22 @@ SHEET_ID = CONFIG['recon_sheet_id']   # India→US and US→US both live here
 creds = get_sheets_credentials(CF, TF)
 
 # ── Date range ──────────────────────────────────────────────────────────────
-START        = date(2026, 9, 11)           # Week 38 — Thu Sep 11
-END          = date(2026, 9, 17)           # Week 38 — Wed Sep 17
-MID_WK_END   = date(2026, 9, 10)          # W37 end (Sep 10)
-LAST_WK_END  = date(2026, 9,  3)          # W36 end (Sep 3)
+def env_date(name, fallback):
+    value = os.environ.get(name, '').strip()
+    if not value:
+        return fallback
+    return datetime.strptime(value, '%Y-%m-%d').date()
+
+START        = env_date('PIVOT_START', date(2026, 9, 11))
+END          = env_date('PIVOT_END',   date(2026, 9, 17))
+MID_WK_END   = START - timedelta(days=1)
+LAST_WK_END  = MID_WK_END - timedelta(days=7)
 WEEK_NUM     = START.isocalendar()[1]
 MID_WEEK     = MID_WK_END.isocalendar()[1]
 PREV_WEEK    = LAST_WK_END.isocalendar()[1]
 
-FOLDER    = r'C:\Users\Admin\Desktop\WeeklyPivotReports'
-SNAP_FILE = os.path.join(FOLDER, 'snapshots.json')
+FOLDER    = os.environ.get('PIVOT_OUTPUT_FOLDER', r'C:\Users\Admin\Desktop\WeeklyPivotReports')
+SNAP_FILE = os.environ.get('PIVOT_SNAPSHOT_FILE', os.path.join(FOLDER, 'snapshots.json'))
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 DATE_FMTS = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y',
@@ -59,9 +66,123 @@ print("Fetching India→US data …")
 ius_raw  = get_india_us_data(creds, SHEET_ID)
 ius_rows = ius_raw.get('rows', [])
 
+def dashboard_ius_claim_snapshot(rows):
+    """Match the dashboard Claims Bucket YTD logic for the current column."""
+    buckets = {}
+    raised_keywords = (
+        'claim raised but not received', 'claim raised but pending',
+        'claim submitted', 'claim filed', 'case raised', 'under review',
+        'claim in progress', 'raised'
+    )
+    for row in rows:
+        month = row.get('month') or 'Unknown'
+        agg = buckets.setdefault(month, {'rec': 0.0, 'prog': 0.0, 'pend': 0.0})
+        sub = str(row.get('sub_remark') or '').strip().lower()
+        remarks = ((str(row.get('sub_remark') or '') + ' ' +
+                    str(row.get('remarks') or '')).lower().strip())
+        actual = float(row.get('actual') or 0)
+        expected = float(row.get('expected') or 0)
+        if actual > 0:
+            agg['rec'] += actual
+        elif sub == 'pending to claim':
+            agg['pend'] += expected
+        elif any(keyword in remarks for keyword in raised_keywords):
+            agg['prog'] += expected
+
+    # Preserve the dashboard's verified historical Jan–Mar overrides.
+    buckets.update({
+        'January': {'rec': 886.85, 'prog': 2.96, 'pend': 0.0},
+        'February': {'rec': 2127.78, 'prog': 1099.02, 'pend': 0.0},
+        'March': {'rec': 2014.10, 'prog': 63.82, 'pend': 0.0},
+    })
+    return {
+        'Claim Raised & Received': round(sum(v['rec'] for v in buckets.values()), 2),
+        'Claim Raised, Pending Receipt': round(sum(v['prog'] for v in buckets.values()), 2),
+        'Pending to Claim': round(sum(v['pend'] for v in buckets.values()), 2),
+    }
+
+DASHBOARD_IUS_LIVE = dashboard_ius_claim_snapshot(ius_rows)
+DASHBOARD_IUS_SNAPSHOT = {
+    'received': DASHBOARD_IUS_LIVE['Claim Raised & Received'],
+    'pending_receipt': DASHBOARD_IUS_LIVE['Claim Raised, Pending Receipt'],
+    'pending_claim': DASHBOARD_IUS_LIVE['Pending to Claim'],
+}
+
 print("Fetching US→US data …")
 u2u_raw  = get_us2us_data(creds, SHEET_ID)
 u2u_rows = u2u_raw.get('rows', [])
+
+def dashboard_u2u_claim_snapshot(rows):
+    """Match the dashboard Claims Bucket YTD logic for US → US."""
+    totals = {'received': 0.0, 'pending_receipt': 0.0, 'pending_claim': 0.0}
+    for row in rows:
+        bucket = row.get('bucket_key') or ''
+        claim_qty = abs(float(row.get('diff') or 0))
+        recovered = float(row.get('recovered') or 0)
+        expected = float(row.get('expected') or 0)
+        if bucket == 'closed':
+            totals['received'] += recovered
+        elif bucket == 'in_progress':
+            totals['pending_receipt'] += expected
+        elif bucket == 'partial':
+            totals['received'] += recovered
+            pending = float(row.get('pending') or 0)
+            totals['pending_receipt'] += pending
+        elif bucket == 'pending':
+            totals['pending_claim'] += expected
+    return {key: round(value, 2) for key, value in totals.items()}
+
+DASHBOARD_U2U_SNAPSHOT = dashboard_u2u_claim_snapshot(u2u_rows)
+
+print("Fetching ShipBob D2C data …")
+shipbob_d2c = get_shipbob_d2c_data(
+    creds, SHEET_ID, CONFIG.get('shipbob_d2c_tab', 'ShipBob D2C Claims')
+)
+
+print("Fetching UPS claims data …")
+ups_data = get_ups_claims_data(creds, SHEET_ID)
+
+# ShipBob D2C historical reference supplied in the weekly review screenshots.
+# These three snapshots are intentionally retained as fixed reference values;
+# the rightmost column in the workbook is always read from the live dashboard
+# source so future runs can continue without editing this history.
+SHIPBOB_HISTORY = {
+    'Claim Raised & Received': [4404.27, 4826.12, 4962.89],
+    'Claim Raised, Pending Receipt': [1168.52, 932.90, 1035.32],
+    'Pending to Claim': [1263.05, 1582.15, 1190.01],
+}
+
+def shipbob_live_snapshot(d2c):
+    kpis = d2c.get('kpis', {}) if isinstance(d2c, dict) else {}
+    return {
+        'Claim Raised & Received': round(float(kpis.get('rec', {}).get('amt') or 0), 2),
+        'Claim Raised, Pending Receipt': round(float(kpis.get('prog', {}).get('exp') or 0), 2),
+        'Pending to Claim': round(float(kpis.get('pend', {}).get('exp') or 0), 2),
+    }
+
+SHIPBOB_LIVE = shipbob_live_snapshot(shipbob_d2c)
+
+def money_value(value):
+    try:
+        return float(str(value).replace(',', '').replace('$', '').replace('₹', '').strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+def ups_live_monthly(data):
+    """Aggregate live UPS claim rows by their settlement/approval month."""
+    grouped = defaultdict(lambda: {'awbs': set(), 'amount': 0.0, 'states': set()})
+    for claim in (data or {}).get('claims', []):
+        state = claim.get('state') or 'not_filed'
+        date_text = claim.get('settled_date') or claim.get('approved_date') or ''
+        dt = parse_date(date_text) if date_text else None
+        month = dt.strftime('%B %Y') if dt else 'TBD'
+        parent = str(claim.get('parent_awb') or '').strip()
+        grouped[month]['awbs'].add(parent or f"row-{id(claim)}")
+        grouped[month]['amount'] += money_value(claim.get('claim_amount'))
+        grouped[month]['states'].add(state)
+    return grouped
+
+UPS_LIVE = ups_live_monthly(ups_data)
 
 # ── Pivot builders ───────────────────────────────────────────────────────────
 # Three views per channel:
@@ -756,14 +877,144 @@ def wow_sheet(ws, route_label, snap_prev, snap_mid, snap_curr, ref_prev, ref_mid
 
 # ── Create WoW sheets ─────────────────────────────────────────────────────────
 wow_sheet(ws_wow, 'India → US',
-          ius_snap_prev, ius_snap_mid, ius_snap_curr,
+          ius_snap_prev, ius_snap_mid, DASHBOARD_IUS_SNAPSHOT,
           REF['ius'][LAST_WK_END], REF['ius'][MID_WK_END])
 
 ws_wow2 = wb.create_sheet(title='WoW Claims Bucket US→US')
 ws_wow2.sheet_view.showGridLines = False
 wow_sheet(ws_wow2, 'US → US',
-          u2u_snap_prev, u2u_snap_mid, u2u_snap_curr,
+          u2u_snap_prev, u2u_snap_mid, DASHBOARD_U2U_SNAPSHOT,
           REF['u2u'][LAST_WK_END], REF['u2u'][MID_WK_END])
+
+# ── ShipBob D2C Claims Bucket reference + live snapshot ─────────────────────
+# Historical values are fixed from the user's weekly review reference. The
+# rightmost snapshot is calculated from the same ShipBob data used by the
+# dashboard, so future runs automatically append the current live position.
+ws_sb = wb.create_sheet(title='ShipBob D2C Claims Bucket')
+ws_sb.sheet_view.showGridLines = False
+sb_current_label = END.strftime('%d %b')
+sb_headers = ['Claims Bucket',
+              '10 Sep Total', '10 Sep YTD%',
+              '17 Sep Total', '17 Sep YTD%',
+              '24 Sep Total', '24 Sep YTD%',
+              f'{sb_current_label} Total', f'{sb_current_label} YTD%']
+for col, h in enumerate(sb_headers, 1):
+    c = ws_sb.cell(row=1, column=col, value=h)
+    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+ws_sb.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(sb_headers))
+ws_sb.cell(row=2, column=1, value=(
+    'ShipBob D2C: 10/17/24 Sep values are hardcoded historical references; '
+    f'{sb_current_label} matches the live dashboard Claims Bucket source.'
+))
+style(ws_sb.cell(row=2, column=1), font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+
+sb_bucket_colors = {
+    'Claim Raised & Received': ('C8E6C9', '2E7D32'),
+    'Claim Raised, Pending Receipt': ('FFF3E0', 'E65100'),
+    'Pending to Claim': ('E3F2FD', '1565C0'),
+}
+sb_rows = []
+sb_totals = [sum(v[i] for v in SHIPBOB_HISTORY.values()) for i in range(3)]
+sb_live_total = round(sum(SHIPBOB_LIVE.values()), 2)
+for bucket, history_vals in SHIPBOB_HISTORY.items():
+    live_val = SHIPBOB_LIVE.get(bucket, 0.0)
+    sb_rows.append([bucket, history_vals[0], history_vals[1], history_vals[2], live_val])
+
+for row_num, row_data in enumerate(sb_rows, 3):
+    bucket, hist_10, hist_17, hist_24, live_val = row_data
+    bg_hex, color_hex = sb_bucket_colors[bucket]
+    for col, value in enumerate([bucket, hist_10,
+                                 hist_10 / sb_totals[0] if sb_totals[0] else 0,
+                                 hist_17, hist_17 / sb_totals[1] if sb_totals[1] else 0,
+                                 hist_24, hist_24 / sb_totals[2] if sb_totals[2] else 0,
+                                 live_val, live_val / sb_live_total if sb_live_total else 0], 1):
+        fmt = None if col == 1 else (USD_FMT if col % 2 == 0 else PCT_FMT)
+        c = ws_sb.cell(row=row_num, column=col, value=round(value, 2) if isinstance(value, float) else value)
+        style(c, fill=PatternFill('solid', fgColor=bg_hex),
+              font=Font(name='Calibri', bold=(col == 1), color=(color_hex if col == 1 else '212121'), size=10),
+              align=(LEFT if col == 1 else RIGHT), fmt=fmt, bdr_=bdr())
+
+sb_total_values = ['Total Eligible Claims', sb_totals[0], 1.0, sb_totals[1], 1.0,
+                   sb_totals[2], 1.0, sb_live_total, 1.0]
+for col, value in enumerate(sb_total_values, 1):
+    c = ws_sb.cell(row=6, column=col, value=value)
+    style(c, fill=PatternFill('solid', fgColor='1B3A2D'),
+          font=Font(name='Calibri', bold=True, color='FFFFFF', size=10),
+          align=(LEFT if col == 1 else RIGHT),
+          fmt=(None if col == 1 else (USD_FMT if col % 2 == 0 else PCT_FMT)),
+          bdr_=bdr(t=Side(style='medium', color='FFFFFF')))
+for i, width in enumerate([34, 15, 12, 15, 12, 15, 12, 15, 12], 1):
+    ws_sb.column_dimensions[get_column_letter(i)].width = width
+ws_sb.freeze_panes = 'B3'
+
+# ── UPS reference table + live dashboard data ────────────────────────────────
+ws_ups = wb.create_sheet(title='UPS Summary')
+ws_ups.sheet_view.showGridLines = False
+ws_ups.merge_cells('A1:D1')
+ws_ups['A1'] = f'UPS Claims Summary — Week {WEEK_NUM} ({START:%d %b} – {END:%d %b %Y})'
+style(ws_ups['A1'], font=TITLE_FONT, align=LEFT)
+ws_ups.merge_cells('A2:D2')
+ws_ups['A2'] = 'Historical reference values are hardcoded from the supplied UPS table. The live section is read from the dashboard UPS Claims source.'
+style(ws_ups['A2'], font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+
+ups_headers = ['Month (Settled)', 'AWBs', 'Amount (₹)', 'Remarks']
+for col, h in enumerate(ups_headers, 1):
+    c = ws_ups.cell(row=4, column=col, value=h)
+    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+ups_history = [
+    ['June', 15, 157256.87, 'Approved / Settled'],
+    ['July', 12, 157106.62, 'Approved / Settled'],
+    ['August', 20, 219936.12, 'Approved / Settled'],
+    ['September', 11, 119819.23, 'Approved and Pending to settle'],
+    ['October', 23, 151280.17, 'Approved and Pending to settle'],
+    ['TBD', 6, 36850.73, 'Approved and Pending to settle'],
+]
+for row_num, vals in enumerate(ups_history, 5):
+    for col, value in enumerate(vals, 1):
+        c = ws_ups.cell(row=row_num, column=col, value=value)
+        style(c, fill=PatternFill('solid', fgColor='E3F2FD'), font=DATA_FONT,
+              align=(LEFT if col in (1,4) else RIGHT), fmt=('₹#,##0.00' if col == 3 else None), bdr_=bdr())
+ups_total_row = 5 + len(ups_history)
+ups_total = ['TOTAL', sum(r[1] for r in ups_history), sum(r[2] for r in ups_history), '']
+for col, value in enumerate(ups_total, 1):
+    c = ws_ups.cell(row=ups_total_row, column=col, value=value)
+    style(c, fill=HDR_BG, font=HDR_FONT,
+          align=(LEFT if col in (1,4) else RIGHT), fmt=('₹#,##0.00' if col == 3 else None), bdr_=bdr())
+
+live_start = ups_total_row + 3
+ws_ups.merge_cells(start_row=live_start, start_column=1, end_row=live_start, end_column=4)
+ws_ups.cell(row=live_start, column=1, value='Live UPS data from dashboard source')
+style(ws_ups.cell(row=live_start, column=1), fill=SECT_BG_RAISED, font=SECT_FONT, align=LEFT)
+for col, h in enumerate(ups_headers, 1):
+    c = ws_ups.cell(row=live_start + 1, column=col, value=h)
+    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+
+def ups_state_label(states):
+    if 'settled' in states:
+        return 'Approved / Settled'
+    if 'approved_not_settled' in states:
+        return 'Approved and Pending to settle'
+    if 'filed_pending' in states:
+        return 'Claim filed / Pending approval'
+    if 'declined' in states:
+        return 'Declined'
+    return 'Not filed'
+
+live_rows = sorted(UPS_LIVE.items(), key=lambda item: (item[0] == 'TBD', item[0]))
+if live_rows:
+    for row_num, (month, vals) in enumerate(live_rows, live_start + 2):
+        row_vals = [month, len(vals['awbs']), round(vals['amount'], 2), ups_state_label(vals['states'])]
+        for col, value in enumerate(row_vals, 1):
+            c = ws_ups.cell(row=row_num, column=col, value=value)
+            style(c, fill=PatternFill('solid', fgColor='E8F5E9'), font=DATA_FONT,
+                  align=(LEFT if col in (1,4) else RIGHT), fmt=('₹#,##0.00' if col == 3 else None), bdr_=bdr())
+else:
+    ws_ups.merge_cells(start_row=live_start + 2, start_column=1, end_row=live_start + 2, end_column=4)
+    ws_ups.cell(row=live_start + 2, column=1, value='No live UPS claim rows returned from the dashboard source.')
+    style(ws_ups.cell(row=live_start + 2, column=1), font=Font(name='Calibri', italic=True, color='9E9E9E', size=10), align=CENTER)
+for col, width in enumerate([24, 12, 18, 34], 1):
+    ws_ups.column_dimensions[get_column_letter(col)].width = width
+ws_ups.freeze_panes = 'A5'
 
 # ── Raw Dump tab — all case rows for this week's activity ─────────────────────
 ws_dump = wb.create_sheet(title='This Week — Raw Log')
@@ -916,7 +1167,8 @@ ws_dump.freeze_panes = 'A5'
 
 # ── Save ──────────────────────────────────────────────────────────────────────
 os.makedirs(FOLDER, exist_ok=True)
-base_out = os.path.join(FOLDER, f'WeeklyRecoveryPivot_W{WEEK_NUM}_{START.strftime("%Y%m%d")}_{END.strftime("%Y%m%d")}.xlsx')
+default_name = f'WeeklyRecoveryPivot_W{WEEK_NUM}_{START.strftime("%Y%m%d")}_{END.strftime("%Y%m%d")}.xlsx'
+base_out = os.path.join(FOLDER, os.environ.get('PIVOT_OUTPUT_NAME', default_name))
 out = base_out
 try:
     wb.save(out)
@@ -929,8 +1181,8 @@ print(f"\n✅  Saved → {out}")
 
 # ── Auto-save this week's snapshot for next run's Ref column ─────────────────
 _all_snaps[END.isoformat()] = {
-    'ius': {k: round(v, 2) for k, v in ius_snap_curr.items()},
-    'u2u': {k: round(v, 2) for k, v in u2u_snap_curr.items()},
+    'ius': {k: round(v, 2) for k, v in DASHBOARD_IUS_SNAPSHOT.items()},
+    'u2u': {k: round(v, 2) for k, v in DASHBOARD_U2U_SNAPSHOT.items()},
 }
 with open(SNAP_FILE, 'w') as _f:
     json.dump(_all_snaps, _f, indent=2, sort_keys=True)
