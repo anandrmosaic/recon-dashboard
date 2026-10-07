@@ -1,14 +1,18 @@
 # upload_shipbob_d2c.py
 # ─────────────────────
-# Reads the latest ShipBob Excel from G:\My Drive\Shibob D2C Claim\
+# Reads ShipBob Excel source file(s) from G:\My Drive\Shibob D2C Claim\
 # Writes ALL rows with exactly 17 columns (A–Q) to the "ShipBob D2C Claims"
 # tab in the recon Google Sheet, in the order below.
+#
+# The source data is split across multiple files when a single workbook gets
+# too large (e.g. one file per set of months). All files listed in
+# SOURCE_FILES are read and their rows concatenated before upload — update
+# this list whenever a file is renamed/added/retired.
 #
 # Run after dropping a new file in the folder:
 #     python upload_shipbob_d2c.py
 # Or double-click: "Sync to Dashboard.bat" in G:\My Drive\Shibob D2C Claim\
 
-import glob
 import json
 import os
 import sys
@@ -19,6 +23,15 @@ FOLDER      = r'G:\My Drive\Shibob D2C Claim'
 SHEET_ID    = '1N8qozEIZUg2FWYRqdO4UGHvcHiTtfoZr_BK_UojDSSA'
 TAB_NAME    = 'ShipBob D2C Claims'
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+
+# Source files to combine (each covering a different, non-overlapping set of
+# months). Add a new entry here whenever the data is split again; move
+# retired files into the "Old File" subfolder so they're not picked up
+# by mistake.
+SOURCE_FILES = [
+    'Shipbob Order Data -- April-May 2026.xlsx',
+    'Shipbob Order Data -- Updated 05-10-2026 Jun-Oct.xlsx',
+]
 
 # Exactly 17 columns, strictly in this order (A → Q)
 COLUMNS = [
@@ -42,15 +55,22 @@ COLUMNS = [
 ]
 
 
-# ── Find latest Excel file ────────────────────────────────────────────────────
-def find_latest_excel(folder):
-    files = [
-        f for f in glob.glob(os.path.join(folder, '*.xlsx'))
-        if not os.path.basename(f).startswith('~$')
-    ]
-    if not files:
-        raise FileNotFoundError(f'No .xlsx files found in {folder}')
-    return max(files, key=os.path.getmtime)
+# ── Resolve configured source files ───────────────────────────────────────────
+def find_source_files(folder, names):
+    paths = []
+    missing = []
+    for name in names:
+        path = os.path.join(folder, name)
+        if os.path.exists(path):
+            paths.append(path)
+        else:
+            missing.append(name)
+    if missing:
+        raise FileNotFoundError(
+            f'Configured source file(s) not found in {folder}: {missing}\n'
+            f'Update SOURCE_FILES in upload_shipbob_d2c.py if these were renamed.'
+        )
+    return paths
 
 
 # ── Read Excel → list of rows ─────────────────────────────────────────────────
@@ -188,8 +208,13 @@ def upload_to_sheets(data_rows):
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     try:
-        path      = find_latest_excel(FOLDER)
-        data_rows = read_excel(path)
+        paths = find_source_files(FOLDER, SOURCE_FILES)
+
+        data_rows = []
+        for path in paths:
+            data_rows.extend(read_excel(path))
+
+        print(f'\nCombined rows from {len(paths)} file(s): {len(data_rows):,}')
 
         if not data_rows:
             print('No rows found in Excel — nothing uploaded.')

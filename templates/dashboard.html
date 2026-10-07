@@ -5590,50 +5590,188 @@ function renderUPSClaimsTab(data, lastUpdated) {
   const declinedClaims       = claims.filter(c => c.state === 'declined');
   const falseTrackCount = summ.false_tracking_count || 0;
 
-  // ── Month-wise settlement aggregation ─────────────────────────────────
+  // ── Monthly Claim Pipeline aggregation ──────────────────────────────
+  // Each claim is placed in the month of its most advanced known date:
+  // settled_date (settled) > approved_date (approved/declined decision) >
+  // form_received (filed) — i.e. whichever stage it has actually reached.
   const _MO_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const _amtVal = c => { const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,'')); return isNaN(v) ? 0 : v; };
+  const _qtyVal = c => { const v = parseInt((c.lost_qty||'').toString().replace(/[,\s]/g,''), 10); return isNaN(v) ? 0 : v; };
+
   const upsMthAgg = {}, upsMthArr = [];
-  settledClaims.forEach(c => {
-    const d = _parseUpsDate(c.settled_date); if (!d) return;
+  const _ensureMonth = (d) => {
     const key = _MO_FULL[d.getMonth()] + ' ' + d.getFullYear();
-    if (!upsMthAgg[key]) { upsMthAgg[key]={count:0,amt:0}; upsMthArr.push({key,sort:d.getFullYear()*12+d.getMonth()}); }
-    const v = parseFloat((c.claim_amount||'').replace(/[₹,\s]/g,''));
-    upsMthAgg[key].count++;
-    upsMthAgg[key].amt += isNaN(v) ? 0 : v;
+    if (!upsMthAgg[key]) {
+      upsMthAgg[key] = {
+        filed:    { count: 0 },
+        approved: { count: 0, pending: 0 },
+        settled:  { count: 0, lostQty: 0, received: 0 },
+        declined: { count: 0, lost: 0 },
+      };
+      upsMthArr.push({ key, sort: d.getFullYear()*12 + d.getMonth() });
+    }
+    return upsMthAgg[key];
+  };
+
+  claims.forEach(c => {
+    let d = null, bucket = null;
+    if (c.state === 'settled')              { d = _parseUpsDate(c.settled_date);  bucket = 'settled'; }
+    else if (c.state === 'approved_not_settled') { d = _parseUpsDate(c.approved_date); bucket = 'approved'; }
+    else if (c.state === 'declined')        { d = _parseUpsDate(c.approved_date);  bucket = 'declined'; }
+    else if (c.state === 'filed_pending')   { d = _parseUpsDate(c.form_received);  bucket = 'filed'; }
+    if (!d || !bucket) return;
+
+    const m = _ensureMonth(d);
+    if (bucket === 'settled') {
+      m.settled.count++;
+      m.settled.lostQty  += _qtyVal(c);
+      m.settled.received += _amtVal(c);
+    } else if (bucket === 'approved') {
+      m.approved.count++;
+      m.approved.pending += _amtVal(c);
+    } else if (bucket === 'declined') {
+      m.declined.count++;
+      m.declined.lost += _amtVal(c);
+    } else if (bucket === 'filed') {
+      m.filed.count++;
+    }
   });
   upsMthArr.sort((a,b)=>a.sort-b.sort);
-  const upsMthTotal = upsMthArr.reduce((s,m)=>s+upsMthAgg[m.key].amt,0);
+
+  const _mthTotals = upsMthArr.reduce((t,m) => {
+    const a = upsMthAgg[m.key];
+    t.filedCount    += a.filed.count;
+    t.approvedCount += a.approved.count;
+    t.pending       += a.approved.pending;
+    t.settledCount  += a.settled.count;
+    t.lostQty       += a.settled.lostQty;
+    t.received      += a.settled.received;
+    t.declinedCount += a.declined.count;
+    t.declinedLost  += a.declined.lost;
+    return t;
+  }, { filedCount:0, approvedCount:0, pending:0, settledCount:0, lostQty:0, received:0, declinedCount:0, declinedLost:0 });
+
+  const _inr = n => '₹' + (n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const _avgPerAwb = (amt, count) => count > 0 ? _inr(amt / count) : '—';
 
   const upsMonthTable = upsMthArr.length > 0 ? `
   <div style="padding:12px 20px 0">
     <div style="background:#fff;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)">
       <div style="padding:11px 16px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.6px">
-          <i class="fas fa-calendar-alt" style="color:#1a237e"></i>&nbsp; Monthly Settlement — Amount Received from UPS
+          <i class="fas fa-calendar-alt" style="color:#1a237e"></i>&nbsp; Monthly Claim Pipeline — UPS
         </div>
-        <span style="font-size:11px;color:#bbb">${upsMthArr.length} month${upsMthArr.length!==1?'s':''}</span>
+        <span style="font-size:11px;color:#bbb">${upsMthArr.length} month${upsMthArr.length!==1?'s':''} · each claim shown in its latest reached stage's month</span>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-            <th style="padding:9px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:160px">Month</th>
-            <th style="padding:9px 14px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:center">AWBs Settled</th>
-            <th style="padding:9px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:right">Amount Received (₹)</th>
-          </tr></thead>
+          <thead>
+            <tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
+              <th rowspan="2" style="padding:9px 16px;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-align:left;min-width:120px;vertical-align:bottom">Month</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.2)">📋 Filed</th>
+              <th colspan="2" style="padding:6px 10px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.2)">🟡 Approved — Pending</th>
+              <th colspan="4" style="padding:6px 10px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.2)">✅ Settled</th>
+              <th colspan="2" style="padding:6px 10px;color:rgba(255,255,255,.85);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.2)">🚫 Declined</th>
+            </tr>
+            <tr style="background:#16302a">
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.15)">AWBs</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.15)">AWBs</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:right">₹ Awaiting Transfer</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.15)">AWBs</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:center">Lost Qty</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:right">₹ Received</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:right">Avg ₹/AWB</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:center;border-left:1px solid rgba(255,255,255,.15)">AWBs</th>
+              <th style="padding:6px 10px;color:rgba(255,255,255,.75);font-size:10px;font-weight:600;text-align:right">₹ Lost (no recovery)</th>
+            </tr>
+          </thead>
           <tbody>
-            ${upsMthArr.map((m,i)=>`
+            ${upsMthArr.map((m,i)=>{
+              const a = upsMthAgg[m.key];
+              return `
             <tr style="background:${i%2===0?'#fff':'#f9fafb'}">
-              <td style="padding:9px 16px;font-weight:600;color:#333;border-bottom:1px solid #f0f0f0">${m.key}</td>
-              <td style="padding:9px 14px;text-align:center;color:#555;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${upsMthAgg[m.key].count}</td>
-              <td style="padding:9px 16px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">₹${upsMthAgg[m.key].amt.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-            </tr>`).join('')}
+              <td style="padding:8px 16px;font-weight:600;color:#333;border-bottom:1px solid #f0f0f0">${m.key}</td>
+              <td style="padding:8px 10px;text-align:center;color:#e65100;font-weight:600;border-left:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0">${a.filed.count || '—'}</td>
+              <td style="padding:8px 10px;text-align:center;color:#f57f17;font-weight:600;border-left:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0">${a.approved.count || '—'}</td>
+              <td style="padding:8px 10px;text-align:right;color:#f57f17;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${a.approved.pending ? _inr(a.approved.pending) : '—'}</td>
+              <td style="padding:8px 10px;text-align:center;color:#2e7d32;font-weight:600;border-left:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0">${a.settled.count || '—'}</td>
+              <td style="padding:8px 10px;text-align:center;color:#555;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${a.settled.lostQty || '—'}</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${a.settled.received ? _inr(a.settled.received) : '—'}</td>
+              <td style="padding:8px 10px;text-align:right;color:#555;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${_avgPerAwb(a.settled.received, a.settled.count)}</td>
+              <td style="padding:8px 10px;text-align:center;color:#b71c1c;font-weight:600;border-left:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0">${a.declined.count || '—'}</td>
+              <td style="padding:8px 10px;text-align:right;color:#b71c1c;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${a.declined.lost ? _inr(a.declined.lost) : '—'}</td>
+            </tr>`;}).join('')}
           </tbody>
           <tfoot><tr style="background:#1a237e">
             <td style="padding:9px 16px;font-weight:700;color:#fff;font-size:12px">TOTAL</td>
-            <td style="padding:9px 14px;text-align:center;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">${settledClaims.length}</td>
-            <td style="padding:9px 16px;text-align:right;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">₹${upsMthTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td style="padding:9px 10px;text-align:center;font-weight:700;color:#fff;border-left:1px solid rgba(255,255,255,.2)">${_mthTotals.filedCount}</td>
+            <td style="padding:9px 10px;text-align:center;font-weight:700;color:#fff;border-left:1px solid rgba(255,255,255,.2)">${_mthTotals.approvedCount}</td>
+            <td style="padding:9px 10px;text-align:right;font-weight:700;color:#fff">${_inr(_mthTotals.pending)}</td>
+            <td style="padding:9px 10px;text-align:center;font-weight:700;color:#fff;border-left:1px solid rgba(255,255,255,.2)">${_mthTotals.settledCount}</td>
+            <td style="padding:9px 10px;text-align:center;font-weight:700;color:#fff">${_mthTotals.lostQty}</td>
+            <td style="padding:9px 10px;text-align:right;font-weight:700;color:#fff">${_inr(_mthTotals.received)}</td>
+            <td style="padding:9px 10px;text-align:right;font-weight:700;color:#fff">${_avgPerAwb(_mthTotals.received, _mthTotals.settledCount)}</td>
+            <td style="padding:9px 10px;text-align:center;font-weight:700;color:#fff;border-left:1px solid rgba(255,255,255,.2)">${_mthTotals.declinedCount}</td>
+            <td style="padding:9px 10px;text-align:right;font-weight:700;color:#fff">${_inr(_mthTotals.declinedLost)}</td>
           </tr></tfoot>
         </table>
+      </div>
+    </div>
+  </div>` : '';
+
+  // ── UPS Lost Analysis — Qty Sent vs Lost Qty by Dispatch Month ──────
+  const lostA = ups.lost_analysis || {};
+  const laPeriods = lostA.periods || [];
+  const laTotals  = lostA.totals  || {};
+  const laUnmatched = lostA.unmatched || {};
+
+  const _laShortLabel = l => (l || '').split(' ')[0].slice(0, 3);
+
+  const lostAnalysisTable = laPeriods.length > 0 ? `
+  <div style="padding:12px 20px 0">
+    <div style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap">
+      <div style="flex:1 1 420px;min-width:320px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+        <div style="padding:9px 14px;border-bottom:1px solid #f0f0f0">
+          <div style="font-size:10px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.6px">
+            <i class="fas fa-chart-line" style="color:#1a237e"></i>&nbsp; UPS Lost Analysis — by Dispatch Month
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead><tr style="background:linear-gradient(135deg,#e65100,#f9a825)">
+              <th style="padding:6px 10px;color:#fff;font-size:10px;font-weight:700;text-align:left;min-width:80px">Metric</th>
+              ${laPeriods.map(p => `<th style="padding:6px 8px;color:#fff;font-size:10px;font-weight:600;text-align:right;white-space:nowrap">${_laShortLabel(p.label)}</th>`).join('')}
+              <th style="padding:6px 10px;color:#fff;font-size:10px;font-weight:700;text-align:right;background:rgba(0,0,0,.15);white-space:nowrap">Total</th>
+            </tr></thead>
+            <tbody>
+              <tr style="background:#fff">
+                <td style="padding:5px 10px;font-weight:600;color:#333;border-bottom:1px solid #f0f0f0">Qty Sent</td>
+                ${laPeriods.map(p => `<td style="padding:5px 8px;text-align:right;color:#333;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${p.qty_sent.toLocaleString('en-IN')}</td>`).join('')}
+                <td style="padding:5px 10px;text-align:right;font-weight:700;color:#333;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0;background:#fafafa">${(laTotals.qty_sent||0).toLocaleString('en-IN')}</td>
+              </tr>
+              <tr style="background:#fafafa">
+                <td style="padding:5px 10px;font-weight:600;color:#b71c1c;border-bottom:1px solid #f0f0f0">Lost Qty</td>
+                ${laPeriods.map(p => `<td style="padding:5px 8px;text-align:right;color:#b71c1c;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0">${p.lost_qty.toLocaleString('en-IN')}</td>`).join('')}
+                <td style="padding:5px 10px;text-align:right;font-weight:700;color:#b71c1c;font-variant-numeric:tabular-nums;border-bottom:1px solid #f0f0f0;background:#fafafa">${(laTotals.lost_qty||0).toLocaleString('en-IN')}</td>
+              </tr>
+              <tr style="background:#fff">
+                <td style="padding:5px 10px;font-weight:600;color:#e65100">Loss %</td>
+                ${laPeriods.map(p => `<td style="padding:5px 8px;text-align:right;font-weight:600;color:#e65100;font-variant-numeric:tabular-nums">${p.loss_pct.toFixed(2)}%</td>`).join('')}
+                <td style="padding:5px 10px;text-align:right;font-weight:700;color:#e65100;font-variant-numeric:tabular-nums;background:#fafafa">${(laTotals.loss_pct||0).toFixed(2)}%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        ${laUnmatched.count > 0 ? `
+        <div style="padding:6px 14px;font-size:10px;color:#888;border-top:1px solid #f0f0f0;background:#fffbf0">
+          ⚠️ ${laUnmatched.count} claim row(s), ${laUnmatched.lost_qty} units unmatched to a dispatch month — excluded above.
+        </div>` : ''}
+      </div>
+      <div style="flex:1 1 360px;min-width:300px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:10px 14px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+        <div style="font-size:10px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">
+          <i class="fas fa-wave-square" style="color:#1a237e"></i>&nbsp; Trend — Qty Sent vs Loss %
+        </div>
+        <div style="position:relative;height:200px"><canvas id="upsLostTrendChart"></canvas></div>
       </div>
     </div>
   </div>` : '';
@@ -5725,6 +5863,7 @@ function renderUPSClaimsTab(data, lastUpdated) {
 
   document.getElementById('mainContent').innerHTML = `
     ${summaryCards}
+    ${lostAnalysisTable}
     ${upsMonthTable}
     <div style="padding:12px 20px 0;display:flex;gap:8px;flex-wrap:wrap">${toggleBtns}</div>
     <div style="padding:12px 20px 20px">
@@ -5750,6 +5889,64 @@ function renderUPSClaimsTab(data, lastUpdated) {
         </div>
       </div>
     </div>`;
+
+  // ── Trend chart: Qty Sent (bars) vs Loss % (line, right axis) ───────
+  const trendCtx = document.getElementById('upsLostTrendChart');
+  if (trendCtx && laPeriods.length > 0) {
+    chartInstances.upsLostTrend = new Chart(trendCtx.getContext('2d'), {
+      data: {
+        labels: laPeriods.map(p => _laShortLabel(p.label)),
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Qty Sent',
+            data: laPeriods.map(p => p.qty_sent),
+            backgroundColor: '#1a237e55',
+            borderColor: '#1a237e',
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: 'y',
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'Loss %',
+            data: laPeriods.map(p => p.loss_pct),
+            borderColor: '#e65100',
+            backgroundColor: '#e6510015',
+            borderWidth: 2.5,
+            fill: false,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#e65100',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            yAxisID: 'y1',
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: ctx => ctx.dataset.yAxisID === 'y1'
+                ? ` Loss %: ${ctx.parsed.y.toFixed(2)}%`
+                : ` Qty Sent: ${ctx.parsed.y.toLocaleString('en-IN')}`
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y:  { position: 'left',  grid: { color: '#f5f5f5' }, ticks: { font: { size: 9 } }, beginAtZero: true, title: { display: true, text: 'Qty Sent', font: { size: 9 } } },
+          y1: { position: 'right', grid: { display: false },   ticks: { font: { size: 9 }, callback: v => v + '%' }, beginAtZero: true, title: { display: true, text: 'Loss %', font: { size: 9 } } },
+        }
+      }
+    });
+  }
 }
 
 function renderDiscrepancyTab(data, lastUpdated) {

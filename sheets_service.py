@@ -577,7 +577,118 @@ def get_ups_claims_data(creds, sheet_id):
             'filed_pending_count':         filed_pending_count,
             'declined_count':              declined_count,
         },
-        'claims': claims,
+        'claims':         claims,
+        'lost_analysis':  get_ups_lost_analysis(creds, sheet_id, claims),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UPS Lost Analysis — qty sent vs lost qty, grouped by the ORIGINAL DISPATCH
+# MONTH of the parent shipment (not the month the claim was raised/settled).
+#
+# Qty sent:  'Inward India to US' tab, rows where Transporter = UPS, summed by
+#            that row's own Month/Year (Final Sent Qty column).
+# Lost qty:  'UPS Claim' tab's Lost Qty column, attributed to the dispatch
+#            month of its Parent AWB (looked up against the same tab above).
+# A claim whose Parent AWB can't be found in the current India→US data is
+# counted separately under "unmatched" rather than silently dropped.
+# ─────────────────────────────────────────────────────────────────────────────
+def get_ups_lost_analysis(creds, sheet_id, claims):
+    service = build('sheets', 'v4', credentials=creds)
+    result = service.spreadsheets().values().get(
+        spreadsheetId=sheet_id,
+        range="'Inward India to US'!A1:AZ2000"
+    ).execute()
+    values = result.get('values', [])
+    if len(values) < 3:
+        return {'periods': [], 'totals': {}, 'unmatched': {'count': 0, 'lost_qty': 0}}
+
+    raw_hdrs = values[1]
+    headers  = [str(h).strip().lower() for h in raw_hdrs]
+
+    def fc(kw):
+        for i, h in enumerate(headers):
+            if kw in h:
+                return i
+        return -1
+
+    month_col       = fc('month')
+    year_col        = fc('year')
+    awb_col         = fc('shipment awb')
+    qty_col         = fc('final sent qty')
+    transporter_col = fc('transporter')
+
+    def g(row, idx):
+        return str(row[idx]).strip() if 0 <= idx < len(row) else ''
+
+    monthly_qty   = {}   # (month, year) -> qty sent (UPS only)
+    awb_period    = {}   # parent awb -> (month, year) — first dispatch record found
+
+    for row in values[2:]:
+        if not row:
+            continue
+        month = g(row, month_col)
+        if month not in MONTH_ORDER:
+            continue
+        year = g(row, year_col) or '—'
+        transporter = g(row, transporter_col)
+        awb = g(row, awb_col)
+        qty = safe_float(g(row, qty_col))
+
+        if transporter.upper() == 'UPS':
+            key = (month, year)
+            monthly_qty[key] = monthly_qty.get(key, 0.0) + qty
+            if awb and awb not in awb_period:
+                awb_period[awb] = key
+
+    lost_by_period = {}
+    unmatched_count = 0
+    unmatched_lost_qty = 0.0
+
+    for c in claims:
+        parent_awb = (c.get('parent_awb') or '').strip()
+        lost_qty = safe_float(c.get('lost_qty'))
+        period = awb_period.get(parent_awb)
+        if period:
+            lost_by_period[period] = lost_by_period.get(period, 0.0) + lost_qty
+        else:
+            unmatched_count += 1
+            unmatched_lost_qty += lost_qty
+
+    all_periods = sorted(
+        set(monthly_qty) | set(lost_by_period),
+        key=lambda p: (p[1], MONTH_ORDER.index(p[0]))
+    )
+
+    periods = []
+    for (month, year) in all_periods:
+        qty_sent = monthly_qty.get((month, year), 0.0)
+        lost_qty = lost_by_period.get((month, year), 0.0)
+        loss_pct = round((lost_qty / qty_sent * 100), 2) if qty_sent > 0 else 0.0
+        periods.append({
+            'label':    f"{month} {year}" if year != '—' else month,
+            'month':    month,
+            'year':     year,
+            'qty_sent': int(qty_sent),
+            'lost_qty': int(lost_qty),
+            'loss_pct': loss_pct,
+        })
+
+    total_qty  = sum(p['qty_sent'] for p in periods)
+    total_lost = sum(p['lost_qty'] for p in periods)
+    totals = {
+        'qty_sent': total_qty,
+        'lost_qty': total_lost,
+        'loss_pct': round((total_lost / total_qty * 100), 2) if total_qty > 0 else 0.0,
+    }
+
+    return {
+        'periods':   periods,
+        'totals':    totals,
+        'unmatched': {
+            'count':    unmatched_count,
+            'lost_qty': int(unmatched_lost_qty),
+        },
     }
 
 
