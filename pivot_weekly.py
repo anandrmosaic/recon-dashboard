@@ -6,7 +6,8 @@ import sys, os, json
 sys.path.insert(0, r'C:\Users\Admin\recon-dashboard')
 
 from sheets_service import (get_india_us_data, get_us2us_data,
-                            get_shipbob_d2c_data, get_ups_claims_data)
+                            get_shipbob_d2c_data, get_ups_claims_data,
+                            get_ups_claim_pipeline_monthly, get_ups_lost_analysis)
 from auth import get_sheets_credentials
 from datetime import date, datetime, timedelta
 from collections import defaultdict
@@ -141,6 +142,7 @@ shipbob_d2c = get_shipbob_d2c_data(
 
 print("Fetching UPS claims data …")
 ups_data = get_ups_claims_data(creds, SHEET_ID)
+ups_data['lost_analysis'] = get_ups_lost_analysis(ius_rows, ups_data.get('claims', []))
 
 # ShipBob D2C historical reference supplied in the weekly review screenshots.
 # These three snapshots are intentionally retained as fixed reference values;
@@ -760,7 +762,8 @@ def wow_sheet(ws, route_label, snap_prev, snap_mid, snap_curr, ref_prev, ref_mid
             value=(f"{LAST_WK_END.strftime('%d %b')} (W{PREV_WEEK})  →  "
                    f"{MID_WK_END.strftime('%d %b')} (W{MID_WEEK})  →  "
                    f"{END.strftime('%d %b %Y')} (W{WEEK_NUM} current)  "
-                   f"|  * Ref = dashboard screenshot value"))
+                   f"|  * Dashboard = the actual total shown that week, locked in and "
+                   f"auto-saved at the time — won't drift even if older rows are edited later"))
     style(ws.cell(row=row, column=1),
           font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
     ws.row_dimensions[row].height = 14
@@ -769,12 +772,12 @@ def wow_sheet(ws, route_label, snap_prev, snap_mid, snap_curr, ref_prev, ref_mid
     # ── Column headers ──────────────────────────────────────────────────────
     hdrs = [
         'Claims Bucket',
-        f'{LAST_WK_END.strftime("%d %b")} Total',
+        f'{LAST_WK_END.strftime("%d %b")} Recalculated Today',
         f'{LAST_WK_END.strftime("%d %b")} YTD%',
-        f'{LAST_WK_END.strftime("%d %b")} Ref *',
-        f'{MID_WK_END.strftime("%d %b")} Total',
+        f'{LAST_WK_END.strftime("%d %b")} Dashboard *',
+        f'{MID_WK_END.strftime("%d %b")} Recalculated Today',
         f'{MID_WK_END.strftime("%d %b")} YTD%',
-        f'{MID_WK_END.strftime("%d %b")} Ref *',
+        f'{MID_WK_END.strftime("%d %b")} Dashboard *',
         f'{END.strftime("%d %b")} Total',
         f'{END.strftime("%d %b")} YTD%',
         f'WoW Change ({MID_WK_END.strftime("%d")}-{END.strftime("%d %b")})',
@@ -826,17 +829,22 @@ def wow_sheet(ws, route_label, snap_prev, snap_mid, snap_curr, ref_prev, ref_mid
                         RIGHT, CENTER, CENTER]
 
         for col, (v, fm, al) in enumerate(zip(vals, fmts, aligns), 1):
-            is_ref = col in (4, 7)
-            is_chg = col == 10
-            clr = (clr_wow if is_chg else ('666666' if is_ref else bcolor if col == 1 else '212121'))
-            fnt = Font(name='Calibri', size=10 if not is_ref else 9,
-                       bold=(col == 1),
-                       italic=is_ref,
+            # Dashboard columns (4, 7) are the authoritative, locked-in weekly
+            # figures — shown bold/prominent. Recalculated-Today columns (2, 5)
+            # are a secondary sanity-check and shown de-emphasized (italic/grey),
+            # since they can drift if older rows get edited after the fact.
+            is_recalc = col in (2, 5)
+            is_dash   = col in (4, 7)
+            is_chg    = col == 10
+            clr = (clr_wow if is_chg else ('999999' if is_recalc else bcolor if col == 1 else '212121'))
+            fnt = Font(name='Calibri', size=9 if is_recalc else 10,
+                       bold=(col == 1 or is_dash),
+                       italic=is_recalc,
                        color=clr)
-            fill = PatternFill('solid', fgColor='F5F5F5') if is_ref else row_fill
+            fill = PatternFill('solid', fgColor='F5F5F5') if is_recalc else row_fill
             c = ws.cell(row=row, column=col, value=v)
             style(c, fill=fill, font=fnt, align=al,
-                  fmt=(fm if not is_ref or isinstance(v, float) else None), bdr_=bdr())
+                  fmt=(fm if isinstance(v, float) else None), bdr_=bdr())
         ws.row_dimensions[row].height = 19
         row += 1
 
@@ -1015,6 +1023,117 @@ else:
 for col, width in enumerate([24, 12, 18, 34], 1):
     ws_ups.column_dimensions[get_column_letter(col)].width = width
 ws_ups.freeze_panes = 'A5'
+
+# ── UPS Lost Analysis — qty sent vs lost qty by ORIGINAL DISPATCH month ────────
+# Mirrors the dashboard's UPS Claims tab: Lost Qty is read from the UPS Claim
+# tab and attributed to the month the Parent AWB was dispatched (per the
+# Inward India to US tab), not the month the claim was raised/settled.
+lost_analysis = ups_data.get('lost_analysis', {'periods': [], 'totals': {}, 'unmatched': {}})
+la_periods  = lost_analysis.get('periods', [])
+la_totals   = lost_analysis.get('totals', {})
+la_unmatched = lost_analysis.get('unmatched', {})
+
+ws_la = wb.create_sheet(title='UPS Lost Analysis')
+ws_la.sheet_view.showGridLines = False
+ws_la.merge_cells('A1:D1')
+ws_la['A1'] = f'UPS Lost Analysis — by Dispatch Month (as of {END:%d %b %Y})'
+style(ws_la['A1'], font=TITLE_FONT, align=LEFT)
+ws_la.merge_cells('A2:D2')
+ws_la['A2'] = ("Qty Sent = Final Sent Qty on Inward India to US rows where Transporter = UPS. "
+               "Lost Qty = UPS Claim tab's Lost Qty, attributed to its Parent AWB's dispatch month.")
+style(ws_la['A2'], font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+
+la_headers = ['Month', 'Qty Sent', 'Lost Qty', 'Loss %']
+for col, h in enumerate(la_headers, 1):
+    c = ws_la.cell(row=4, column=col, value=h)
+    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+
+for row_num, p in enumerate(la_periods, 5):
+    vals = [p['label'], p['qty_sent'], p['lost_qty'], p['loss_pct'] / 100]
+    for col, value in enumerate(vals, 1):
+        c = ws_la.cell(row=row_num, column=col, value=value)
+        style(c, fill=PatternFill('solid', fgColor='FFF3E0'), font=DATA_FONT,
+              align=(LEFT if col == 1 else RIGHT),
+              fmt=(PCT_FMT if col == 4 else ('#,##0' if col in (2, 3) else None)), bdr_=bdr())
+
+la_total_row = 5 + len(la_periods)
+la_total_vals = ['TOTAL', la_totals.get('qty_sent', 0), la_totals.get('lost_qty', 0),
+                 (la_totals.get('loss_pct', 0) or 0) / 100]
+for col, value in enumerate(la_total_vals, 1):
+    c = ws_la.cell(row=la_total_row, column=col, value=value)
+    style(c, fill=HDR_BG, font=HDR_FONT,
+          align=(LEFT if col == 1 else RIGHT),
+          fmt=(PCT_FMT if col == 4 else ('#,##0' if col in (2, 3) else None)), bdr_=bdr())
+
+if la_unmatched.get('count'):
+    note_row = la_total_row + 2
+    ws_la.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=4)
+    ws_la.cell(row=note_row, column=1,
+               value=f"⚠ {la_unmatched['count']} claim row(s), {la_unmatched.get('lost_qty', 0)} units "
+                     f"could not be matched to a dispatch month (Parent AWB not found in current "
+                     f"Inward India to US data) — excluded from the table above.")
+    style(ws_la.cell(row=note_row, column=1),
+          font=Font(name='Calibri', italic=True, color='E65100', size=9), align=LEFT)
+
+for col, width in enumerate([20, 14, 14, 12], 1):
+    ws_la.column_dimensions[get_column_letter(col)].width = width
+ws_la.freeze_panes = 'A5'
+
+# ── UPS Claim Pipeline — filed / approved / settled / declined by month ───────
+pipeline = get_ups_claim_pipeline_monthly(ups_data.get('claims', []))
+pl_periods = pipeline.get('periods', [])
+pl_totals  = pipeline.get('totals', {})
+
+ws_pl = wb.create_sheet(title='UPS Claim Pipeline')
+ws_pl.sheet_view.showGridLines = False
+ws_pl.merge_cells('A1:J1')
+ws_pl['A1'] = f'UPS Claim Pipeline — Week {WEEK_NUM} snapshot (as of {END:%d %b %Y})'
+style(ws_pl['A1'], font=TITLE_FONT, align=LEFT)
+ws_pl.merge_cells('A2:J2')
+ws_pl['A2'] = ("Each claim is shown in the month of its latest reached stage: Settled -> settled date, "
+               "Approved/Declined -> approval decision date, Filed -> form received date.")
+style(ws_pl['A2'], font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+
+pl_headers = ['Month', 'Filed (AWBs)', 'Approved (AWBs)', 'Awaiting Transfer (₹)',
+              'Settled (AWBs)', 'Settled Lost Qty', 'Received (₹)', 'Avg ₹/AWB',
+              'Declined (AWBs)', 'Declined Lost (₹)']
+for col, h in enumerate(pl_headers, 1):
+    c = ws_pl.cell(row=4, column=col, value=h)
+    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+
+def _avg_per_awb(amount, count):
+    return round(amount / count, 2) if count else 0
+
+for row_num, p in enumerate(pl_periods, 5):
+    settled = p['settled']; approved = p['approved']; declined = p['declined']; filed = p['filed']
+    vals = [
+        p['label'], filed['count'], approved['count'], round(approved['pending'], 2),
+        settled['count'], settled['lost_qty'], round(settled['received'], 2),
+        _avg_per_awb(settled['received'], settled['count']),
+        declined['count'], round(declined['lost'], 2),
+    ]
+    for col, value in enumerate(vals, 1):
+        c = ws_pl.cell(row=row_num, column=col, value=value)
+        style(c, fill=PatternFill('solid', fgColor='E8F5E9'), font=DATA_FONT,
+              align=(LEFT if col == 1 else RIGHT),
+              fmt=(USD_FMT if col in (4, 7, 8, 10) else None), bdr_=bdr())
+
+pl_total_row = 5 + len(pl_periods)
+pl_total_vals = [
+    'TOTAL', pl_totals.get('filed_count', 0), pl_totals.get('approved_count', 0),
+    pl_totals.get('pending', 0), pl_totals.get('settled_count', 0), pl_totals.get('lost_qty', 0),
+    pl_totals.get('received', 0), _avg_per_awb(pl_totals.get('received', 0), pl_totals.get('settled_count', 0)),
+    pl_totals.get('declined_count', 0), pl_totals.get('declined_lost', 0),
+]
+for col, value in enumerate(pl_total_vals, 1):
+    c = ws_pl.cell(row=pl_total_row, column=col, value=value)
+    style(c, fill=HDR_BG, font=HDR_FONT,
+          align=(LEFT if col == 1 else RIGHT),
+          fmt=(USD_FMT if col in (4, 7, 8, 10) else None), bdr_=bdr())
+
+for col, width in enumerate([18, 11, 13, 17, 13, 13, 15, 12, 13, 15], 1):
+    ws_pl.column_dimensions[get_column_letter(col)].width = width
+ws_pl.freeze_panes = 'A5'
 
 # ── Raw Dump tab — all case rows for this week's activity ─────────────────────
 ws_dump = wb.create_sheet(title='This Week — Raw Log')

@@ -20,7 +20,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from auth import get_sheets_credentials, get_gmail_credentials
-from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel, get_shipbob_summary_pivot, calculate_overview_metrics
+from sheets_service import get_ups_claims_data, get_india_us_data, get_us2us_data, get_shipbob_d2c_data, get_shipbob_d2c_from_excel, get_shipbob_summary_pivot, calculate_overview_metrics, get_ups_lost_analysis
 from email_service import send_weekly_report
 from provision_engine import get_sheet_carriers, process_provision, get_carriers_for_finance_file
 
@@ -139,6 +139,17 @@ def refresh_data():
             print(f"[Data] UPS claims failed: {e}")
             refresh_errors.append(f"UPS Claims: {e}")
             data['ups_claims'] = {'summary': {}, 'claims': []}
+
+        # ── UPS Lost Analysis — reuses India→US rows already fetched above,
+        # no extra Sheets API call (avoids slowing down the refresh cycle). ──
+        try:
+            data['ups_claims']['lost_analysis'] = get_ups_lost_analysis(
+                data['india_us'].get('rows', []), data['ups_claims'].get('claims', [])
+            )
+        except Exception as e:
+            print(f"[Data] UPS lost analysis failed: {e}")
+            refresh_errors.append(f"UPS Lost Analysis: {e}")
+            data['ups_claims']['lost_analysis'] = {'periods': [], 'totals': {}, 'unmatched': {'count': 0, 'lost_qty': 0}}
 
         # ── ShipBob D2C Claims ────────────────────────────────────────────────
         # Always reads from the "ShipBob D2C Claims" Sheets tab.

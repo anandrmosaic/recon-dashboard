@@ -577,8 +577,7 @@ def get_ups_claims_data(creds, sheet_id):
             'filed_pending_count':         filed_pending_count,
             'declined_count':              declined_count,
         },
-        'claims':         claims,
-        'lost_analysis':  get_ups_lost_analysis(creds, sheet_id, claims),
+        'claims': claims,
     }
 
 
@@ -586,54 +585,30 @@ def get_ups_claims_data(creds, sheet_id):
 # UPS Lost Analysis — qty sent vs lost qty, grouped by the ORIGINAL DISPATCH
 # MONTH of the parent shipment (not the month the claim was raised/settled).
 #
-# Qty sent:  'Inward India to US' tab, rows where Transporter = UPS, summed by
-#            that row's own Month/Year (Final Sent Qty column).
+# Qty sent:  'Inward India to US' rows where Transporter = UPS, summed by that
+#            row's own Month/Year (Final Sent Qty column).
 # Lost qty:  'UPS Claim' tab's Lost Qty column, attributed to the dispatch
-#            month of its Parent AWB (looked up against the same tab above).
+#            month of its Parent AWB (looked up against the rows above).
 # A claim whose Parent AWB can't be found in the current India→US data is
 # counted separately under "unmatched" rather than silently dropped.
+#
+# Takes already-parsed `ius_rows` (from get_india_us_data) rather than
+# re-reading the sheet itself — that tab is large and already fetched once
+# per refresh cycle; a second live read here was adding enough latency to
+# risk timing out the request on Render.
 # ─────────────────────────────────────────────────────────────────────────────
-def get_ups_lost_analysis(creds, sheet_id, claims):
-    service = build('sheets', 'v4', credentials=creds)
-    result = service.spreadsheets().values().get(
-        spreadsheetId=sheet_id,
-        range="'Inward India to US'!A1:AZ2000"
-    ).execute()
-    values = result.get('values', [])
-    if len(values) < 3:
-        return {'periods': [], 'totals': {}, 'unmatched': {'count': 0, 'lost_qty': 0}}
-
-    raw_hdrs = values[1]
-    headers  = [str(h).strip().lower() for h in raw_hdrs]
-
-    def fc(kw):
-        for i, h in enumerate(headers):
-            if kw in h:
-                return i
-        return -1
-
-    month_col       = fc('month')
-    year_col        = fc('year')
-    awb_col         = fc('shipment awb')
-    qty_col         = fc('final sent qty')
-    transporter_col = fc('transporter')
-
-    def g(row, idx):
-        return str(row[idx]).strip() if 0 <= idx < len(row) else ''
-
+def get_ups_lost_analysis(ius_rows, claims):
     monthly_qty   = {}   # (month, year) -> qty sent (UPS only)
     awb_period    = {}   # parent awb -> (month, year) — first dispatch record found
 
-    for row in values[2:]:
-        if not row:
-            continue
-        month = g(row, month_col)
+    for row in (ius_rows or []):
+        month = row.get('month')
         if month not in MONTH_ORDER:
             continue
-        year = g(row, year_col) or '—'
-        transporter = g(row, transporter_col)
-        awb = g(row, awb_col)
-        qty = safe_float(g(row, qty_col))
+        year = row.get('year') or '—'
+        transporter = (row.get('transporter') or '').strip()
+        awb = (row.get('awb') or '').strip()
+        qty = safe_float(row.get('qty'))
 
         if transporter.upper() == 'UPS':
             key = (month, year)
@@ -690,6 +665,88 @@ def get_ups_lost_analysis(creds, sheet_id, claims):
             'lost_qty': int(unmatched_lost_qty),
         },
     }
+
+
+def _claim_amount_value(claim_amount_str):
+    s = (claim_amount_str or '').replace('₹', '').replace(',', '').strip()
+    return safe_float(s)
+
+
+def get_ups_claim_pipeline_monthly(claims):
+    """Bucket every UPS claim into the month of its latest reached stage:
+    settled -> settled_date, approved/declined -> approved_date (decision
+    date), filed_pending -> form_received. Mirrors the dashboard's monthly
+    claim pipeline table so reports built elsewhere (e.g. the weekly pivot
+    Excel) show the same breakdown.
+
+    Returns {periods: [...], totals: {...}} sorted chronologically, where
+    each period has filed/approved/settled/declined sub-dicts.
+    """
+    monthly = {}  # (year, month_idx) -> aggregates
+
+    def ensure(d):
+        key = (d.year, d.month)
+        if key not in monthly:
+            monthly[key] = {
+                'label':    d.strftime('%B %Y'),
+                'filed':    {'count': 0},
+                'approved': {'count': 0, 'pending': 0.0},
+                'settled':  {'count': 0, 'lost_qty': 0, 'received': 0.0},
+                'declined': {'count': 0, 'lost': 0.0},
+            }
+        return monthly[key]
+
+    for c in claims:
+        state = c.get('state')
+        amt   = _claim_amount_value(c.get('claim_amount'))
+        qty   = int(safe_float(c.get('lost_qty')))
+
+        if state == 'settled':
+            d = (_parse_date_only(c.get('settled_date'))
+                 or _parse_date_only(c.get('approved_date'))
+                 or _parse_date_only(c.get('form_received')))
+            if not d:
+                continue
+            m = ensure(d)
+            m['settled']['count']    += 1
+            m['settled']['lost_qty'] += qty
+            m['settled']['received'] += amt
+        elif state == 'approved_not_settled':
+            d = _parse_date_only(c.get('approved_date')) or _parse_date_only(c.get('form_received'))
+            if not d:
+                continue
+            m = ensure(d)
+            m['approved']['count']   += 1
+            m['approved']['pending'] += amt
+        elif state == 'declined':
+            d = _parse_date_only(c.get('approved_date')) or _parse_date_only(c.get('form_received'))
+            if not d:
+                continue
+            m = ensure(d)
+            m['declined']['count'] += 1
+            m['declined']['lost']  += amt
+        elif state == 'filed_pending':
+            d = _parse_date_only(c.get('form_received'))
+            if not d:
+                continue
+            m = ensure(d)
+            m['filed']['count'] += 1
+
+    sorted_keys = sorted(monthly.keys())
+    periods = [monthly[k] for k in sorted_keys]
+
+    totals = {
+        'filed_count':    sum(p['filed']['count'] for p in periods),
+        'approved_count': sum(p['approved']['count'] for p in periods),
+        'pending':        round(sum(p['approved']['pending'] for p in periods), 2),
+        'settled_count':  sum(p['settled']['count'] for p in periods),
+        'lost_qty':       sum(p['settled']['lost_qty'] for p in periods),
+        'received':       round(sum(p['settled']['received'] for p in periods), 2),
+        'declined_count': sum(p['declined']['count'] for p in periods),
+        'declined_lost':  round(sum(p['declined']['lost'] for p in periods), 2),
+    }
+
+    return {'periods': periods, 'totals': totals}
 
 
 def get_recon_recovery_totals(creds, sheet_id, tab_name):
@@ -985,6 +1042,7 @@ def get_india_us_data(creds, sheet_id):
         return -1
 
     month_col       = fc('month')
+    year_col        = fc('year')
     bucket_col      = fc('bucket')
     sub_col         = fc('sub remark')
     awb_col         = fc('shipment awb')
@@ -1110,6 +1168,7 @@ def get_india_us_data(creds, sheet_id):
         rows.append({
             'row_index':            i + 3,
             'month':                month,
+            'year':                 str(g(row, year_col)).strip(),
             'awb':                  str(g(row, awb_col)).strip(),
             'label':                label,
             'old_ibr':              old_ibr,                           # parent IBR (child rows only)

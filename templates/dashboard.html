@@ -5615,9 +5615,9 @@ function renderUPSClaimsTab(data, lastUpdated) {
 
   claims.forEach(c => {
     let d = null, bucket = null;
-    if (c.state === 'settled')              { d = _parseUpsDate(c.settled_date);  bucket = 'settled'; }
-    else if (c.state === 'approved_not_settled') { d = _parseUpsDate(c.approved_date); bucket = 'approved'; }
-    else if (c.state === 'declined')        { d = _parseUpsDate(c.approved_date);  bucket = 'declined'; }
+    if (c.state === 'settled')              { d = _parseUpsDate(c.settled_date) || _parseUpsDate(c.approved_date) || _parseUpsDate(c.form_received); bucket = 'settled'; }
+    else if (c.state === 'approved_not_settled') { d = _parseUpsDate(c.approved_date) || _parseUpsDate(c.form_received); bucket = 'approved'; }
+    else if (c.state === 'declined')        { d = _parseUpsDate(c.approved_date) || _parseUpsDate(c.form_received); bucket = 'declined'; }
     else if (c.state === 'filed_pending')   { d = _parseUpsDate(c.form_received);  bucket = 'filed'; }
     if (!d || !bucket) return;
 
