@@ -608,7 +608,7 @@ def get_ups_lost_analysis(ius_rows, claims):
         year = row.get('year') or '—'
         transporter = (row.get('transporter') or '').strip()
         awb = (row.get('awb') or '').strip()
-        qty = safe_float(row.get('qty'))
+        qty = safe_float(row.get('qty_sent'))   # as-shipped Qty Sent column, not the post-recon Final Sent Qty
 
         if transporter.upper() == 'UPS':
             key = (month, year)
@@ -1050,6 +1050,7 @@ def get_india_us_data(creds, sheet_id):
     old_ibr_col     = fc('old ibr')           # parent IBR link for split shipments
     child_col       = fc('child product')
     qty_col         = fc('final sent qty')
+    qty_sent_col    = fc('qty sent')   # as-shipped qty — distinct from Final Sent Qty (post-recon adjusted)
     grn_col         = fc('final grn')
     diff_col        = fc('final diff')
     exp_col         = fc('expected reimburs')
@@ -1174,6 +1175,7 @@ def get_india_us_data(creds, sheet_id):
             'old_ibr':              old_ibr,                           # parent IBR (child rows only)
             'product':              str(g(row, child_col)).strip()[:50],
             'qty':                  int(qty),
+            'qty_sent':             int(safe_float(g(row, qty_sent_col))),
             'grn':                  int(safe_float(g(row, grn_col))),
             'diff':                 int(safe_float(g(row, diff_col))),
             'channel':              _norm_channel(str(g(row, channel_col)).strip()),

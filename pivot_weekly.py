@@ -537,25 +537,37 @@ def write_section(ws, row_num, section_title, sect_fill, col_headers,
 
 SECT_BG_SAMEWEEK = PatternFill('solid', fgColor='FFF9C4')   # yellow — same-week turnaround
 
-def add_pivot_sheet(wb, title, raised_new, closed_old, closed_new, tab_label):
-    ws = wb.create_sheet(title=title)
-    ws.sheet_view.showGridLines = False
+def add_pivot_sheet(wb, title, raised_new, closed_old, closed_new, tab_label,
+                     ws=None, start_row=None):
+    """Write the India->US / US->US 3-section pivot. Creates its own standalone
+    sheet by default; pass an existing `ws` + `start_row` to append into a
+    shared/combined sheet instead (returns the next free row in that case)."""
+    standalone = ws is None
+    if standalone:
+        ws = wb.create_sheet(title=title)
+        ws.sheet_view.showGridLines = False
+        row = 1
+    else:
+        row = start_row
 
     # Title
-    ws.merge_cells('A1:F1')
-    ws['A1'] = f"📊  {tab_label}  —  Week {WEEK_NUM}  ({START.strftime('%d %b')} – {END.strftime('%d %b %Y')})"
-    style(ws['A1'], font=TITLE_FONT, align=LEFT)
-    ws.row_dimensions[1].height = 22
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    ws.cell(row=row, column=1,
+            value=f"📊  {tab_label}  —  Week {WEEK_NUM}  ({START.strftime('%d %b')} – {END.strftime('%d %b %Y')})")
+    style(ws.cell(row=row, column=1), font=TITLE_FONT, align=LEFT)
+    ws.row_dimensions[row].height = 22
+    row += 1
 
-    ws.merge_cells('A2:F2')
-    ws['A2'] = ('Section 1: new cases raised this week  |  '
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    ws.cell(row=row, column=1, value=(
+                'Section 1: new cases raised this week  |  '
                 'Section 2: old backlog cases closed this week  |  '
-                'Section 3: raised & resolved same week')
-    style(ws['A2'], font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
-    ws.row_dimensions[2].height = 14
-    ws.row_dimensions[3].height = 6
-
-    row = 4
+                'Section 3: raised & resolved same week'))
+    style(ws.cell(row=row, column=1), font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+    ws.row_dimensions[row].height = 14
+    row += 1
+    ws.row_dimensions[row].height = 6
+    row += 1
 
     # Section 1 — Raised this week (Expected only; received tracked in closed sections)
     rn_rows = [[ch, len(m['labels']), round(m['exp'],2)]
@@ -601,13 +613,15 @@ def add_pivot_sheet(wb, title, raised_new, closed_old, closed_new, tab_label):
         cn_rows, PatternFill('solid', fgColor='FFF9C4'),
         [None, NUM_FMT, USD_FMT, USD_FMT], [LEFT, CENTER, RIGHT, RIGHT])
 
-    for i, w in enumerate([34, 12, 16, 16, 16, 20], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = 'A4'
-    return ws
+    if standalone:
+        for i, w in enumerate([34, 12, 16, 16, 16, 20], 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        ws.freeze_panes = 'A4'
+        return ws
+    return row + 1   # gap row before the next section in a combined sheet
 
 
-# Create sheets
+# Create standalone sheets (unchanged — still generated alongside the combined tab)
 add_pivot_sheet(wb, 'India → US', ius_raised_new, ius_closed_old, ius_closed_new, 'India → US Claims')
 add_pivot_sheet(wb, 'US → US',    u2u_raised_new, u2u_closed_old, u2u_closed_new, 'US → US Claims')
 
@@ -898,62 +912,91 @@ wow_sheet(ws_wow2, 'US → US',
 # Historical values are fixed from the user's weekly review reference. The
 # rightmost snapshot is calculated from the same ShipBob data used by the
 # dashboard, so future runs automatically append the current live position.
-ws_sb = wb.create_sheet(title='ShipBob D2C Claims Bucket')
-ws_sb.sheet_view.showGridLines = False
-sb_current_label = END.strftime('%d %b')
-sb_headers = ['Claims Bucket',
-              '10 Sep Total', '10 Sep YTD%',
-              '17 Sep Total', '17 Sep YTD%',
-              '24 Sep Total', '24 Sep YTD%',
-              f'{sb_current_label} Total', f'{sb_current_label} YTD%']
-for col, h in enumerate(sb_headers, 1):
-    c = ws_sb.cell(row=1, column=col, value=h)
-    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
-ws_sb.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(sb_headers))
-ws_sb.cell(row=2, column=1, value=(
-    'ShipBob D2C: 10/17/24 Sep values are hardcoded historical references; '
-    f'{sb_current_label} matches the live dashboard Claims Bucket source.'
-))
-style(ws_sb.cell(row=2, column=1), font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+def write_shipbob_section(wb, ws=None, start_row=None):
+    """Creates its own standalone 'ShipBob D2C Claims Bucket' sheet by default;
+    pass an existing `ws` + `start_row` to append into a combined sheet instead
+    (returns the next free row in that case)."""
+    standalone = ws is None
+    if standalone:
+        ws = wb.create_sheet(title='ShipBob D2C Claims Bucket')
+        ws.sheet_view.showGridLines = False
+        row = 1
+    else:
+        row = start_row
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+        ws.cell(row=row, column=1, value='📦  ShipBob D2C Claims Bucket')
+        style(ws.cell(row=row, column=1), font=TITLE_FONT, align=LEFT)
+        row += 1
 
-sb_bucket_colors = {
-    'Claim Raised & Received': ('C8E6C9', '2E7D32'),
-    'Claim Raised, Pending Receipt': ('FFF3E0', 'E65100'),
-    'Pending to Claim': ('E3F2FD', '1565C0'),
-}
-sb_rows = []
-sb_totals = [sum(v[i] for v in SHIPBOB_HISTORY.values()) for i in range(3)]
-sb_live_total = round(sum(SHIPBOB_LIVE.values()), 2)
-for bucket, history_vals in SHIPBOB_HISTORY.items():
-    live_val = SHIPBOB_LIVE.get(bucket, 0.0)
-    sb_rows.append([bucket, history_vals[0], history_vals[1], history_vals[2], live_val])
+    sb_current_label = END.strftime('%d %b')
+    sb_headers = ['Claims Bucket',
+                  '10 Sep Total', '10 Sep YTD%',
+                  '17 Sep Total', '17 Sep YTD%',
+                  '24 Sep Total', '24 Sep YTD%',
+                  f'{sb_current_label} Total', f'{sb_current_label} YTD%']
+    hdr_row = row
+    for col, h in enumerate(sb_headers, 1):
+        c = ws.cell(row=hdr_row, column=col, value=h)
+        style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+    row += 1
+    note_row = row
+    ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=len(sb_headers))
+    ws.cell(row=note_row, column=1, value=(
+        'ShipBob D2C: 10/17/24 Sep values are hardcoded historical references; '
+        f'{sb_current_label} matches the live dashboard Claims Bucket source.'
+    ))
+    style(ws.cell(row=note_row, column=1), font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+    row += 1
 
-for row_num, row_data in enumerate(sb_rows, 3):
-    bucket, hist_10, hist_17, hist_24, live_val = row_data
-    bg_hex, color_hex = sb_bucket_colors[bucket]
-    for col, value in enumerate([bucket, hist_10,
-                                 hist_10 / sb_totals[0] if sb_totals[0] else 0,
-                                 hist_17, hist_17 / sb_totals[1] if sb_totals[1] else 0,
-                                 hist_24, hist_24 / sb_totals[2] if sb_totals[2] else 0,
-                                 live_val, live_val / sb_live_total if sb_live_total else 0], 1):
-        fmt = None if col == 1 else (USD_FMT if col % 2 == 0 else PCT_FMT)
-        c = ws_sb.cell(row=row_num, column=col, value=round(value, 2) if isinstance(value, float) else value)
-        style(c, fill=PatternFill('solid', fgColor=bg_hex),
-              font=Font(name='Calibri', bold=(col == 1), color=(color_hex if col == 1 else '212121'), size=10),
-              align=(LEFT if col == 1 else RIGHT), fmt=fmt, bdr_=bdr())
+    sb_bucket_colors = {
+        'Claim Raised & Received': ('C8E6C9', '2E7D32'),
+        'Claim Raised, Pending Receipt': ('FFF3E0', 'E65100'),
+        'Pending to Claim': ('E3F2FD', '1565C0'),
+    }
+    sb_rows = []
+    sb_totals = [sum(v[i] for v in SHIPBOB_HISTORY.values()) for i in range(3)]
+    sb_live_total = round(sum(SHIPBOB_LIVE.values()), 2)
+    for bucket, history_vals in SHIPBOB_HISTORY.items():
+        live_val = SHIPBOB_LIVE.get(bucket, 0.0)
+        sb_rows.append([bucket, history_vals[0], history_vals[1], history_vals[2], live_val])
 
-sb_total_values = ['Total Eligible Claims', sb_totals[0], 1.0, sb_totals[1], 1.0,
-                   sb_totals[2], 1.0, sb_live_total, 1.0]
-for col, value in enumerate(sb_total_values, 1):
-    c = ws_sb.cell(row=6, column=col, value=value)
-    style(c, fill=PatternFill('solid', fgColor='1B3A2D'),
-          font=Font(name='Calibri', bold=True, color='FFFFFF', size=10),
-          align=(LEFT if col == 1 else RIGHT),
-          fmt=(None if col == 1 else (USD_FMT if col % 2 == 0 else PCT_FMT)),
-          bdr_=bdr(t=Side(style='medium', color='FFFFFF')))
-for i, width in enumerate([34, 15, 12, 15, 12, 15, 12, 15, 12], 1):
-    ws_sb.column_dimensions[get_column_letter(i)].width = width
-ws_sb.freeze_panes = 'B3'
+    data_start_row = row
+    for i, row_data in enumerate(sb_rows):
+        row_num = data_start_row + i
+        bucket, hist_10, hist_17, hist_24, live_val = row_data
+        bg_hex, color_hex = sb_bucket_colors[bucket]
+        for col, value in enumerate([bucket, hist_10,
+                                     hist_10 / sb_totals[0] if sb_totals[0] else 0,
+                                     hist_17, hist_17 / sb_totals[1] if sb_totals[1] else 0,
+                                     hist_24, hist_24 / sb_totals[2] if sb_totals[2] else 0,
+                                     live_val, live_val / sb_live_total if sb_live_total else 0], 1):
+            fmt = None if col == 1 else (USD_FMT if col % 2 == 0 else PCT_FMT)
+            c = ws.cell(row=row_num, column=col, value=round(value, 2) if isinstance(value, float) else value)
+            style(c, fill=PatternFill('solid', fgColor=bg_hex),
+                  font=Font(name='Calibri', bold=(col == 1), color=(color_hex if col == 1 else '212121'), size=10),
+                  align=(LEFT if col == 1 else RIGHT), fmt=fmt, bdr_=bdr())
+    row = data_start_row + len(sb_rows)
+
+    sb_total_values = ['Total Eligible Claims', sb_totals[0], 1.0, sb_totals[1], 1.0,
+                       sb_totals[2], 1.0, sb_live_total, 1.0]
+    for col, value in enumerate(sb_total_values, 1):
+        c = ws.cell(row=row, column=col, value=value)
+        style(c, fill=PatternFill('solid', fgColor='1B3A2D'),
+              font=Font(name='Calibri', bold=True, color='FFFFFF', size=10),
+              align=(LEFT if col == 1 else RIGHT),
+              fmt=(None if col == 1 else (USD_FMT if col % 2 == 0 else PCT_FMT)),
+              bdr_=bdr(t=Side(style='medium', color='FFFFFF')))
+    row += 1
+
+    if standalone:
+        for i, width in enumerate([34, 15, 12, 15, 12, 15, 12, 15, 12], 1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+        ws.freeze_panes = 'B3'
+        return ws
+    return row + 1   # gap row before the next section in a combined sheet
+
+
+write_shipbob_section(wb)
 
 # ── UPS reference table + live dashboard data ────────────────────────────────
 ws_ups = wb.create_sheet(title='UPS Summary')
@@ -1024,116 +1067,188 @@ for col, width in enumerate([24, 12, 18, 34], 1):
     ws_ups.column_dimensions[get_column_letter(col)].width = width
 ws_ups.freeze_panes = 'A5'
 
+def _avg_per_awb(amount, count):
+    return round(amount / count, 2) if count else 0
+
 # ── UPS Lost Analysis — qty sent vs lost qty by ORIGINAL DISPATCH month ────────
 # Mirrors the dashboard's UPS Claims tab: Lost Qty is read from the UPS Claim
 # tab and attributed to the month the Parent AWB was dispatched (per the
 # Inward India to US tab), not the month the claim was raised/settled.
-lost_analysis = ups_data.get('lost_analysis', {'periods': [], 'totals': {}, 'unmatched': {}})
-la_periods  = lost_analysis.get('periods', [])
-la_totals   = lost_analysis.get('totals', {})
-la_unmatched = lost_analysis.get('unmatched', {})
+def write_ups_lost_analysis_section(wb, lost_analysis, ws=None, start_row=None):
+    standalone = ws is None
+    la_periods   = lost_analysis.get('periods', [])
+    la_totals    = lost_analysis.get('totals', {})
+    la_unmatched = lost_analysis.get('unmatched', {})
 
-ws_la = wb.create_sheet(title='UPS Lost Analysis')
-ws_la.sheet_view.showGridLines = False
-ws_la.merge_cells('A1:D1')
-ws_la['A1'] = f'UPS Lost Analysis — by Dispatch Month (as of {END:%d %b %Y})'
-style(ws_la['A1'], font=TITLE_FONT, align=LEFT)
-ws_la.merge_cells('A2:D2')
-ws_la['A2'] = ("Qty Sent = Final Sent Qty on Inward India to US rows where Transporter = UPS. "
-               "Lost Qty = UPS Claim tab's Lost Qty, attributed to its Parent AWB's dispatch month.")
-style(ws_la['A2'], font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+    if standalone:
+        ws = wb.create_sheet(title='UPS Lost Analysis')
+        ws.sheet_view.showGridLines = False
+        row = 1
+    else:
+        row = start_row
 
-la_headers = ['Month', 'Qty Sent', 'Lost Qty', 'Loss %']
-for col, h in enumerate(la_headers, 1):
-    c = ws_la.cell(row=4, column=col, value=h)
-    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+    ws.cell(row=row, column=1, value=f'📉  UPS Lost Analysis — by Dispatch Month (as of {END:%d %b %Y})')
+    style(ws.cell(row=row, column=1), font=TITLE_FONT, align=LEFT)
+    row += 1
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+    ws.cell(row=row, column=1, value=(
+        "Qty Sent = Qty Sent column on Inward India to US rows where Transporter = UPS. "
+        "Lost Qty = UPS Claim tab's Lost Qty, attributed to its Parent AWB's dispatch month."))
+    style(ws.cell(row=row, column=1), font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+    row += 1
 
-for row_num, p in enumerate(la_periods, 5):
-    vals = [p['label'], p['qty_sent'], p['lost_qty'], p['loss_pct'] / 100]
-    for col, value in enumerate(vals, 1):
-        c = ws_la.cell(row=row_num, column=col, value=value)
-        style(c, fill=PatternFill('solid', fgColor='FFF3E0'), font=DATA_FONT,
+    la_headers = ['Month', 'Qty Sent', 'Lost Qty', 'Loss %']
+    hdr_row = row
+    for col, h in enumerate(la_headers, 1):
+        c = ws.cell(row=hdr_row, column=col, value=h)
+        style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+    row += 1
+
+    data_start = row
+    for i, p in enumerate(la_periods):
+        row_num = data_start + i
+        vals = [p['label'], p['qty_sent'], p['lost_qty'], p['loss_pct'] / 100]
+        for col, value in enumerate(vals, 1):
+            c = ws.cell(row=row_num, column=col, value=value)
+            style(c, fill=PatternFill('solid', fgColor='FFF3E0'), font=DATA_FONT,
+                  align=(LEFT if col == 1 else RIGHT),
+                  fmt=(PCT_FMT if col == 4 else ('#,##0' if col in (2, 3) else None)), bdr_=bdr())
+    row = data_start + len(la_periods)
+
+    total_row = row
+    la_total_vals = ['TOTAL', la_totals.get('qty_sent', 0), la_totals.get('lost_qty', 0),
+                     (la_totals.get('loss_pct', 0) or 0) / 100]
+    for col, value in enumerate(la_total_vals, 1):
+        c = ws.cell(row=total_row, column=col, value=value)
+        style(c, fill=HDR_BG, font=HDR_FONT,
               align=(LEFT if col == 1 else RIGHT),
               fmt=(PCT_FMT if col == 4 else ('#,##0' if col in (2, 3) else None)), bdr_=bdr())
+    row += 1
 
-la_total_row = 5 + len(la_periods)
-la_total_vals = ['TOTAL', la_totals.get('qty_sent', 0), la_totals.get('lost_qty', 0),
-                 (la_totals.get('loss_pct', 0) or 0) / 100]
-for col, value in enumerate(la_total_vals, 1):
-    c = ws_la.cell(row=la_total_row, column=col, value=value)
-    style(c, fill=HDR_BG, font=HDR_FONT,
-          align=(LEFT if col == 1 else RIGHT),
-          fmt=(PCT_FMT if col == 4 else ('#,##0' if col in (2, 3) else None)), bdr_=bdr())
+    if la_unmatched.get('count'):
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+        ws.cell(row=row, column=1,
+                value=f"⚠ {la_unmatched['count']} claim row(s), {la_unmatched.get('lost_qty', 0)} units "
+                      f"could not be matched to a dispatch month (Parent AWB not found in current "
+                      f"Inward India to US data) — excluded from the table above.")
+        style(ws.cell(row=row, column=1),
+              font=Font(name='Calibri', italic=True, color='E65100', size=9), align=LEFT)
+        row += 1
 
-if la_unmatched.get('count'):
-    note_row = la_total_row + 2
-    ws_la.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=4)
-    ws_la.cell(row=note_row, column=1,
-               value=f"⚠ {la_unmatched['count']} claim row(s), {la_unmatched.get('lost_qty', 0)} units "
-                     f"could not be matched to a dispatch month (Parent AWB not found in current "
-                     f"Inward India to US data) — excluded from the table above.")
-    style(ws_la.cell(row=note_row, column=1),
-          font=Font(name='Calibri', italic=True, color='E65100', size=9), align=LEFT)
+    if standalone:
+        for col, width in enumerate([20, 14, 14, 12], 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        ws.freeze_panes = 'A5'
+        return ws
+    return row + 1   # gap row before the next section in a combined sheet
 
-for col, width in enumerate([20, 14, 14, 12], 1):
-    ws_la.column_dimensions[get_column_letter(col)].width = width
-ws_la.freeze_panes = 'A5'
 
 # ── UPS Claim Pipeline — filed / approved / settled / declined by month ───────
-pipeline = get_ups_claim_pipeline_monthly(ups_data.get('claims', []))
-pl_periods = pipeline.get('periods', [])
-pl_totals  = pipeline.get('totals', {})
+def write_ups_pipeline_section(wb, pipeline, ws=None, start_row=None):
+    standalone = ws is None
+    pl_periods = pipeline.get('periods', [])
+    pl_totals  = pipeline.get('totals', {})
 
-ws_pl = wb.create_sheet(title='UPS Claim Pipeline')
-ws_pl.sheet_view.showGridLines = False
-ws_pl.merge_cells('A1:J1')
-ws_pl['A1'] = f'UPS Claim Pipeline — Week {WEEK_NUM} snapshot (as of {END:%d %b %Y})'
-style(ws_pl['A1'], font=TITLE_FONT, align=LEFT)
-ws_pl.merge_cells('A2:J2')
-ws_pl['A2'] = ("Each claim is shown in the month of its latest reached stage: Settled -> settled date, "
-               "Approved/Declined -> approval decision date, Filed -> form received date.")
-style(ws_pl['A2'], font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+    if standalone:
+        ws = wb.create_sheet(title='UPS Claim Pipeline')
+        ws.sheet_view.showGridLines = False
+        row = 1
+    else:
+        row = start_row
 
-pl_headers = ['Month', 'Filed (AWBs)', 'Approved (AWBs)', 'Awaiting Transfer (₹)',
-              'Settled (AWBs)', 'Settled Lost Qty', 'Received (₹)', 'Avg ₹/AWB',
-              'Declined (AWBs)', 'Declined Lost (₹)']
-for col, h in enumerate(pl_headers, 1):
-    c = ws_pl.cell(row=4, column=col, value=h)
-    style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=10)
+    ws.cell(row=row, column=1, value=f'🚚  UPS Claim Pipeline — Week {WEEK_NUM} snapshot (as of {END:%d %b %Y})')
+    style(ws.cell(row=row, column=1), font=TITLE_FONT, align=LEFT)
+    row += 1
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=10)
+    ws.cell(row=row, column=1, value=(
+        "Each claim is shown in the month of its latest reached stage: Settled -> settled date, "
+        "Approved/Declined -> approval decision date, Filed -> form received date."))
+    style(ws.cell(row=row, column=1), font=Font(name='Calibri', italic=True, color='546E7A', size=9), align=LEFT)
+    row += 1
 
-def _avg_per_awb(amount, count):
-    return round(amount / count, 2) if count else 0
+    pl_headers = ['Month', 'Filed (AWBs)', 'Approved (AWBs)', 'Awaiting Transfer (₹)',
+                  'Settled (AWBs)', 'Settled Lost Qty', 'Received (₹)', 'Avg ₹/AWB',
+                  'Declined (AWBs)', 'Declined Lost (₹)']
+    hdr_row = row
+    for col, h in enumerate(pl_headers, 1):
+        c = ws.cell(row=hdr_row, column=col, value=h)
+        style(c, fill=HDR_BG, font=HDR_FONT, align=CENTER)
+    row += 1
 
-for row_num, p in enumerate(pl_periods, 5):
-    settled = p['settled']; approved = p['approved']; declined = p['declined']; filed = p['filed']
-    vals = [
-        p['label'], filed['count'], approved['count'], round(approved['pending'], 2),
-        settled['count'], settled['lost_qty'], round(settled['received'], 2),
-        _avg_per_awb(settled['received'], settled['count']),
-        declined['count'], round(declined['lost'], 2),
+    data_start = row
+    for i, p in enumerate(pl_periods):
+        row_num = data_start + i
+        settled = p['settled']; approved = p['approved']; declined = p['declined']; filed = p['filed']
+        vals = [
+            p['label'], filed['count'], approved['count'], round(approved['pending'], 2),
+            settled['count'], settled['lost_qty'], round(settled['received'], 2),
+            _avg_per_awb(settled['received'], settled['count']),
+            declined['count'], round(declined['lost'], 2),
+        ]
+        for col, value in enumerate(vals, 1):
+            c = ws.cell(row=row_num, column=col, value=value)
+            style(c, fill=PatternFill('solid', fgColor='E8F5E9'), font=DATA_FONT,
+                  align=(LEFT if col == 1 else RIGHT),
+                  fmt=(USD_FMT if col in (4, 7, 8, 10) else None), bdr_=bdr())
+    row = data_start + len(pl_periods)
+
+    total_row = row
+    pl_total_vals = [
+        'TOTAL', pl_totals.get('filed_count', 0), pl_totals.get('approved_count', 0),
+        pl_totals.get('pending', 0), pl_totals.get('settled_count', 0), pl_totals.get('lost_qty', 0),
+        pl_totals.get('received', 0), _avg_per_awb(pl_totals.get('received', 0), pl_totals.get('settled_count', 0)),
+        pl_totals.get('declined_count', 0), pl_totals.get('declined_lost', 0),
     ]
-    for col, value in enumerate(vals, 1):
-        c = ws_pl.cell(row=row_num, column=col, value=value)
-        style(c, fill=PatternFill('solid', fgColor='E8F5E9'), font=DATA_FONT,
+    for col, value in enumerate(pl_total_vals, 1):
+        c = ws.cell(row=total_row, column=col, value=value)
+        style(c, fill=HDR_BG, font=HDR_FONT,
               align=(LEFT if col == 1 else RIGHT),
               fmt=(USD_FMT if col in (4, 7, 8, 10) else None), bdr_=bdr())
+    row += 1
 
-pl_total_row = 5 + len(pl_periods)
-pl_total_vals = [
-    'TOTAL', pl_totals.get('filed_count', 0), pl_totals.get('approved_count', 0),
-    pl_totals.get('pending', 0), pl_totals.get('settled_count', 0), pl_totals.get('lost_qty', 0),
-    pl_totals.get('received', 0), _avg_per_awb(pl_totals.get('received', 0), pl_totals.get('settled_count', 0)),
-    pl_totals.get('declined_count', 0), pl_totals.get('declined_lost', 0),
-]
-for col, value in enumerate(pl_total_vals, 1):
-    c = ws_pl.cell(row=pl_total_row, column=col, value=value)
-    style(c, fill=HDR_BG, font=HDR_FONT,
-          align=(LEFT if col == 1 else RIGHT),
-          fmt=(USD_FMT if col in (4, 7, 8, 10) else None), bdr_=bdr())
+    if standalone:
+        for col, width in enumerate([18, 11, 13, 17, 13, 13, 15, 12, 13, 15], 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        ws.freeze_panes = 'A5'
+        return ws
+    return row + 1   # gap row before the next section in a combined sheet
 
-for col, width in enumerate([18, 11, 13, 17, 13, 13, 15, 12, 13, 15], 1):
-    ws_pl.column_dimensions[get_column_letter(col)].width = width
-ws_pl.freeze_panes = 'A5'
+
+lost_analysis = ups_data.get('lost_analysis', {'periods': [], 'totals': {}, 'unmatched': {}})
+pipeline = get_ups_claim_pipeline_monthly(ups_data.get('claims', []))
+
+write_ups_lost_analysis_section(wb, lost_analysis)
+write_ups_pipeline_section(wb, pipeline)
+
+# ── Combined "Weekly Summary (All-in-One)" tab ─────────────────────────────────
+# All 5 core tables stacked in a single sheet, one below another, for anyone
+# who wants the whole week's picture without flipping between tabs. The
+# standalone tabs above still exist independently with the same data.
+ws_combo = wb.create_sheet(title='Weekly Summary (All-in-One)', index=1)
+ws_combo.sheet_view.showGridLines = False
+
+combo_row = 1
+ws_combo.merge_cells(start_row=combo_row, start_column=1, end_row=combo_row, end_column=10)
+ws_combo.cell(row=combo_row, column=1,
+              value=f"📑  Weekly Summary — All Tables — Week {WEEK_NUM} ({START.strftime('%d %b')} – {END.strftime('%d %b %Y')})")
+style(ws_combo.cell(row=combo_row, column=1), font=Font(name='Calibri', bold=True, color='1A237E', size=14), align=LEFT)
+ws_combo.row_dimensions[combo_row].height = 26
+combo_row += 2
+
+combo_row = add_pivot_sheet(wb, None, ius_raised_new, ius_closed_old, ius_closed_new,
+                            'India → US Claims', ws=ws_combo, start_row=combo_row)
+combo_row = add_pivot_sheet(wb, None, u2u_raised_new, u2u_closed_old, u2u_closed_new,
+                            'US → US Claims', ws=ws_combo, start_row=combo_row)
+combo_row = write_shipbob_section(wb, ws=ws_combo, start_row=combo_row)
+combo_row = write_ups_pipeline_section(wb, pipeline, ws=ws_combo, start_row=combo_row)
+combo_row = write_ups_lost_analysis_section(wb, lost_analysis, ws=ws_combo, start_row=combo_row)
+
+# One generic column width scheme wide enough for the widest table (UPS Claim
+# Pipeline, 10 columns); narrower tables just leave the extra columns blank.
+for col, width in enumerate([30, 14, 15, 17, 13, 13, 15, 12, 13, 15], 1):
+    ws_combo.column_dimensions[get_column_letter(col)].width = width
 
 # ── Raw Dump tab — all case rows for this week's activity ─────────────────────
 ws_dump = wb.create_sheet(title='This Week — Raw Log')
