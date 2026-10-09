@@ -4,15 +4,21 @@
 # Writes ALL rows with exactly 17 columns (A–Q) to the "ShipBob D2C Claims"
 # tab in the recon Google Sheet, in the order below.
 #
-# The source data is split across multiple files when a single workbook gets
-# too large (e.g. one file per set of months). All files listed in
-# SOURCE_FILES are read and their rows concatenated before upload — update
-# this list whenever a file is renamed/added/retired.
+# Source resolution: PINNED_FILES (closed historical periods that are never
+# re-exported, e.g. "April-May") are always included by exact name. Everything
+# else is auto-detected — among the remaining .xlsx files directly in FOLDER,
+# the single most-recently-modified one is treated as the current rolling
+# file. This means a new weekly export (whatever it's named/dated) is always
+# picked up automatically; no code change needed each week. Move a retired
+# current-period file into the "Old File" subfolder once its replacement has
+# been dropped in, so an older file sitting around doesn't confuse things if
+# its mtime is ever touched (e.g. by a sync tool) after the fact.
 #
 # Run after dropping a new file in the folder:
 #     python upload_shipbob_d2c.py
 # Or double-click: "Sync to Dashboard.bat" in G:\My Drive\Shibob D2C Claim\
 
+import glob
 import json
 import os
 import sys
@@ -24,13 +30,10 @@ SHEET_ID    = '1N8qozEIZUg2FWYRqdO4UGHvcHiTtfoZr_BK_UojDSSA'
 TAB_NAME    = 'ShipBob D2C Claims'
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 
-# Source files to combine (each covering a different, non-overlapping set of
-# months). Add a new entry here whenever the data is split again; move
-# retired files into the "Old File" subfolder so they're not picked up
-# by mistake.
-SOURCE_FILES = [
+# Closed historical periods — always included, never auto-replaced because
+# no new export for these months will ever appear.
+PINNED_FILES = [
     'Shipbob Order Data -- April-May 2026.xlsx',
-    'Shipbob Order Data -- Updated 05-10-2026 Jun-Oct.xlsx',
 ]
 
 # Exactly 17 columns, strictly in this order (A → Q)
@@ -55,22 +58,40 @@ COLUMNS = [
 ]
 
 
-# ── Resolve configured source files ───────────────────────────────────────────
-def find_source_files(folder, names):
-    paths = []
+# ── Resolve source files: pinned by name + auto-detected latest current file ──
+def find_source_files(folder, pinned_names):
+    pinned_paths = []
     missing = []
-    for name in names:
+    for name in pinned_names:
         path = os.path.join(folder, name)
         if os.path.exists(path):
-            paths.append(path)
+            pinned_paths.append(path)
         else:
             missing.append(name)
     if missing:
         raise FileNotFoundError(
-            f'Configured source file(s) not found in {folder}: {missing}\n'
-            f'Update SOURCE_FILES in upload_shipbob_d2c.py if these were renamed.'
+            f'Pinned file(s) not found in {folder}: {missing}\n'
+            f'Update PINNED_FILES in upload_shipbob_d2c.py if these were renamed/moved.'
         )
-    return paths
+
+    pinned_basenames = {os.path.basename(p) for p in pinned_paths}
+    all_xlsx = [
+        f for f in glob.glob(os.path.join(folder, '*.xlsx'))
+        if not os.path.basename(f).startswith('~$')
+    ]
+    candidates = [f for f in all_xlsx if os.path.basename(f) not in pinned_basenames]
+    if not candidates:
+        raise FileNotFoundError(
+            f'No current-period ShipBob file found in {folder} (besides pinned files).'
+        )
+
+    latest = max(candidates, key=os.path.getmtime)
+    others = [f for f in candidates if f != latest]
+    if others:
+        print(f'  (ignoring {len(others)} older file(s) in the folder: '
+              f'{[os.path.basename(f) for f in others]} — using most recently edited only)')
+
+    return pinned_paths + [latest]
 
 
 # ── Read Excel → list of rows ─────────────────────────────────────────────────
@@ -208,7 +229,7 @@ def upload_to_sheets(data_rows):
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     try:
-        paths = find_source_files(FOLDER, SOURCE_FILES)
+        paths = find_source_files(FOLDER, PINNED_FILES)
 
         data_rows = []
         for path in paths:
