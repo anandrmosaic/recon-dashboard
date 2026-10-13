@@ -1,8 +1,11 @@
 # upload_shipbob_d2c.py
 # ─────────────────────
 # Reads ShipBob Excel source file(s) from G:\My Drive\Shibob D2C Claim\
-# Writes ALL rows with exactly 17 columns (A–Q) to the "ShipBob D2C Claims"
-# tab in the recon Google Sheet, in the order below.
+# Writes ALL rows with exactly 16 columns (A–P) to the "ShipBob D2C Claims"
+# tab in the recon Google Sheet, in the order below. ("Claim status" was
+# dropped from the source Excel and this sheet on request — it was never
+# read anywhere downstream, so removing it has no effect on the dashboard
+# or the weekly pivot reports.)
 #
 # Source resolution: PINNED_FILES (closed historical periods that are never
 # re-exported, e.g. "April-May") are always included by exact name. Everything
@@ -54,7 +57,6 @@ COLUMNS = [
     'Total Item Quantity',
     'Delivery Status',
     'Delivery remark',
-    'Claim status',
     'Amt',
     'Expected Claim amount',
     'Claims remark',

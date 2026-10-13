@@ -1302,7 +1302,6 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
     ci_line_qty      = _find(['line item qty'])
     ci_sub_bucket    = _find(['sub bucket'])
     ci_main_bucket   = _find(['main bucket'])
-    ci_claim_st      = _find(['claim status'])
     ci_amt           = _find(['amt'])
     ci_expected      = _find(['expected claim', 'expected'])
     ci_remark        = _find(['claims remark', 'remark'])
@@ -1366,7 +1365,6 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
         line_name    = gv(raw, ci_line_name) or sku
         sub_bucket   = gv(raw, ci_sub_bucket)
         main_bucket  = gv(raw, ci_main_bucket)
-        claim_status = gv(raw, ci_claim_st)
         amt          = safe_float(gv(raw, ci_amt))
         exp          = safe_float(gv(raw, ci_expected))
         remark       = gv(raw, ci_remark)
@@ -1418,7 +1416,6 @@ def get_shipbob_d2c_data(creds, sheet_id, tab_name='ShipBob D2C Claims'):
             'sub_bucket':      sub_bucket or main_bucket,
             'main_bucket':     main_bucket or sub_bucket,
             'bucket_key':      bk,
-            'claim_status':    claim_status,
             'amt':             round(amt, 2),
             'exp':             round(exp, 2),
             'remark':          remark,
@@ -1655,7 +1652,6 @@ def get_shipbob_d2c_from_excel(folder):
     ci_line_qty   = _find(['line item qty'])
     ci_sub_bucket = _find(['sub bucket'])
     ci_main_bucket= _find(['main bucket'])
-    ci_claim_st   = _find(['claim status'])
     ci_amt        = _find(['amt'])
     ci_expected   = _find(['expected claim', 'expected'])
     ci_remark     = _find(['claims remark', 'remark'])
@@ -1715,7 +1711,6 @@ def get_shipbob_d2c_from_excel(folder):
         line_name    = gv(raw, ci_line_name) or sku
         sub_bucket   = gv(raw, ci_sub_bucket)
         main_bucket  = gv(raw, ci_main_bucket)
-        claim_status = gv(raw, ci_claim_st)
         remark       = gv(raw, ci_remark)
         carrier      = gv(raw, ci_carrier)
 
@@ -1769,7 +1764,6 @@ def get_shipbob_d2c_from_excel(folder):
             'sub_bucket':      sub_bucket or main_bucket,
             'main_bucket':     main_bucket or sub_bucket,
             'bucket_key':      bk,
-            'claim_status':    claim_status,
             'amt':             round(amt, 2),
             'exp':             round(exp, 2),
             'remark':          remark,
