@@ -9,10 +9,15 @@
 # else is auto-detected — among the remaining .xlsx files directly in FOLDER,
 # the single most-recently-modified one is treated as the current rolling
 # file. This means a new weekly export (whatever it's named/dated) is always
-# picked up automatically; no code change needed each week. Move a retired
-# current-period file into the "Old File" subfolder once its replacement has
-# been dropped in, so an older file sitting around doesn't confuse things if
-# its mtime is ever touched (e.g. by a sync tool) after the fact.
+# picked up automatically; no code change needed each week.
+#
+# Any other non-pinned .xlsx file is automatically archived into the "Old File"
+# subfolder right after being skipped — a separate automation
+# (shipbob_daily_refresh.py) writes a brand new dated file every day and, by
+# its own design, never moves or cleans up the previous ones, so this sync
+# script does that housekeeping instead. It only ever archives files that
+# were NOT chosen as this run's current file, so the data that was just used
+# is never affected.
 #
 # Run after dropping a new file in the folder:
 #     python upload_shipbob_d2c.py
@@ -21,6 +26,7 @@
 import glob
 import json
 import os
+import shutil
 import sys
 import openpyxl
 
@@ -88,8 +94,20 @@ def find_source_files(folder, pinned_names):
     latest = max(candidates, key=os.path.getmtime)
     others = [f for f in candidates if f != latest]
     if others:
-        print(f'  (ignoring {len(others)} older file(s) in the folder: '
-              f'{[os.path.basename(f) for f in others]} — using most recently edited only)')
+        print(f'  Using most recently edited file: {os.path.basename(latest)}')
+        archive_dir = os.path.join(folder, 'Old File')
+        os.makedirs(archive_dir, exist_ok=True)
+        for f in others:
+            try:
+                dest = os.path.join(archive_dir, os.path.basename(f))
+                if os.path.exists(dest):
+                    # Don't clobber an existing archived file with the same name
+                    base, ext = os.path.splitext(os.path.basename(f))
+                    dest = os.path.join(archive_dir, f'{base}_{int(os.path.getmtime(f))}{ext}')
+                shutil.move(f, dest)
+                print(f'  Archived superseded file to Old File/: {os.path.basename(f)}')
+            except Exception as e:
+                print(f'  ⚠ Could not archive {os.path.basename(f)} (may be open elsewhere): {e}')
 
     return pinned_paths + [latest]
 
