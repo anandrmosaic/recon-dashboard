@@ -928,7 +928,7 @@ function destroyCharts() {
 }
 
 // ── Claims Bucket drill-down modal ────────────────────────────────────────
-function renderCBDrillModal(month, bucket, rows, contextLabel='') {
+function renderCBDrillModal(month, bucket, rows, contextLabel='', labelColHeader='Shipment ID') {
   const bktLabel = bucket === 'rec'  ? 'Claim Raised & Received'
                  : bucket === 'prog' ? 'Claim Raised, Pending Receipt'
                  :                     'Pending to Claim';
@@ -968,7 +968,7 @@ function renderCBDrillModal(month, bucket, rows, contextLabel='') {
         <table style="width:100%;border-collapse:collapse">
           <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d);position:sticky;top:0;z-index:1">
             <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Sheet Row</th>
-            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">IBR / Label</th>
+            <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">${labelColHeader}</th>
             <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">${contextLabel || 'Sub Remark'}</th>
             <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Case Raise Date</th>
             <th style="padding:9px 14px;text-align:right;font-size:10px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.6px">Qty</th>
@@ -999,7 +999,7 @@ function showU2UCBDrill(month, bucket) {
   const rows = month === 'all'
     ? Object.values(allDetail).flatMap(d => d[bucket] || [])
     : ((allDetail[month] || {})[bucket] || []);
-  renderCBDrillModal(month, bucket, rows, 'Subbucket');
+  renderCBDrillModal(month, bucket, rows, 'Subbucket', 'Shipment ID');
 }
 
 // Compact accordion for the Claims Bucket by Channel & Month tables.
@@ -1836,7 +1836,7 @@ function renderDashboardOverview(data, lastUpdated) {
     if (!window._u2uCbDetail[m]) window._u2uCbDetail[m] = { rec:[], prog:[], pend:[] };
     const claimQty = Math.abs(r.diff || 0);
     const det = {
-      lbl: r.from_label || r.to_label || '',
+      lbl: r.to_label || r.from_label || '',
       sub: r.subbucket || r.bucket || '',
       row: r.row_index || '',
       case_raise_date: r.case_raise_date || '',

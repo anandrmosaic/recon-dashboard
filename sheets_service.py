@@ -826,8 +826,18 @@ def get_us2us_data(creds, sheet_id):
     if len(values) < 4:
         return {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
 
-    # Row 3 (index 2) = headers; data starts row 4 (index 3)
-    raw_hdrs = values[2]
+    # Header row position can shift if someone inserts/removes a row above it
+    # in the sheet — search for it by content instead of assuming a fixed index.
+    header_idx = None
+    for i, row in enumerate(values[:10]):
+        if len(row) > 1 and str(row[0]).strip().lower() == 'year' and str(row[1]).strip().lower() == 'month':
+            header_idx = i
+            break
+    if header_idx is None:
+        print("[US2US] Header row not found (expected 'Year'/'Month' in first 10 rows)")
+        return {'kpis': {}, 'rows': [], 'monthly': {}, 'months': []}
+
+    raw_hdrs = values[header_idx]
     headers  = [str(h).strip().lower() for h in raw_hdrs]
 
     def fc(kw):
@@ -886,7 +896,7 @@ def get_us2us_data(creds, sheet_id):
     def g(row, idx):
         return row[idx] if idx >= 0 and len(row) > idx else ''
 
-    for i, row in enumerate(values[3:]):
+    for i, row in enumerate(values[header_idx + 1:]):
         if not row: continue
         month = str(g(row, month_col)).strip()
         if month not in MONTH_ORDER: continue
@@ -945,7 +955,7 @@ def get_us2us_data(creds, sheet_id):
         reimb_status   = str(g(row, reimb_col)).strip() if reimb_col >= 0 and len(row) > reimb_col else ''
         is_carrier_pay = 'carrier' in reimb_status.lower()
         rows.append({
-            'row_index':            i + 4,
+            'row_index':            i + header_idx + 2,
             'month':                month,
             'from_channel':         str(g(row, from_ch_col)).strip(),
             'to_channel':           str(g(row, to_ch_col)).strip(),
