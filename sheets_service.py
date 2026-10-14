@@ -1088,6 +1088,7 @@ def get_india_us_data(creds, sheet_id):
         remarks_col = next((i for i, h in enumerate(headers) if h == 'remark'), -1)
     if remarks_col < 0:
         remarks_col = 30  # hardcoded: column AE (31st column, 0-indexed 30)
+    ship_status_col = fc('ship partner portal')
 
     print(f"[IndiaUS] Cols — month:{month_col} bucket:{bucket_col} sub:{sub_col} "
           f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col} remarks:{remarks_col}")
@@ -1118,6 +1119,12 @@ def get_india_us_data(creds, sheet_id):
         if not row: continue
         month = str(g(row, month_col)).strip()
         if month not in MONTH_ORDER: continue
+
+        # A cancelled shipment never actually happened — exclude it from
+        # every downstream total (shipment counts, qty sent, shortage, etc.)
+        ship_status = str(g(row, ship_status_col)).strip().lower() if ship_status_col >= 0 else ''
+        if ship_status == 'cancelled':
+            continue
 
         bucket  = str(g(row, bucket_col)).strip()
         sub     = str(g(row, sub_col)).strip()
