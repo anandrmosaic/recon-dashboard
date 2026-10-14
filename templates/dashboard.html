@@ -1694,16 +1694,13 @@ function renderDashboardOverview(data, lastUpdated) {
   // ── Total short: Final Diff (Q-T) — confirmed shorts only ───────────────
   // Rules:
   //  1. Exclude intransit rows — shipment not yet received, diff is provisional, not confirmed short
-  //  2. Deduplicate by label — child-SKU rows share the same diff; take only first row per label
+  //  2. Sum every (non-intransit) row's diff — confirmed each row is a genuine
+  //     separate child-SKU shortage, not a duplicate of its parent label, so
+  //     no deduplication here (same labels can carry different diffs).
   //  3. Sum only positive diffs — negative = over-received, not a shortage
-  const _seenDiffLbl = {};
-  rows
+  const totalShort = rows
     .filter(r => r.bucket_key !== 'intransit')
-    .forEach(r => {
-      const lbl = r.label || r.from_label || '';
-      if (lbl && !(lbl in _seenDiffLbl)) _seenDiffLbl[lbl] = r.diff || 0;
-    });
-  const totalShort = Object.values(_seenDiffLbl).filter(v => v > 0).reduce((s,v) => s+v, 0);
+    .reduce((s,r) => s + Math.max(0, r.diff || 0), 0);
   const totalPending = Math.max(0, totalExpected - totalRecovered);
   const recovPct     = totalExpected > 0 ? ((totalRecovered/totalExpected)*100).toFixed(1) : '0.0';
 
@@ -2325,9 +2322,11 @@ function renderDashboardOverview(data, lastUpdated) {
 
       <div class="kpi-card green">
         <div class="kpi-icon"><i class="fas fa-dollar-sign"></i></div>
-        <div class="kpi-value" style="font-size:22px">${formatUSD(totalRecovered)}</div>
+        <div class="kpi-value" style="font-size:22px">${_dashView==='india_us' ? formatUSD(cbTotRec) : formatUSD(totalRecovered)}</div>
         <div class="kpi-label">Total Recovered</div>
-        <div class="kpi-sub">${recovPct}% of ${formatUSD(totalExpected)}</div>
+        <div class="kpi-sub">${_dashView==='india_us'
+          ? ((cbGrand>0 ? (cbTotRec/cbGrand*100).toFixed(1) : '0.0')+'% of '+formatUSD(cbGrand))
+          : (recovPct+'% of '+formatUSD(totalExpected))}</div>
       </div>
 
       <!-- Card 6: Total Claim Value -->
