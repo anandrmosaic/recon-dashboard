@@ -1,0 +1,1049 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShipBob D2C · Delivery &amp; Claims</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ---------- design tokens ---------- */
+:root {
+  color-scheme: light;
+  --bg: #f4f6f9; --surface: #ffffff; --surface-2: #f8f9fb;
+  --ink: #101828; --ink-2: #475467; --muted: #667085;
+  --line: #e4e7ec; --line-2: #eef0f4;
+  --brand: #1b3a2d; --brand-ink: #ffffff; --link: #1d4ed8;
+  --pending: #2a78d6; --raised: #eb6834; --received: #1baf7a; --expired: #eda100;
+  --good: #067647; --good-bg: #e7f6ee; --warn: #93370d; --warn-bg: #fff3d6; --crit: #b42318; --crit-bg: #fdecea;
+  --info: #1d4ed8; --info-bg: #e8f0fe;
+  --dot-good: #12b76a; --dot-warn: #f79009; --dot-crit: #f04438; --dot-info: #2e90fa; --dot-mute: #98a2b3;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.04);
+  --shadow-lg: 0 20px 50px rgba(16,24,40,.28);
+  --r-lg: 14px; --r-md: 10px; --r-sm: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b1017; --surface: #141b24; --surface-2: #19212c;
+    --ink: #eef2f7; --ink-2: #b6c0cd; --muted: #8e9aab;
+    --line: #28323f; --line-2: #202935;
+    --brand: #2d5a3d; --brand-ink: #ffffff; --link: #8ab4ff;
+    --pending: #3987e5; --raised: #d95926; --received: #199e70; --expired: #c98500;
+    --good: #4ade80; --good-bg: #123222; --warn: #fbbf24; --warn-bg: #3a2c0c; --crit: #fca5a5; --crit-bg: #3b1a1a;
+    --info: #8ab4ff; --info-bg: #172a4a;
+    --shadow: 0 1px 2px rgba(0,0,0,.5); --shadow-lg: 0 20px 50px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1017; --surface: #141b24; --surface-2: #19212c;
+  --ink: #eef2f7; --ink-2: #b6c0cd; --muted: #8e9aab;
+  --line: #28323f; --line-2: #202935;
+  --brand: #2d5a3d; --brand-ink: #ffffff; --link: #8ab4ff;
+  --pending: #3987e5; --raised: #d95926; --received: #199e70; --expired: #c98500;
+  --good: #4ade80; --good-bg: #123222; --warn: #fbbf24; --warn-bg: #3a2c0c; --crit: #fca5a5; --crit-bg: #3b1a1a;
+  --info: #8ab4ff; --info-bg: #172a4a;
+  --shadow: 0 1px 2px rgba(0,0,0,.5); --shadow-lg: 0 20px 50px rgba(0,0,0,.6);
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+h1, h2, h3, p { margin: 0; }
+button { font: inherit; color: inherit; }
+a { color: var(--link); }
+[hidden] { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 6px; }
+svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.wrap { max-width: 100%; margin: 0 auto; padding: 24px 24px 72px; }
+section { margin-bottom: 24px; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.sec-head h2 { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.sec-head .hint { color: var(--muted); font-size: 13px; }
+
+/* ---------- header + page tabs ---------- */
+.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.top-in { max-width: 100%; margin: 0 auto; padding: 12px 24px 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logo { width: 38px; height: 38px; border-radius: 10px; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; }
+.brand h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+.brand p { font-size: 12.5px; color: var(--muted); }
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nav-in { max-width: 100%; margin: 0 auto; padding: 4px 24px 0; display: flex; gap: 4px; }
+.nav-in button { border: 0; background: transparent; padding: 10px 14px; font-weight: 600; font-size: 14px; color: var(--ink-2); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.nav-in button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brand); }
+:root[data-theme="dark"] .nav-in button[aria-selected="true"] { border-bottom-color: var(--link); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 13.5px; font-weight: 600; text-decoration: none; color: var(--ink);
+  transition: background .15s, border-color .15s; }
+.btn:hover { background: var(--surface-2); border-color: color-mix(in srgb, var(--ink) 18%, var(--line)); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.primary:hover { filter: brightness(1.12); }
+.btn.sm { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+.btn.icon { width: 40px; padding: 0; }
+.spin svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); padding: 2px; gap: 2px; }
+.seg button { border: 0; background: transparent; min-height: 34px; padding: 0 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); }
+.fresh { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.fresh .d { width: 8px; height: 8px; border-radius: 50%; background: var(--dot-mute); }
+.fresh.ok .d { background: var(--dot-good); } .fresh.warn .d { background: var(--dot-warn); } .fresh.stale .d { background: var(--dot-crit); }
+.fresh.ok { background: var(--surface); } .fresh.warn { background: var(--warn-bg); } .fresh.stale { background: var(--crit-bg); }
+
+/* ---------- cards ---------- */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.pad { padding: 20px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.6; }
+.pill.ok { background: var(--good-bg); color: var(--good); } .pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.crit { background: var(--crit-bg); color: var(--crit); } .pill.info { background: var(--info-bg); color: var(--info); }
+.pill.mute { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+
+/* ---------- today's actions ---------- */
+.acts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.act { text-align: left; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--dot-mute); border-radius: var(--r-md);
+  padding: 12px 14px; cursor: pointer; box-shadow: var(--shadow); display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center; transition: background .15s; }
+.act:hover { background: var(--surface-2); }
+.act .n { grid-row: span 2; font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; min-width: 40px; text-align: center; }
+.act .l { font-size: 13px; font-weight: 700; line-height: 1.3; }
+.act .s { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.act.crit { border-left-color: var(--dot-crit); } .act.warn { border-left-color: var(--dot-warn); }
+.act.info { border-left-color: var(--dot-info); } .act.ok { border-left-color: var(--dot-good); }
+.act.ok .n { color: var(--good); }
+
+/* ---------- bucket strip ---------- */
+.strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow: hidden; }
+.tile { padding: 18px 20px; border: 0; border-right: 1px solid var(--line-2); background: transparent; text-align: left; display: block; width: 100%; }
+.tile:last-child { border-right: 0; }
+button.tile { cursor: pointer; transition: background .15s; }
+button.tile:hover { background: var(--surface-2); }
+.tile .lbl { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.tile .val { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+.tile .note { font-size: 12.5px; color: var(--muted); }
+
+/* ---------- claims + mailer ---------- */
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.claims { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.stage { padding: 18px 18px 14px; display: flex; flex-direction: column; cursor: pointer; }
+.stage .lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+.stage .sq { width: 10px; height: 10px; border-radius: 3px; }
+.stage .val { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; margin: 8px 0 2px; font-variant-numeric: tabular-nums; }
+.stage .note { font-size: 12.5px; color: var(--muted); }
+.mbars { display: flex; align-items: flex-end; gap: 6px; height: 104px; margin-top: 14px; border-bottom: 1px solid var(--line); }
+.mcol { background: none; border: 0; padding: 0; font: inherit; color: inherit; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.mcol .v { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 3px; line-height: 1; }
+button.mcol { cursor: pointer; }
+.mcol.zero .v { color: var(--muted); font-weight: 400; }
+.mcol .bar { width: 100%; max-width: 34px; border-radius: 4px 4px 0 0; }
+.mcol:hover .bar { filter: brightness(1.12); outline: 2px solid var(--ink-2); outline-offset: 1px; }
+.mlabels { display: flex; gap: 6px; margin-top: 4px; }
+.mlabels span { flex: 1; text-align: center; font-size: 11.5px; color: var(--muted); }
+.expired-line { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--crit-bg); color: var(--ink); width: 100%; text-align: left;
+  border: 1px solid color-mix(in srgb, var(--dot-crit) 25%, transparent); cursor: pointer; font-size: 13px; }
+.expired-line b { color: var(--crit); font-size: 15px; }
+.expired-line .m { display: block; color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.money { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.gm { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-bottom: 12px; font-size: 13px; }
+.mrow { padding: 14px 0; border-top: 1px solid var(--line-2); }
+.mrow .mh { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mrow .mt { font-weight: 700; font-size: 13.5px; }
+.mrow .mc { font-size: 12.5px; color: var(--muted); margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.mail .auto { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line-2); font-size: 12.5px; color: var(--muted); }
+
+/* ---------- claims value table ---------- */
+.vt th { background: var(--brand); color: var(--brand-ink); border-bottom: 0; font-size: 12px; position: static; }
+.vt th:first-child { border-top-left-radius: var(--r-md); } .vt th:last-child { border-top-right-radius: var(--r-md); }
+.vt td { padding: 12px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.vt td:first-child { font-weight: 600; }
+.vt .sq { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
+.vt td.dash { color: var(--muted); }
+.vt td.tot { font-weight: 700; }
+.vt td.pc { color: var(--muted); font-size: 12.5px; }
+.vt tr.elig td { font-weight: 700; background: var(--surface-2); border-top: 2px solid var(--line); }
+.vt tr.exp td { color: var(--muted); font-size: 13px; }
+
+/* ---------- trend + carriers ---------- */
+.trendrow { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: stretch; }
+.chart-box { position: relative; height: 270px; padding: 12px 20px 8px; }
+.cbars { display: grid; gap: 12px; padding: 4px 20px 18px; }
+.cb { display: grid; grid-template-columns: 112px 1fr 52px; gap: 10px; align-items: center; font-size: 13px; }
+.cb .track { height: 8px; background: var(--line-2); border-radius: 4px; overflow: hidden; }
+.cb .fill { height: 100%; background: var(--raised); border-radius: 4px; }
+.cb .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.cb .n { color: var(--muted); font-size: 11.5px; display: block; line-height: 1.2; }
+
+/* ---------- tables ---------- */
+.scroll { overflow: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 8px 12px; border-bottom: 1px solid var(--line-2); text-align: right; white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--surface); z-index: 1; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child, .l { text-align: left; }
+tbody tr:hover td { background: var(--surface-2); }
+tr.total td { font-weight: 700; border-top: 2px solid var(--line); background: var(--surface-2); }
+.gl { border-left: 1px solid var(--line); }
+.minibar { display: inline-block; height: 8px; border-radius: 0 4px 4px 0; background: var(--raised); vertical-align: middle; margin-left: 8px; }
+
+/* ---------- tabs + lists ---------- */
+.sel { min-height: 36px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; padding: 0 8px; }
+.linkbtn { border: 0; background: none; color: var(--link); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding: 0 12px; }
+.tab { border: 0; background: transparent; padding: 12px 12px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab .c { margin-left: 6px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brand); }
+:root[data-theme="dark"] .tab[aria-selected="true"] { border-bottom-color: var(--link); }
+.listbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 14px 20px 10px; }
+.listbar .desc { font-size: 13px; color: var(--ink-2); flex: 1 1 320px; }
+.search { position: relative; }
+.search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); width: 16px; height: 16px; }
+.search input { min-height: 36px; width: 280px; max-width: 100%; padding: 0 12px 0 32px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+.listwrap { max-height: 520px; overflow: auto; border-top: 1px solid var(--line-2); }
+.foot { padding: 10px 20px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line-2); }
+.empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+/* ---------- log: mail activity, checks, rules ---------- */
+.mlog { padding: 14px 20px; border-top: 1px solid var(--line-2); }
+.mlog:first-child { border-top: 0; }
+.mlog .t { font-weight: 700; font-size: 13.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.runs { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--ink-2); display: grid; gap: 4px; }
+details.prev { margin-top: 8px; font-size: 12.5px; }
+details.prev summary { cursor: pointer; color: var(--link); }
+details.prev pre { white-space: pre-wrap; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px; font: 12px/1.55 ui-monospace, Consolas, monospace; max-height: 300px; overflow: auto; margin: 8px 0 0; }
+details.sect { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); margin-bottom: 12px; }
+details.sect summary { cursor: pointer; padding: 16px 20px; font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 10px; list-style: none; }
+details.sect summary::-webkit-details-marker { display: none; }
+details.sect summary::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+details.sect[open] summary::after { transform: rotate(-135deg); }
+details.sect .body { padding: 0 20px 18px; }
+.check { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 12px 0; border-top: 1px solid var(--line-2); align-items: start; }
+.check .t { font-weight: 600; font-size: 13.5px; } .check .h { color: var(--muted); font-size: 12.5px; grid-column: 2; }
+.ids { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
+.chip { font: 12px ui-monospace, Consolas, monospace; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; color: var(--ink); }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px 28px; font-size: 13px; color: var(--ink-2); }
+.rules b { color: var(--ink); }
+
+/* ---------- overlay + toast ---------- */
+.overlay { position: fixed; inset: 0; background: rgba(8,12,20,.55); display: grid; place-items: center; z-index: 60; padding: 16px; }
+.modal { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); max-width: 520px; width: 100%; padding: 24px; box-shadow: var(--shadow-lg); }
+.modal h3 { font-size: 18px; margin-bottom: 2px; }
+.modal .big { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin: 12px 0 4px; }
+.modal table td { white-space: normal; text-align: left; } .modal table td:first-child { color: var(--muted); width: 42%; }
+.msg { padding: 10px 12px; border-radius: var(--r-sm); font-size: 13px; margin-top: 8px; }
+.msg.ok { background: var(--good-bg); } .msg.warn { background: var(--warn-bg); } .msg.stale { background: var(--crit-bg); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 10px;
+  font-size: 13.5px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 70; max-width: 92vw; box-shadow: var(--shadow-lg); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.skel { background: linear-gradient(90deg, var(--line-2), var(--surface-2), var(--line-2)); background-size: 200% 100%; animation: sh 1.4s infinite; border-radius: var(--r-lg); }
+@keyframes sh { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- motion: subtle, opacity / transform only, off when the system asks for reduced motion ---------- */
+:root { --ease: cubic-bezier(.2, .7, .2, 1); }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes growx { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 50%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+/* .reveal: see the colour + motion block below */
+
+.mcol .bar { transform-origin: bottom; animation: grow .6s var(--ease) both; animation-delay: calc(var(--k, 0) * 50ms + 160ms); }
+.cb .fill { transform-origin: left; animation: growx .7s var(--ease) both; animation-delay: calc(var(--k, 0) * 60ms + 200ms); }
+.modal { animation: pop .22s var(--ease) both; }
+.fresh.warn .d { color: var(--dot-warn); animation: ring 1.8s ease-out infinite; }                   /* stale data gets a soft pulse */
+.fresh.stale .d { color: var(--dot-crit); animation: ring 1.8s ease-out infinite; }
+.tile, .act, .stage, .btn, .seg button, .tab, .nav-in button, .chip, .expired-line, .mcol .bar { transition: transform .18s var(--ease), box-shadow .18s var(--ease), background .15s, border-color .15s, color .15s, opacity .15s; }
+.act:hover, .stage:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(16, 24, 40, .10); }
+.btn:active, .seg button:active, .act:active, .stage:active, .chip:active { transform: scale(.98); }
+.btn.primary:hover { box-shadow: 0 6px 16px rgba(27, 47, 91, .28); }
+
+/* ---------- colour: light tints, one hue per meaning ---------- */
+:root { --a-blue: #3b82f6; --a-green: #12b76a; --a-amber: #f79009; --a-red: #f04438; --a-violet: #7c5cff; --a-teal: #14b8a6; --a-slate: #64748b; --a-orange: #f97316; }
+.t-blue { --acc: var(--a-blue); } .t-green { --acc: var(--a-green); } .t-amber { --acc: var(--a-amber); } .t-red { --acc: var(--a-red); }
+.t-violet { --acc: var(--a-violet); } .t-teal { --acc: var(--a-teal); } .t-slate { --acc: var(--a-slate); } .t-orange { --acc: var(--a-orange); }
+body { background: radial-gradient(900px 380px at 10% -90px, color-mix(in srgb, var(--a-blue) 11%, transparent), transparent) no-repeat,
+  radial-gradient(800px 360px at 94% -70px, color-mix(in srgb, var(--a-violet) 9%, transparent), transparent) no-repeat, var(--bg); }
+.sec-head h2::before { content: ""; display: inline-block; width: 4px; height: 15px; border-radius: 2px; margin-right: 9px; vertical-align: -2px; background: var(--acc, var(--brand)); }
+.card.soft { background: color-mix(in srgb, var(--acc, var(--a-slate)) 5%, var(--surface)); border-color: color-mix(in srgb, var(--acc, var(--a-slate)) 20%, var(--line)); }
+.card.soft th { background: color-mix(in srgb, var(--acc, var(--a-slate)) 8%, var(--surface)); }
+.card.soft tbody tr:hover td { background: color-mix(in srgb, var(--acc, var(--a-slate)) 9%, var(--surface)); }
+.card.soft .tabs, .card.soft .listwrap, .card.soft .foot { border-color: color-mix(in srgb, var(--acc, var(--a-slate)) 18%, var(--line-2)); }
+.tile { background: color-mix(in srgb, var(--acc, var(--a-slate)) 9%, var(--surface)); border-right-color: color-mix(in srgb, var(--acc, var(--a-slate)) 22%, var(--surface)); }
+button.tile:hover, .tile:hover { background: color-mix(in srgb, var(--acc, var(--a-slate)) 17%, var(--surface)); }
+.card.stage { background: color-mix(in srgb, var(--acc) 7%, var(--surface)); border-color: color-mix(in srgb, var(--acc) 26%, var(--line)); border-top: 3px solid var(--acc); }
+.act { position: relative; background: color-mix(in srgb, var(--acc, var(--a-slate)) 9%, var(--surface)); border-color: color-mix(in srgb, var(--acc, var(--a-slate)) 24%, var(--line)); }
+.act:hover { background: color-mix(in srgb, var(--acc, var(--a-slate)) 15%, var(--surface)); }
+.act.ok { --acc: var(--a-green); } .act.crit { --acc: var(--a-red); } .act.warn { --acc: var(--a-amber); } .act.info { --acc: var(--a-blue); }
+.card.mail { background: color-mix(in srgb, var(--a-violet) 6%, var(--surface)); border-color: color-mix(in srgb, var(--a-violet) 24%, var(--line)); }
+.vt tr.r-green td { background: color-mix(in srgb, var(--a-green) 9%, var(--surface)); }
+.vt tr.r-orange td { background: color-mix(in srgb, var(--a-orange) 9%, var(--surface)); }
+.vt tr.r-blue td { background: color-mix(in srgb, var(--a-blue) 9%, var(--surface)); }
+.vt tr.elig td { background: color-mix(in srgb, var(--a-slate) 13%, var(--surface)); }
+.vt tr.exp td { background: color-mix(in srgb, var(--a-amber) 9%, var(--surface)); }
+details.sect { background: color-mix(in srgb, var(--a-violet) 5%, var(--surface)); border-color: color-mix(in srgb, var(--a-violet) 20%, var(--line)); }
+details.sect#checks { background: color-mix(in srgb, var(--a-amber) 6%, var(--surface)); border-color: color-mix(in srgb, var(--a-amber) 26%, var(--line)); }
+
+/* ---------- motion v2: sections reveal as they scroll into view, tiles pop in one by one, sliding indicators ---------- */
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .65s var(--ease), transform .65s var(--ease); transition-delay: calc(var(--i, 0) * 60ms); }
+.reveal.in { opacity: 1; transform: none; }
+.reveal:not(.in) .mcol .bar, .reveal:not(.in) .cb .fill { animation-play-state: paused; }
+@keyframes tilein { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+.stagger > * { opacity: 0; }
+.in .stagger > * { opacity: 1; animation: tilein .6s cubic-bezier(.34, 1.4, .64, 1) backwards; animation-delay: calc(var(--n, 0) * 75ms + 140ms); }
+.in.done .stagger > * { animation: none; }
+.stagger > *:nth-child(1) { --n: 0; } .stagger > *:nth-child(2) { --n: 1; } .stagger > *:nth-child(3) { --n: 2; }
+.stagger > *:nth-child(4) { --n: 3; } .stagger > *:nth-child(5) { --n: 4; } .stagger > *:nth-child(6) { --n: 5; }
+.in .stagger > .act:hover, .in .stagger > .stage:hover { transform: translateY(-3px); }
+@keyframes flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--acc, var(--a-blue)) 50%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+.flash { animation: flash 1.1s ease-out !important; }
+@keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--a-red) 22%, transparent); } }
+.act.crit::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; animation: breathe 3.4s ease-in-out infinite; }
+.nav-in { position: relative; }
+.nav-ink { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; border-radius: 2px; background: var(--brand); transition: transform .32s var(--ease), width .32s var(--ease); }
+:root[data-theme="dark"] .nav-ink { background: var(--link); }
+.nav-in button[aria-selected="true"] { border-bottom-color: transparent !important; }
+.seg { position: relative; }
+.seg .thumb { position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 0; width: 0; border-radius: 6px; background: var(--brand); transition: transform .3s var(--ease), width .3s var(--ease); }
+.seg button { position: relative; z-index: 1; }
+.seg button[aria-pressed="true"] { background: transparent; color: var(--brand-ink); }
+.fade-in tbody tr { animation: rise .32s var(--ease) backwards; }
+.fade-in tbody tr:nth-child(1) { animation-delay: 16ms; }
+.fade-in tbody tr:nth-child(2) { animation-delay: 32ms; }
+.fade-in tbody tr:nth-child(3) { animation-delay: 48ms; }
+.fade-in tbody tr:nth-child(4) { animation-delay: 64ms; }
+.fade-in tbody tr:nth-child(5) { animation-delay: 80ms; }
+.fade-in tbody tr:nth-child(6) { animation-delay: 96ms; }
+.fade-in tbody tr:nth-child(7) { animation-delay: 112ms; }
+.fade-in tbody tr:nth-child(8) { animation-delay: 128ms; }
+.fade-in tbody tr:nth-child(9) { animation-delay: 144ms; }
+.fade-in tbody tr:nth-child(10) { animation-delay: 160ms; }
+.fade-in tbody tr:nth-child(11) { animation-delay: 176ms; }
+.fade-in tbody tr:nth-child(12) { animation-delay: 192ms; }
+.fade-in tbody tr:nth-child(13) { animation-delay: 208ms; }
+.fade-in tbody tr:nth-child(14) { animation-delay: 224ms; }
+.card.stage:hover .mcol .bar { filter: saturate(1.2) brightness(1.04); }
+
+/* ---------- Shipment log colours ---------- */
+.tabs .tab { border-radius: 8px 8px 0 0; }
+.tab .tdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; background: var(--acc, var(--a-slate)); }
+.tabs .tab:hover { background: color-mix(in srgb, var(--acc, var(--a-slate)) 9%, transparent); }
+.tabs .tab[aria-selected="true"] { background: color-mix(in srgb, var(--acc, var(--a-slate)) 14%, transparent); border-bottom-color: var(--acc, var(--a-slate)) !important; color: var(--ink); }
+.tabs .tab[aria-selected="true"] .c { color: var(--ink); }
+.card.soft .listbar { background: color-mix(in srgb, var(--acc, var(--a-slate)) 5%, transparent); }
+#lists .sel, #lists .search input { border-color: color-mix(in srgb, var(--acc, var(--a-slate)) 30%, var(--line)); background: color-mix(in srgb, var(--acc, var(--a-slate)) 4%, var(--surface)); }
+#lists .sel:focus-visible, #lists .search input:focus-visible { outline: 2px solid var(--acc, var(--link)); outline-offset: 1px; }
+.card.soft tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--acc, var(--a-slate)) 3.5%, var(--surface)); }
+.card.soft tbody tr:hover td { background: color-mix(in srgb, var(--acc, var(--a-slate)) 11%, var(--surface)); }
+.card.soft th { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--acc, var(--a-slate)) 55%, transparent); }
+.cg-green { --cg: var(--a-green); } .cg-blue { --cg: var(--a-blue); } .cg-amber { --cg: var(--a-amber); } .cg-red { --cg: var(--a-red); }
+.cg-orange { --cg: var(--a-orange); } .cg-slate { --cg: var(--a-slate); } .cg-violet { --cg: var(--a-violet); }
+.card.soft th[class*="cg-"] { background: color-mix(in srgb, var(--cg) 13%, var(--surface)); box-shadow: inset 0 -3px 0 var(--cg); color: var(--ink); }
+.card.soft tbody tr td[class*="cg-"] { background: color-mix(in srgb, var(--cg) 6.5%, var(--surface)); }
+.card.soft tbody tr:hover td[class*="cg-"] { background: color-mix(in srgb, var(--cg) 14%, var(--surface)); }
+.card.soft tr.total td[class*="cg-"] { background: color-mix(in srgb, var(--cg) 13%, var(--surface)); }
+.mlog[class*="t-"] { border-left: 4px solid var(--acc); background: color-mix(in srgb, var(--acc) 6%, transparent); }
+.rule { border-left: 3px solid var(--acc, var(--a-slate)); padding-left: 10px; }
+.rule b { color: color-mix(in srgb, var(--acc, var(--a-slate)) 70%, var(--ink)); }
+.check .t { color: var(--ink); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) { .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .row2, .trendrow { grid-template-columns: 1fr; } .strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tile { border-bottom: 1px solid var(--line-2); } }
+@media (max-width: 900px) { .claims { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .acts { grid-template-columns: 1fr; } .wrap { padding: 16px 16px 56px; } .top-in, .nav-in { padding-left: 16px; padding-right: 16px; } .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile .val { font-size: 26px; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <div class="logo"><svg class="i" width="20" height="20"><use href="#i-box"/></svg></div>
+      <div><h1>ShipBob D2C</h1><p id="sub">Delivery &amp; claims</p></div>
+    </div>
+    <div class="actions">
+      <button class="fresh" id="freshBadge" hidden aria-haspopup="dialog"></button>
+      <div class="seg" role="group" aria-label="Count by" id="unitSeg">
+        <button data-u="lines" aria-pressed="true" title="One row per product, same as your Excel pivot">Line items</button>
+        <button data-u="orders" aria-pressed="false" title="Each shipment counted once">Orders</button>
+      </div>
+      <button class="btn primary" id="refreshBtn"><svg class="i"><use href="#i-refresh"/></svg><span>Refresh</span></button>
+    </div>
+  </div>
+  <nav class="nav-in" role="tablist" aria-label="Pages"><span class="nav-ink" aria-hidden="true"></span>
+    <button role="tab" id="nav-dash" data-p="dash" aria-selected="true">Dashboard</button>
+    <button role="tab" id="nav-log" data-p="log" aria-selected="false">Shipment log</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div id="loading">
+    <div class="skel" style="height:96px;margin-bottom:16px"></div>
+    <div class="skel" style="height:300px;margin-bottom:16px"></div>
+    <p style="text-align:center;color:var(--muted)" id="loadmsg">Reading the Excel from the G: drive… the first load takes about a minute.</p>
+  </div>
+
+  <div id="app" hidden>
+    <!-- ============ DASHBOARD ============ -->
+    <div id="view-dash" role="tabpanel" aria-labelledby="nav-dash">
+      <section aria-labelledby="h-buckets" class="reveal t-blue" style="--i:0">
+        <div class="sec-head"><h2 id="h-buckets">Order buckets</h2><span class="hint" id="unitHint"></span></div>
+        <div class="card strip stagger" id="strip"></div>
+      </section>
+
+      <div class="row2">
+        <section aria-labelledby="h-claims" class="reveal t-orange" style="margin:0;--i:1">
+          <div class="sec-head"><h2 id="h-claims">Claims</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <div class="seg" role="group" aria-label="Claim cards by" id="claimSeg">
+                <button data-c="month" aria-pressed="true" title="Orders by the month they were imported">By month</button>
+                <button data-c="age" aria-pressed="false" title="Orders by days since the Import Date">By age</button>
+              </div>
+              <div class="money" id="money"></div></div></div>
+          <div class="claims stagger" id="claims"></div>
+        </section>
+        <section aria-labelledby="h-mail" class="reveal t-violet" style="margin:0;--i:2">
+          <div class="sec-head"><h2 id="h-mail">ShipBob mails</h2></div>
+          <div class="card pad mail" id="mail"></div>
+        </section>
+      </div>
+
+      <section aria-labelledby="h-val" class="reveal t-green" style="margin-top:24px;--i:3">
+        <div class="sec-head"><h2 id="h-val">Claims value by month</h2><span class="hint" id="valHint"></span></div>
+        <div class="card"><div class="scroll"><table class="vt" id="valTbl"></table></div><div class="foot" id="valFoot"></div></div>
+      </section>
+
+      <div class="trendrow" style="margin-top:24px">
+        <section data-onview="trend" aria-labelledby="h-trend" class="reveal t-blue" style="margin:0;--i:4">
+          <div class="sec-head">
+            <h2 id="h-trend">Under Dispute by claim stage</h2>
+            <div class="seg" role="group" aria-label="View" id="viewSeg">
+              <button data-v="month" aria-pressed="true">By import month</button>
+              <button data-v="ageing" aria-pressed="false">By ageing</button>
+            </div>
+          </div>
+          <div class="card soft"><div class="chart-box"><canvas id="trendChart" role="img" aria-label="Under Dispute orders by claim stage"></canvas></div></div>
+        </section>
+        <section aria-labelledby="h-car" class="reveal t-teal" style="margin:0;--i:5">
+          <div class="sec-head"><h2 id="h-car">Carrier loss %</h2><span class="hint">Under Dispute ÷ closed</span></div>
+          <div class="card soft"><div class="cbars" id="carBars" style="padding-top:16px"></div></div>
+        </section>
+      </div>
+    
+      <section aria-labelledby="h-act" class="reveal t-red" style="margin-top:24px;--i:6">
+        <div class="sec-head"><h2 id="h-act">Today's actions</h2><span class="hint">Click one to open exactly those orders</span></div>
+        <div class="acts stagger" id="acts"></div>
+      </section>
+    </div>
+
+    <!-- ============ SHIPMENT LOG ============ -->
+    <div id="view-log" role="tabpanel" aria-labelledby="nav-log" hidden>
+      <section aria-labelledby="h-lists" id="lists" class="reveal t-blue" style="--i:0">
+        <div class="sec-head"><h2 id="h-lists">Order lists</h2></div>
+        <div class="card soft">
+          <div class="tabs" role="tablist" id="tabs"></div>
+          <div class="listbar">
+            <p class="desc" id="tabDesc"></p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <span id="filters" style="display:contents">
+                <select class="sel" id="fMonth" aria-label="Filter by import month"></select>
+                <select class="sel" id="fBand" aria-label="Filter by days since import"></select></span>
+              <label class="search"><span class="sr-only">Search the list</span><svg class="i"><use href="#i-search"/></svg>
+                <input type="search" id="search" placeholder="Search order, tracking, carrier…"></label>
+              <a class="btn sm" id="dl" href="#"><svg class="i" style="width:16px;height:16px"><use href="#i-download"/></svg>Excel</a>
+            </div>
+          </div>
+          <div class="listwrap"><table id="listTbl"></table></div>
+          <div class="foot" id="rowCount"></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-rep" class="reveal t-green" style="--i:1">
+        <div class="sec-head">
+          <h2 id="h-rep">Reports</h2>
+          <div class="seg" role="group" aria-label="Report" id="repSeg">
+            <button data-r="month" aria-pressed="true">Month-wise</button>
+            <button data-r="ageing" aria-pressed="false">Claims ageing</button>
+            <button data-r="carriers" aria-pressed="false">Carriers</button>
+          </div>
+        </div>
+        <div class="card soft"><div class="scroll"><table id="repTbl"></table></div></div>
+      </section>
+
+      <section aria-labelledby="h-ml" class="reveal t-violet" style="--i:2">
+        <div class="sec-head"><h2 id="h-ml">Mail activity</h2></div>
+        <div class="card soft" id="mailLog"></div>
+      </section>
+
+      <details class="sect" id="checks"><summary id="checksTitle">Data checks</summary><div class="body" id="checksBody"></div></details>
+      <details class="sect"><summary>How the numbers are worked out</summary><div class="body"><div class="rules" id="rules"></div></div></details>
+    </div>
+  </div>
+</main>
+
+<div class="overlay" id="freshModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="freshTitle">
+    <h3 id="freshTitle">Data freshness</h3>
+    <p style="color:var(--muted);font-size:13px">How current the numbers on this dashboard are</p>
+    <div class="big" id="freshBig"></div>
+    <table id="freshTbl"></table>
+    <div class="msg" id="freshMsg"></div>
+    <div style="text-align:right;margin-top:16px"><button class="btn primary" id="freshOk">OK</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const fmt = n => (n ?? 0).toLocaleString('en-US');
+const usd = n => '$' + (n ?? 0).toLocaleString('en-US', {maximumFractionDigits: 0});
+const pct = n => (n ?? 0).toFixed(2) + '%';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const icon = (n, s = 18) => `<svg class="i" width="${s}" height="${s}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const unitWord = () => unit === 'lines' ? 'line items' : 'orders';
+const KINDS = ['potential', 'claims'];
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let trendVisible = !('IntersectionObserver' in window);
+const io = ('IntersectionObserver' in window) ? new IntersectionObserver(es => es.forEach(e => {
+  if (!e.isIntersecting) return;
+  e.target.classList.add('in'); io.unobserve(e.target);
+  setTimeout(() => e.target.classList.add('done'), 1800);          // stop the tile entrance animation from replaying on re-render
+  if (e.target.dataset.onview === 'trend') { trendVisible = true; if (D) drawTrend(); }
+}), {threshold: 0.1, rootMargin: '0px 0px -5% 0px'}) : null;
+function watchReveal(root = document) { $$('.reveal:not(.in)', root).forEach(el => io ? io.observe(el) : el.classList.add('in', 'done')); }
+function placeInk() {
+  const b = $('.nav-in button[aria-selected="true"]'), ink = $('.nav-ink'); if (!b || !ink || !b.offsetWidth) return;
+  ink.style.width = b.offsetWidth + 'px'; ink.style.transform = `translateX(${b.offsetLeft}px)`;
+}
+function placeThumb(seg, instant) {
+  const b = seg.querySelector('[aria-pressed="true"]'), t = seg.querySelector('.thumb'); if (!b || !t || !b.offsetWidth) return;
+  if (instant) t.style.transition = 'none';
+  t.style.width = b.offsetWidth + 'px'; t.style.transform = `translateX(${b.offsetLeft}px)`;
+  if (instant) { void t.offsetWidth; t.style.transition = ''; }
+}
+function initSegs() {
+  $$('.seg').forEach(seg => {
+    if (seg.querySelector('.thumb')) return;
+    const t = document.createElement('span'); t.className = 'thumb'; t.setAttribute('aria-hidden', 'true'); seg.prepend(t);
+    new MutationObserver(() => placeThumb(seg)).observe(seg, {attributes: true, subtree: true, attributeFilter: ['aria-pressed']});
+  });
+  placeAll(true);
+}
+function placeAll(instant) { placeInk(); $$('.seg').forEach(s => placeThumb(s, instant)); }
+addEventListener('resize', () => placeAll(true));
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => placeAll(true));
+// numbers count up to their value (from the previous value when the data changes); nothing replays on the 45 s status poll
+const prevNum = {};
+function countUp(root) {
+  $$('[data-count]', root).forEach(el => {
+    const key = el.dataset.key, to = +el.dataset.count, had = key in prevNum, from = prevNum[key] ?? 0;
+    prevNum[key] = to;
+    if (had && from !== to && !reduceMotion) { const box = el.closest('.tile, .stage, .act'); if (box) { box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 1200); } }
+    if (reduceMotion || from === to) { el.textContent = fmt(to); return; }
+    const t0 = performance.now(), dur = 700;
+    const tick = t => {
+      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt(Math.round(from + (to - from) * e));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    el.textContent = fmt(from); requestAnimationFrame(tick);
+  });
+}
+
+const BASE = '__BASE__';            // where this page is mounted (set by the server)
+const PAGE_BUILD = '__BUILD__';     // set by the server; a newer build on the server makes this tab reload itself
+let claimView = new URLSearchParams(location.search).get('cv') === 'age' ? 'age' : 'month';
+let D = null, ST = null, charts = [], tab = 'potential', view = 'month', rep = 'month', unit = 'lines', page = 'dash', lastVersion = null;
+try { unit = localStorage.getItem('sbUnit') || 'lines'; } catch (e) {}
+if (location.hash === '#log') page = 'log';
+const _q = new URLSearchParams(location.search);     // deep link: ?list=pending&band=61-90  or  ?list=raised&month=2026-09
+const _n = k => _q.get(k) === null ? null : +_q.get(k);
+let pendingOpen = _q.get('list') ? {id: _q.get('list'), f: {month: _q.get('month') || '', band: _q.get('band') || '', minAge: _n('minage'), maxAge: _n('maxage'), minClaim: _n('minclaim')}} : null;
+
+/* ---------- theme ----------
+   The toggle itself lives in the parent recon dashboard's header (same-origin,
+   this page is just an iframe of it) — both read/write the 'sbTheme'
+   localStorage key, so they always match. No toggle button on this page. */
+try {
+  const qt = new URLSearchParams(location.search).get('theme');      // ?theme=dark / ?theme=light (manual override, e.g. for testing)
+  const t = qt || localStorage.getItem('sbTheme'); if (t) document.documentElement.dataset.theme = t;
+} catch (e) {}
+window.addEventListener('storage', e => {
+  if (e.key === 'sbTheme' && e.newValue) {
+    document.documentElement.dataset.theme = e.newValue;
+    if (D && page === 'dash') drawTrend();
+  }
+});
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4200);
+}
+
+/* ---------- pages ---------- */
+function showPage(p) {
+  const changed = p !== page;
+  page = p;
+  if (changed) { trendVisible = !io; $$('.reveal', $(p === 'dash' ? '#view-dash' : '#view-log')).forEach(el => el.classList.remove('in', 'done')); }
+  $('#view-dash').hidden = p !== 'dash'; $('#view-log').hidden = p !== 'log';
+  $$('.nav-in button').forEach(b => b.setAttribute('aria-selected', b.dataset.p === p));
+  history.replaceState(null, '', p === 'log' ? '#log' : location.pathname + location.search);
+  placeAll(true); watchReveal($(p === 'dash' ? '#view-dash' : '#view-log'));
+  if (D && p === 'dash') drawTrend();
+}
+$$('.nav-in button').forEach(b => b.onclick = () => { showPage(b.dataset.p); window.scrollTo({top: 0}); });
+
+/* ---------- data ---------- */
+async function loadData(quiet) {
+  for (let i = 0; i < 150; i++) {
+    const r = await fetch(BASE + '/api/data?unit=' + unit);
+    if (r.ok) { D = await r.json(); await pollStatus(true); render(); if (!quiet) freshness(true); return; }
+    const j = await r.json().catch(() => ({}));
+    if (j.error) { $('#loadmsg').textContent = 'Could not read the Excel: ' + j.error; return; }
+    await new Promise(res => setTimeout(res, 2000));
+  }
+}
+async function pollStatus(silent) {
+  try {
+    ST = await (await fetch(BASE + '/api/status')).json();
+    if (ST.build && ST.build !== PAGE_BUILD && !PAGE_BUILD.startsWith('__')) { toast('A new version of the dashboard is ready. Reloading…'); setTimeout(() => location.reload(), 1200); return; }
+    if (!silent && lastVersion !== null && ST.version !== lastVersion) {
+      lastVersion = ST.version;
+      toast('The Excel changed. Dashboard updated.');
+      await loadData(true); return;
+    }
+    lastVersion = ST.version;
+    if (D) { renderMail(); renderMailLog(); renderActs(); }
+  } catch (e) {}
+}
+setInterval(() => pollStatus(false), 45000);
+
+$('#refreshBtn').onclick = async () => {
+  const b = $('#refreshBtn'); b.disabled = true; b.classList.add('spin'); $('span', b).textContent = 'Refreshing';
+  const j = await (await fetch(BASE + '/api/refresh', {method: 'POST'})).json().catch(() => ({ok: false, error: 'server not reachable'}));
+  b.disabled = false; b.classList.remove('spin'); $('span', b).textContent = 'Refresh';
+  if (!j.ok) return toast('Refresh failed: ' + j.error);
+  await loadData(); toast('Data refreshed from the Excel.');
+};
+$$('#unitSeg button').forEach(b => b.onclick = async () => {
+  unit = b.dataset.u; try { localStorage.setItem('sbUnit', unit); } catch (e) {}
+  await loadData(true);
+});
+$$('#viewSeg button').forEach(b => b.onclick = () => { view = b.dataset.v; $$('#viewSeg button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === view)); drawTrend(); });
+$$('#repSeg button').forEach(b => b.onclick = () => { rep = b.dataset.r; renderReports(); });
+$$('#claimSeg button').forEach(b => b.onclick = () => { claimView = b.dataset.c; renderClaims(); });
+
+/* ---------- render ---------- */
+function render() {
+  $('#loading').hidden = true; $('#app').hidden = false;
+  $$('#unitSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.u === unit));
+  const m = D.meta;
+  $('#sub').textContent = `${D.monthly[0]?.month} – ${D.monthly.at(-1)?.month} · data as of ${m.as_of}`;
+  $('#unitHint').textContent = `Counting ${unit === 'lines' ? 'line items, same as your Excel pivot' : 'orders, each shipment once'}`;
+  renderFresh(); renderActs(); renderStrip(); renderClaims(); renderValue(); renderMail(); renderCarrierBars();
+  renderTabs(); renderReports(); renderMailLog(); renderChecks(); renderRules();
+  showPage(page);
+  initSegs();
+  if (pendingOpen) { const o = pendingOpen; pendingOpen = null; openTab(o.id, o.f); }
+}
+
+function renderStrip() {
+  const k = D.kpis, s = D.meta.settings;
+  const tiles = [
+    ['Delivered', k.delivered, `${pct(k.delivery_rate)} of closed orders`, '--dot-good', null],
+    ['In Transit', k.in_transit, `0–${s.transit_days} days since import`, '--dot-info', 'in_transit'],
+    ['Potential In-Transit Loss', k.potential, `Day ${s.alert_from_day}–${s.transit_days} · ${fmt(k.potential - k.potential_mailed)} not mailed yet`, '--dot-warn', 'potential'],
+    ['Under Dispute', k.dispute, `${s.transit_days}+ days · loss rate ${pct(k.loss_rate)}`, '--dot-crit', 'pending'],
+    ['RTO', k.rto, 'Returned to origin', '--dot-mute', 'rto'],
+    ['Cancelled', k.cancelled, 'Cancelled orders', '--dot-mute', null],
+  ];
+  const TINTS = ['t-green', 't-blue', 't-amber', 't-red', 't-slate', 't-violet'];
+  $('#strip').innerHTML = tiles.map(([l, v, n, dot, t], idx) => {
+    const tint = TINTS[idx];
+    const inner = `<div class="lbl"><span class="dot" style="background:var(${dot})"></span>${l}</div><div class="val" data-count="${v}" data-key="b-${l}">${fmt(v)}</div><div class="note">${n}</div>`;
+    return t ? `<button class="tile ${tint}" data-tab="${t}" aria-label="${l}: ${fmt(v)}. Open the list in the Shipment log">${inner}</button>` : `<div class="tile ${tint}">${inner}</div>`;
+  }).join('');
+  countUp($('#strip'));
+  $$('#strip [data-tab]').forEach(b => b.onclick = () => openTab(b.dataset.tab));
+}
+
+const SUB_TAB = {'Pending to claim': 'pending', 'Claim raised but not received': 'raised', 'Claim raised and received': 'received'};
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ymOf = l => { const [m, y] = l.split(' '); return y + '-' + String(MON.indexOf(m) + 1).padStart(2, '0'); };
+const monthName = ym => { const [y, m] = ym.split('-'); return MON[+m - 1] + ' ' + y; };
+const ageBand = a => a <= 15 ? '≤15' : a <= 30 ? '16-30' : a <= 45 ? '31-45' : a <= 60 ? '46-60' : a <= 90 ? '61-90' : '91+';
+const BANDS = ['16-30', '31-45', '46-60', '61-90', '91+'];
+
+function miniBars(sub, color, money) {
+  const byAge = claimView === 'age';
+  const rows = (byAge ? D.claims_ageing : D.claims_monthly).map(m => ({label: m.label, c: m.cells[sub]}));
+  const max = Math.max(...rows.map(r => r.c.count), 1), H = 78;
+  const cols = rows.map((r, i) => {
+    const n = r.c.count, h = n ? Math.max(4, Math.round(n / max * H)) : 0;
+    const tip = `${byAge ? r.label + ' days since import' : r.label}: ${fmt(n)} ${unitWord()}` + (n ? ` · ${usd(r.c[money])} ${money} · click to see these orders with their age` : '');
+    const inner = `<div class="v">${n ? fmt(n) : '–'}</div>${n ? `<div class="bar" style="height:${h}px;background:var(${color});--k:${i}"></div>` : ''}`;
+    if (!n) return `<div class="mcol zero" title="${esc(tip)}">${inner}</div>`;
+    const f = byAge ? `data-band="${r.label}"` : `data-month="${ymOf(r.label)}"`;
+    return `<button class="mcol" ${f} data-list="${SUB_TAB[sub]}" title="${esc(tip)}">${inner}</button>`;
+  }).join('');
+  return `<div class="mbars">${cols}</div><div class="mlabels" aria-hidden="true">${rows.map(r => `<span>${byAge ? r.label : r.label.slice(0, 3)}</span>`).join('')}</div>`;
+}
+
+function renderClaims() {
+  $$('#claimSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === claimView));
+  const k = D.kpis, sc = k.sub_counts, sv = k.sub_value, A = D.ageing_cards, sla = D.meta.settings.claim_sla_days[0];
+  const ageTxt = a => `avg ${Math.round(a.avg)} d · oldest ${a.oldest} d`;
+  const open = sv['Pending to claim'] + sv['Claim raised but not received'];
+  $('#money').innerHTML = `<span class="pill ok">Received ${usd(k.received_amt)}</span><span class="pill warn">Open ${usd(open)}</span><span class="pill crit">Expired ${usd(sv['Claim Window Expired'])}</span>`;
+  const exp = (claimView === 'age' ? D.claims_ageing.map(m => [m.label + ' d', m.cells['Claim Window Expired'].count])
+    : D.claims_monthly.map(m => [m.label.slice(0, 3), m.cells['Claim Window Expired'].count])).filter(x => x[1]);
+  const stage = (title, color, sub, note, money, extra = '') => `
+    <article class="card stage ${({'--pending': 't-blue', '--raised': 't-orange', '--received': 't-green'})[color]}" aria-label="${title}">
+      <div class="lbl"><span class="sq" style="background:var(${color})"></span>${title}</div>
+      <div class="val" data-count="${sc[sub]}" data-key="s-${sub}">${fmt(sc[sub])}</div><div class="note">${note}</div>
+      ${miniBars(sub, color, money)}${extra}
+    </article>`;
+  $('#claims').innerHTML =
+    stage('Pending to claim', '--pending', 'Pending to claim', `Expected ${usd(sv['Pending to claim'])} · ${ageTxt(A.pending)}`, 'expected',
+      `<button class="expired-line" data-tab="expired"><b>${fmt(sc['Claim Window Expired'])}</b> Claim Window Expired · ${usd(sv['Claim Window Expired'])}
+        <span class="m">${exp.map(x => `${x[0]} ${x[1]}`).join(' · ') || 'none'}</span></button>`) +
+    stage('Claim raised, not received', '--raised', 'Claim raised but not received', `Expected ${usd(sv['Claim raised but not received'])} · ${ageTxt(A.raised)}`, 'expected',
+      A.raised.past_sla ? `<div style="margin-top:10px"><span class="pill warn" title="${sla}+ days since the claim, which is ${sla + D.meta.settings.transit_days}+ days since import">${fmt(A.raised.past_sla)} past claim SLA</span></div>` : '') +
+    stage('Claim raised and received', '--received', 'Claim raised and received', `Received ${usd(k.received_amt)}`, 'received');
+  countUp($('#claims'));
+  $$('#claims .stage').forEach((c, i) => { c.onclick = () => openTab(['pending', 'raised', 'received'][i]); });
+  $$('#claims .mcol[data-list]').forEach(b => b.onclick = e => { e.stopPropagation(); openTab(b.dataset.list, {month: b.dataset.month || '', band: b.dataset.band || ''}); });
+  $('#claims .expired-line').onclick = e => { e.stopPropagation(); openTab('expired'); };
+}
+
+/* ---------- claims value by month ($) ---------- */
+const usd2 = n => '$' + (n ?? 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+function renderValue() {
+  const V = D.value_table, n = V.months.length;
+  $('#valHint').textContent = `ShipBob D2C · ${n} month${n === 1 ? '' : 's'}`;
+  const defs = [['received', 'Claim raised & received', '--received'], ['raised', 'Claim raised, pending receipt', '--raised'], ['pending', 'Pending to claim', '--pending']];
+  const cell = v => v ? `<td class="num">${usd2(v)}</td>` : '<td class="num dash">—</td>';
+  const line = ([k, label, color]) => `<tr class="r-${({received: 'green', raised: 'orange', pending: 'blue'})[k]}"><td><span class="sq" style="background:var(${color})"></span>${label}</td>${V.rows[k].map(cell).join('')}
+    <td class="num tot">${usd2(V.totals[k])}</td><td class="num pc">${V.ytd[k].toFixed(1)}%</td></tr>`;
+  $('#valTbl').innerHTML = `<thead><tr><th class="l">Bucket</th>${V.months.map(m => `<th>${m.slice(0, 3)}</th>`).join('')}<th>TOTAL</th><th>YTD %</th></tr></thead><tbody>
+    ${defs.map(line).join('')}
+    <tr class="elig"><td>Total eligible</td>${V.eligible.map(v => `<td class="num">${usd2(v)}</td>`).join('')}<td class="num">${usd2(V.eligible_total)}</td><td class="num pc">100%</td></tr>
+    <tr class="exp"><td><span class="sq" style="background:var(--expired)"></span>Claim window expired (not claimable)</td>${V.rows.expired.map(cell).join('')}<td class="num">${usd2(V.totals.expired)}</td><td></td></tr></tbody>`;
+  $('#valFoot').innerHTML = `Received = the Amt column. Pending and Raised = the Excel's "Expected Claim amount" column, same as the recon dashboard.` +
+    (V.missing.count ? ` ${V.missing.count} Pending / Raised orders have no Expected Claim amount in the Excel, so they are not counted (about ${usd(V.missing.calc)} by price × qty).` : '');
+}
+
+/* ---------- today's actions ---------- */
+function renderActs() {
+  if (!D) return;
+  const a = D.actions, M = (ST && ST.mailer) || {kinds: {}};
+  const drafted = KINDS.filter(kd => { const s = (M.kinds || {})[kd] || {}; return s.drafted_at && s.drafted_for === s.data_date; }).length;
+  const tiles = [
+    {n: `${drafted}/${KINDS.length}`, cls: drafted === KINDS.length ? 'ok' : 'warn', l: 'Mails to review and send',
+     s: drafted === KINDS.length ? 'Both Gmail drafts are ready' : M.gmail_connected ? 'Create the drafts in the mail panel' : 'Connect Gmail in the mail panel',
+     go: () => drafted ? window.open('https://mail.google.com/mail/u/0/#drafts', '_blank', 'noopener') : $('#mail').scrollIntoView({behavior: 'smooth', block: 'center'})},
+    {v: a.past_sla, n: fmt(a.past_sla), cls: a.past_sla ? 'crit' : 'ok', l: 'Claims past SLA: chase ShipBob',
+     s: a.past_sla ? `Raised, not received · ${a.sla_claim_days}+ days since the claim` : 'Nothing past the claim SLA',
+     go: () => openTab('raised', {minClaim: a.sla_claim_days})},
+    {v: a.new_dispute, n: fmt(a.new_dispute), cls: a.new_dispute ? 'warn' : 'ok', l: 'Just entered dispute: raise the claim',
+     s: a.new_dispute ? `Pending to claim · up to ${a.new_dispute_max_age} days old` : 'No new disputes in the last 2 days',
+     go: () => openTab('pending', {maxAge: a.new_dispute_max_age})},
+    {v: a.soon, n: fmt(a.soon), cls: a.soon ? 'info' : 'ok', l: 'Entering dispute in 1–2 days',
+     s: a.soon ? `In transit at day ${a.soon_min_age}–${D.meta.settings.transit_days}: last chance to trace` : 'Nothing close to day 15',
+     go: () => openTab('potential', {minAge: a.soon_min_age})},
+  ];
+  $('#acts').innerHTML = tiles.map((t, i) => `<button class="act ${t.cls}" data-i="${i}"><span class="n" ${t.v != null ? `data-count="${t.v}" data-key="a${i}"` : ''}>${t.n}</span><span class="l">${t.l}</span><span class="s">${t.s}</span></button>`).join('');
+  countUp($('#acts'));
+  $$('#acts .act').forEach(b => b.onclick = () => tiles[+b.dataset.i].go());
+}
+
+/* ---------- ShipBob mails: short panel on the dashboard ---------- */
+const MAIL_NAMES = {potential: 'Potential in-transit loss (11–15 days)', claims: 'Claims follow-up'};
+const mailDetail = (kd, s) => kd === 'potential'
+  ? `${fmt(s.all_count || 0)} orders · ${fmt(s.new_count || 0)} new`
+  : `${fmt(s.pending_count || 0)} orders pending to claim · ${fmt(s.raised_count || 0)} orders raised, not received · ${fmt(s.aged || 0)} past 45 days since claim`;
+function renderMail() {
+  if (!D) return;
+  const M = (ST && ST.mailer) || {kinds: {}};
+  const row = kd => {
+    const s = (M.kinds || {})[kd] || {};
+    const drafted = !!(s.drafted_at && s.drafted_for === s.data_date);
+    const canSent = drafted && (!s.sent_at || s.sent_at < s.drafted_at);
+    const pill = drafted ? `<span class="pill ok">${icon('check', 13)}Draft saved</span>` : s.excel_exists ? '<span class="pill mute">Excel ready</span>' : '<span class="pill mute">Not built</span>';
+    return `<div class="mrow" data-kind="${kd}">
+      <div class="mh"><span class="mt">${MAIL_NAMES[kd]}</span>${pill}</div>
+      <div class="mc">${s.data_date ? mailDetail(kd, s) : '–'}</div>
+      <div class="btnrow">
+        ${M.gmail_connected ? `<button class="btn sm primary" data-act="draft">${icon('mail', 15)}${drafted ? 'Update draft' : 'Create draft'}</button>` : ''}
+        ${s.excel_exists ? `<a class="btn sm" href="${BASE}/download/mailer/${kd}">${icon('download', 15)}Excel</a>` : `<button class="btn sm" data-act="build">Build Excel</button>`}
+        ${canSent ? `<button class="btn sm" data-act="mark-sent" title="Use after you sent the draft from Gmail">I sent it</button>` : ''}
+      </div></div>`;
+  };
+  $('#mail').innerHTML = `
+    <div class="gm"><span>Gmail drafts</span>
+      ${M.gmail_connected ? '<span class="pill ok">Connected</span>' : `<button class="btn sm primary" data-act="connect">${icon('link', 15)}Connect Gmail</button>`}</div>
+    ${KINDS.map(row).join('')}
+    <div class="auto">Updates by itself when the Excel changes. Saves drafts only, nothing is sent without you. Details are in the Shipment log.</div>`;
+  $$('#mail [data-act]').forEach(b => b.onclick = () => mailAction(b));
+}
+async function mailAction(b) {
+  const kd = b.closest('.mrow')?.dataset.kind, act = b.dataset.act;
+  if (act === 'connect') toast('Approve access in the browser window that just opened.');
+  const url = BASE + (act === 'connect' ? '/api/mailer/connect-gmail' : `/api/mailer/${kd}/${act}`);
+  const msgs = {connect: () => 'Gmail connected. Drafts will be created automatically.', draft: j => `Draft saved in Gmail: ${MAIL_NAMES[kd]} (${j.all} orders).`,
+    build: j => `Excel built (${j.all} orders, ${j.new} new).`, 'mark-sent': j => `${j.marked} orders marked as sent.`};
+  b.disabled = true; const t = b.innerHTML; b.innerHTML = 'Working…';
+  const j = await (await fetch(url, {method: 'POST'})).json().catch(() => ({ok: false, error: 'server not reachable'}));
+  b.disabled = false; b.innerHTML = t;
+  if (!j.ok) return toast('Failed: ' + j.error);
+  toast(msgs[act](j)); await pollStatus(true); await loadData(true);
+}
+
+/* ---------- trend chart + carrier bars ---------- */
+function drawTrend() {
+  if (!D || page !== 'dash' || !trendVisible) return;
+  charts.forEach(c => c.destroy()); charts = [];
+  const rows = view === 'month' ? D.claims_monthly : D.claims_ageing;
+  const ink2 = css('--ink-2'), grid = css('--line-2'), surface = css('--surface');
+  const colors = ['--pending', '--raised', '--received', '--expired'].map(css);
+  const names = {'Pending to claim': 'Pending to claim', 'Claim raised but not received': 'Raised, not received', 'Claim raised and received': 'Raised and received', 'Claim Window Expired': 'Window expired'};
+  const summary = rows.map(r => `${r.label}: ${D.sub_all.reduce((a, s) => a + r.cells[s].count, 0)}`).join(', ');
+  $('#trendChart').setAttribute('aria-label', `Under Dispute ${unitWord()} by claim stage. ${summary}. The Shipment log has the same numbers as a table.`);
+  charts.push(new Chart($('#trendChart'), {
+    type: 'bar',
+    data: {labels: rows.map(r => r.label), datasets: D.sub_all.map((s, i) => ({label: names[s], data: rows.map(r => r.cells[s].count),
+      backgroundColor: colors[i], borderColor: surface, borderWidth: {top: 2}, borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 56}))},
+    options: {responsive: true, maintainAspectRatio: false, animation: reduceMotion ? false : {duration: 700, easing: 'easeOutQuart', delay: ctx => ctx.type === 'data' && ctx.mode === 'default' ? ctx.dataIndex * 80 + ctx.datasetIndex * 30 : 0}, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {position: 'bottom', labels: {color: ink2, boxWidth: 12, boxHeight: 12, useBorderRadius: true, borderRadius: 3}},
+        tooltip: {callbacks: {footer: it => 'Total: ' + fmt(it.reduce((a, i) => a + i.parsed.y, 0))}}},
+      scales: {x: {stacked: true, grid: {display: false}, ticks: {color: ink2}, border: {color: css('--line')}},
+        y: {stacked: true, grid: {color: grid}, ticks: {color: ink2, precision: 0}, border: {display: false}}}}}));
+}
+function renderCarrierBars() {
+  const top = D.carriers.slice(0, 7), max = Math.max(...top.map(c => c.loss_rate), 0.01);
+  $('#carBars').innerHTML = top.map((c, i) => `<div class="cb"><span>${esc(c.carrier)}<span class="n">${fmt(c.shipments)} ${unitWord()}</span></span>
+    <span class="track"><span class="fill" style="display:block;width:${Math.max(3, Math.round(c.loss_rate / max * 100))}%;--k:${i}"></span></span>
+    <span class="v">${pct(c.loss_rate)}</span></div>`).join('');
+}
+
+/* ---------- LOG: lists ---------- */
+const LIST_TINT = {potential: 't-amber', pending: 't-blue', raised: 't-orange', expired: 't-red', received: 't-green', in_transit: 't-teal', rto: 't-slate'};
+const TABS = [
+  ['potential', 'Potential loss', 'Not delivered, 11–15 days since import. These go to ShipBob in the daily mail. They are also counted in In Transit.'],
+  ['pending', 'Pending to claim', 'Under Dispute, claim not raised yet, oldest first. "Days" = days since the Import Date (orange over 30, red over 60). "Mailed" shows if we already highlighted it to ShipBob.'],
+  ['raised', 'Raised, not received', 'Claim raised with ShipBob, amount not received yet. "Days since claim" = order age minus 15 days (claim raised date taken as import date + 15 days).'],
+  ['expired', 'Window expired', 'Orders you marked Claim Window Expired in the Excel.'],
+  ['received', 'Received', 'Claim raised and the amount received.'],
+  ['in_transit', 'In Transit', 'Everything not delivered yet, within the in-transit days.'],
+  ['rto', 'RTO', 'Returned to origin.'],
+];
+const HEAD = {'Claim Age': 'Days since claim', Age: 'Days', 'Tracking Information': 'Tracking #', Item: 'Item', 'Expected Claim $': 'Expected $', 'Received $': 'Received $',
+  'Store Order ID': 'Order ID', 'Import Date': 'Imported', 'Delivery Status': 'Carrier status', Sub: 'Bucket', 'Claims remark': 'Remark'};
+function renderTabs() {
+  $('#tabs').innerHTML = TABS.map(([id, l]) => `<button class="tab ${LIST_TINT[id]}" role="tab" data-id="${id}" aria-selected="${id === tab}"><span class="tdot"></span>${l}<span class="c">${fmt(D.list_totals[id])}</span></button>`).join('');
+  $('#tabs').parentElement.className = 'card soft ' + LIST_TINT[tab];
+  $$('#tabs .tab').forEach(t => t.onclick = () => { tab = t.dataset.id; listFilter = {month: '', band: ''}; $('#search').value = ''; renderTabs(); });
+  drawList(true);
+}
+let listFilter = {month: '', band: ''};
+const FILTERABLE = ['pending', 'raised', 'expired', 'received'];
+function openTab(id, f) {
+  tab = id; listFilter = {month: f?.month || '', band: f?.band || '', minAge: f?.minAge ?? null, maxAge: f?.maxAge ?? null, minClaim: f?.minClaim ?? null};
+  $('#search').value = ''; showPage('log'); renderTabs();
+  window.scrollTo({top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+}
+$('#search').oninput = () => drawList();
+$('#fMonth').onchange = () => { listFilter.month = $('#fMonth').value; drawList(true); };
+$('#fBand').onchange = () => { listFilter.band = $('#fBand').value; drawList(true); };
+function drawList(anim = false) {
+  const q = $('#search').value.trim().toLowerCase();
+  const all = D.lists[tab], total = D.list_totals[tab];
+  $('#tabDesc').textContent = TABS.find(t => t[0] === tab)[2];
+  $('#dl').href = BASE + '/download/' + tab + '?unit=' + unit;
+  const cols = (all.length ? Object.keys(all[0]) : []).filter(c => tab === 'in_transit' || c !== 'Sub');
+  // month + age filters (claim lists)
+  const filt = FILTERABLE.includes(tab);
+  $('#filters').hidden = !filt;
+  if (filt) {
+    const months = [...new Set(all.map(r => String(r['Import Date']).slice(0, 7)))].sort();
+    $('#fMonth').innerHTML = '<option value="">All months</option>' + months.map(m => `<option value="${m}">${monthName(m)}</option>`).join('');
+    $('#fBand').innerHTML = '<option value="">All ages</option>' + BANDS.map(b => `<option value="${b}">${b} days old</option>`).join('');
+    $('#fMonth').value = listFilter.month; $('#fBand').value = listFilter.band;
+  }
+  const f = listFilter;
+  let rows = all.filter(r => (!f.month || String(r['Import Date']).slice(0, 7) === f.month) && (!f.band || ageBand(r.Age) === f.band)
+    && (f.minAge == null || r.Age >= f.minAge) && (f.maxAge == null || r.Age <= f.maxAge) && (f.minClaim == null || r['Claim Age'] >= f.minClaim));
+  const filtered = !!(f.month || f.band || f.minAge != null || f.maxAge != null || f.minClaim != null);
+  if (q) rows = rows.filter(r => cols.some(c => String(r[c] ?? '').toLowerCase().includes(q)));
+  $('#rowCount').innerHTML = filtered
+    ? `${fmt(rows.length)} ${unitWord()} match${f.month ? ' · imported ' + monthName(f.month) : ''}${f.band ? ' · ' + f.band + ' days old' : ''}${f.minAge != null ? ' · ' + f.minAge + '+ days old' : ''}${f.maxAge != null ? ' · up to ' + f.maxAge + ' days old' : ''}${f.minClaim != null ? ' · ' + f.minClaim + '+ days since the claim' : ''} · <button class="linkbtn" id="clearF">Clear filters</button>`
+    : total > all.length ? `Showing ${fmt(rows.length)} of ${fmt(total)} ${unitWord()}. Download the Excel for all of them.` : `${fmt(rows.length)} ${unitWord()}`;
+  if ($('#clearF')) $('#clearF').onclick = () => { listFilter = {month: '', band: '', minAge: null, maxAge: null, minClaim: null}; drawList(true); };
+  const cell = (c, v) => {
+    if (v === null || v === undefined || v === '') return c === 'Mailed' ? '<td class="l"><span class="pill mute">Not mailed</span></td>' : '<td></td>';
+    if (c.endsWith('$')) return `<td class="num">$${Number(v).toFixed(2)}</td>`;
+    if (c === 'Age' && FILTERABLE.includes(tab) && tab !== 'received') return `<td class="num"><span class="pill ${v > 60 ? 'crit' : v > 30 ? 'warn' : 'mute'}">${v} d</span></td>`;
+    if (c === 'Claim Age') return `<td class="num"><span class="pill ${v > 60 ? 'crit' : v >= 45 ? 'warn' : 'mute'}">${v} d</span></td>`;
+    if (c === 'Mailed') return `<td class="l"><span class="pill ${String(v).startsWith('Sent') ? 'ok' : 'info'}">${esc(v)}</span></td>`;
+    return `<td class="${typeof v === 'number' ? 'num' : 'l'}">${esc(v)}</td>`;
+  };
+  if (anim && !reduceMotion) { const w = $('#listTbl'); w.classList.remove('fade-in'); void w.offsetWidth; w.classList.add('fade-in'); }
+  $('#listTbl').innerHTML = rows.length
+    ? `<thead><tr>${cols.map(c => `<th class="${typeof all[0][c] === 'number' ? '' : 'l'}">${HEAD[c] || c}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => cell(c, r[c])).join('')}</tr>`).join('')}</tbody>`
+    : `<tbody><tr><td class="empty" style="text-align:center">${q ? 'Nothing matches your search.' : 'No orders in this list.'}</td></tr></tbody>`;
+}
+
+/* ---------- LOG: reports (tables) ---------- */
+const REP_COLORS = {
+  month: [null, null, 'green', 'green', 'blue', 'amber', 'red', 'red', 'blue', 'orange', 'green', 'amber', 'green'],
+  ageing: [null, 'blue', 'blue', 'orange', 'orange', 'green', 'green', 'amber', 'amber', 'slate'],
+  carriers: [null, null, 'green', 'blue', 'amber', 'red', 'red']};
+function colorCols(sel, colors) {
+  $$(sel + ' tr').forEach(tr => [...tr.children].forEach((c, i) => { if (colors[i]) c.classList.add('cg-' + colors[i]); }));
+}
+function renderReports() { renderReportsBase(); colorCols('#repTbl', REP_COLORS[rep]); }
+function renderReportsBase() {
+  $$('#repSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.r === rep));
+  const subs = D.sub_all, unitHead = unit === 'lines' ? 'Line items' : 'Orders';
+  if (rep === 'month') {
+    const rows = D.monthly, T = {total: 0, Delivered: 0, 'In Transit': 0, potential: 0, 'Under Dispute': 0};
+    subs.forEach(s => T[s] = 0); let rec = 0;
+    rows.forEach(r => { Object.keys(T).forEach(c => T[c] += r[c] || 0); rec += r.received_amt; });
+    const cl = T.Delivered + T['Under Dispute'];
+    const line = (r, cls = '') => `<tr class="${cls}"><td>${r.month}${r.open ? ' <span class="pill warn" title="More than 5% still in transit, rates not final">open</span>' : ''}</td>
+      <td class="num">${fmt(r.total)}</td><td class="num">${fmt(r.Delivered)}</td><td class="num">${pct(r.delivery_rate)}</td>
+      <td class="num gl">${fmt(r['In Transit'])}</td><td class="num">${fmt(r.potential)}</td>
+      <td class="num gl">${fmt(r['Under Dispute'])}</td><td class="num">${pct(r.loss_rate)}</td>
+      ${subs.map((s, i) => `<td class="num ${i === 0 ? 'gl' : ''}">${fmt(r[s])}</td>`).join('')}
+      <td class="num gl">${usd(r.received_amt)}</td></tr>`;
+    const rows2 = rows.map(r => ({...r, open: r.total && r['In Transit'] / r.total > 0.05}));
+    const totRow = {...T, month: 'Total', delivery_rate: T.Delivered / cl * 100, loss_rate: T['Under Dispute'] / cl * 100, received_amt: rec};
+    $('#repTbl').innerHTML = `<thead><tr><th>Import month</th><th>${unitHead}</th><th>Delivered</th><th>Delivery %</th>
+      <th class="gl">In Transit</th><th>Potential loss</th><th class="gl">Under Dispute</th><th>Loss %</th>
+      <th class="gl">Pending</th><th>Raised, not rcvd</th><th>Received</th><th>Window expired</th><th class="gl">Received $</th></tr></thead><tbody>` +
+      rows2.map(r => line(r)).join('') + line(totRow, 'total') + '</tbody>';
+  } else if (rep === 'ageing') {
+    const tot = Object.fromEntries(subs.map(s => [s, {count: 0, expected: 0, received: 0}]));
+    D.claims_ageing.forEach(r => subs.forEach(s => ['count', 'expected', 'received'].forEach(k => tot[s][k] += r.cells[s][k])));
+    const all = c => subs.reduce((a, s) => a + c[s].count, 0);
+    const line = (label, c, cls = '') => `<tr class="${cls}"><td>${label}</td>
+      <td class="num">${fmt(c[subs[0]].count)}</td><td class="num">${usd(c[subs[0]].expected)}</td>
+      <td class="num gl">${fmt(c[subs[1]].count)}</td><td class="num">${usd(c[subs[1]].expected)}</td>
+      <td class="num gl">${fmt(c[subs[2]].count)}</td><td class="num">${usd(c[subs[2]].received)}</td>
+      <td class="num gl">${fmt(c[subs[3]].count)}</td><td class="num">${usd(c[subs[3]].expected)}</td>
+      <td class="num gl">${fmt(all(c))}</td></tr>`;
+    $('#repTbl').innerHTML = `<thead><tr><th>Days since import</th><th>Pending</th><th>Expected $</th><th class="gl">Raised, not rcvd</th><th>Expected $</th>
+      <th class="gl">Received</th><th>Received $</th><th class="gl">Window expired</th><th>Expected $</th><th class="gl">Total</th></tr></thead><tbody>` +
+      D.claims_ageing.map(r => line(r.label, r.cells)).join('') + line('Total', tot, 'total') + '</tbody>';
+  } else {
+    const max = Math.max(...D.carriers.map(c => c.loss_rate), 0.01);
+    $('#repTbl').innerHTML = `<thead><tr><th>Carrier</th><th>${unitHead}</th><th>Delivered</th><th>In Transit</th><th>Potential loss</th><th>Under Dispute</th><th>Loss %</th></tr></thead><tbody>` +
+      D.carriers.map(c => `<tr><td>${esc(c.carrier)}</td><td class="num">${fmt(c.shipments)}</td><td class="num">${fmt(c.delivered)}</td><td class="num">${fmt(c.in_transit)}</td>
+        <td class="num">${fmt(c.potential)}</td><td class="num">${fmt(c.dispute)}</td>
+        <td class="num">${pct(c.loss_rate)}<span class="minibar" style="width:${Math.round(c.loss_rate / max * 64)}px"></span></td></tr>`).join('') + '</tbody>';
+  }
+}
+
+/* ---------- LOG: mail activity, checks, rules ---------- */
+function renderMailLog() {
+  if (!D) return;
+  const M = (ST && ST.mailer) || {kinds: {}}, runs = ((ST && ST.auto_log) || []).slice(0, 8);
+  $('#mailLog').innerHTML = KINDS.map(kd => {
+    const s = (M.kinds || {})[kd] || {};
+    const drafted = !!(s.drafted_at && s.drafted_for === s.data_date);
+    return `<div class="mlog ${kd === 'potential' ? 't-amber' : 't-orange'}"><div class="t">${MAIL_NAMES[kd]}
+        ${drafted ? `<span class="pill ok">Draft saved ${esc(s.drafted_at.replace('T', ' ').slice(5, 16))}</span>` : '<span class="pill mute">No draft yet</span>'}
+        ${s.sent_at ? `<span class="pill info">Marked sent ${esc(s.sent_at.replace('T', ' ').slice(5, 16))}</span>` : ''}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${s.data_date ? mailDetail(kd, s) + ' · data of ' + esc(s.data_date) : 'Not built yet'}${s.mail_to ? ' · To: ' + esc(s.mail_to) : ' · no recipient set (add mail_to in config.json)'}</div>
+      ${s.subject ? `<details class="prev"><summary>Preview the email</summary><div style="margin:8px 0 6px;font-size:12.5px"><b>Subject:</b> ${esc(s.subject)}</div><iframe sandbox title="Email preview" style="width:100%;height:360px;border:1px solid var(--line);border-radius:8px;background:#fff" srcdoc="${esc(s.html || '')}"></iframe></details>` : ''}</div>`;
+  }).join('') + `<div class="mlog t-slate"><div class="t">Recent automatic runs</div>${runs.length
+    ? `<ul class="runs">${runs.map(r => `<li>${esc(r.at)} · ${esc(r.kind)} · ${esc(r.action)}${r.reason ? ' (' + esc(r.reason) + ')' : ''}${r.all !== undefined ? ` · ${r.all} orders, ${r.new} new` : ''}</li>`).join('')}</ul>`
+    : '<div style="font-size:12.5px;color:var(--muted);margin-top:4px">No automatic runs since the dashboard was started.</div>'}</div>`;
+}
+function renderChecks() {
+  const warn = D.checks.filter(c => c.level === 'warn' && c.count > 0), notes = D.checks.filter(c => c.level !== 'warn' && c.count > 0);
+  $('#checksTitle').innerHTML = `Data checks ${warn.length ? `<span class="pill warn">${warn.length} to review</span>` : notes.length ? `<span class="pill info">${notes.length} note${notes.length > 1 ? 's' : ''}</span>` : '<span class="pill ok">all clear</span>'}`;
+  $('#checksBody').innerHTML = D.checks.map(c => `<div class="check">
+      <span class="pill ${c.count ? (c.level === 'warn' ? 'warn' : 'info') : 'ok'}">${fmt(c.count)}</span>
+      <div class="t">${esc(c.title)}</div><div class="h">${esc(c.help)}</div>
+      ${c.ids.length ? `<div class="ids">${c.ids.map(i => `<button class="chip" title="Copy" data-id="${i}">${i}</button>`).join('')}${c.count > c.ids.length ? `<span class="h" style="grid-column:auto">+${c.count - c.ids.length} more</span>` : ''}</div>` : ''}
+    </div>`).join('');
+  $$('#checksBody .chip').forEach(b => b.onclick = () => { navigator.clipboard?.writeText(b.dataset.id); toast('Copied ' + b.dataset.id); });
+}
+const RULE_TINT = {'Delivered': 'green', 'In Transit': 'blue', 'Potential In-Transit Loss': 'amber', 'Under Dispute': 'red', 'Claim stages': 'orange',
+  'Received / Expired': 'teal', 'Claim raised date': 'violet', 'Expected claim $': 'green', 'RTO / Cancelled': 'slate', 'Counting': 'blue', 'Mails': 'violet'};
+function renderRules() {
+  const s = D.meta.settings;
+  $('#rules').innerHTML = [
+    ['Delivered', 'Delivery Status starts with "Delivered", or you marked Sub Bucket = Delivered.'],
+    ['In Transit', `Not delivered, 0–${s.transit_days} days since Import Date. A blank Delivery Status means no carrier scan yet, still in transit.`],
+    ['Potential In-Transit Loss', `In Transit orders at day ${s.alert_from_day}–${s.transit_days}. Mailed to ShipBob; they stay in In Transit too.`],
+    ['Under Dispute', `Not delivered, more than ${s.transit_days} days since Import Date. Split by your Sub Bucket column.`],
+    ['Claim stages', 'Pending to claim, Claim raised but not received, Claim raised and received, Claim Window Expired: exactly as you mark them in Sub Bucket. The Claim status column is not used.'],
+    ['Received / Expired', 'Stay in Under Dispute even if the carrier later shows Delivered. A received claim closes the order.'],
+    ['Claim raised date', `Taken as import date + ${s.transit_days} days, so days since claim = order age − ${s.transit_days}. Claim SLA is 45–60 days from that date.`],
+    ['Expected claim $', 'Pending, Raised and Expired: the "Expected Claim amount" column of the Excel (same as the recon dashboard). Received orders: product price × line item quantity.'],
+    ['RTO / Cancelled', 'From your Main / Sub Bucket columns; Cancelled also from Order Status.'],
+    ['Counting', 'Line items = one row per product (your Excel pivot). Orders = each shipment once.'],
+    ['Mails', 'Potential loss mail: daily, when there are new orders. Claims follow-up mail: Pending to claim + Claim raised but not received in one mail, on new orders or as a weekly reminder.'],
+  ].map(([a, b]) => `<div class="rule t-${RULE_TINT[a] || 'slate'}"><b>${a}.</b> ${b}</div>`).join('');
+}
+
+/* ---------- freshness ---------- */
+function freshDays() { const f = D.freshness; return Math.floor((new Date(new Date().toDateString()) - new Date(f.as_of_iso + 'T00:00:00')) / 864e5); }
+function freshLevel() { const d = freshDays(); return d <= 1 ? 'ok' : d <= 3 ? 'warn' : 'stale'; }
+function renderFresh() {
+  const f = D.freshness, lvl = freshLevel(), days = freshDays();
+  const b = $('#freshBadge'); b.hidden = false; b.className = 'fresh ' + lvl;
+  const short = f.data_as_of.slice(0, 6);
+  b.innerHTML = `<span class="d"></span><span>${short}${lvl === 'ok' ? '' : ' · ' + days + ' d old'}</span>`;
+  b.title = `Data as of ${f.data_as_of} · ${days <= 0 ? 'today' : days + ' day' + (days === 1 ? '' : 's') + ' old'}. Click for details.`;
+  b.setAttribute('aria-label', b.title);
+  b.onclick = () => openFresh();
+}
+function freshness(popup) { if (popup && freshLevel() !== 'ok') openFresh(); }
+function openFresh() {
+  const f = D.freshness, lvl = freshLevel(), days = freshDays();
+  $('#freshBig').textContent = `Data as of ${f.data_as_of}`;
+  const msg = {ok: 'The data is up to date.', warn: `The data is ${days} days old. Today's ShipBob export has not been loaded yet.`,
+    stale: `The data is ${days} days old. Drop the latest ShipBob export in the Input folder; the dashboard updates by itself once the Excel is refreshed.`}[lvl];
+  $('#freshMsg').className = 'msg ' + lvl; $('#freshMsg').textContent = msg;
+  const row = (a, v) => `<tr><td>${a}</td><td>${v}</td></tr>`;
+  $('#freshTbl').innerHTML = row('Latest import in the Excel', `<b>${f.data_as_of}</b>`) +
+    row('Excel saved', `${esc(f.file_modified)}<br><span style="color:var(--muted)">${esc(f.file_name)}</span>`) +
+    row('Last export dropped', f.input_name ? `${esc(f.input_modified)}<br><span style="color:var(--muted)">${esc(f.input_name)}</span>` : 'No file found') +
+    row('Last ShipBob mail', f.last_mailer ? esc(f.last_mailer) : 'No mail logged yet') +
+    row('Dashboard loaded', esc(f.dashboard_loaded));
+  $('#freshModal').hidden = false; $('#freshOk').focus();
+}
+$('#freshOk').onclick = () => { $('#freshModal').hidden = true; };
+$('#freshModal').onclick = e => { if (e.target.id === 'freshModal') $('#freshModal').hidden = true; };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#freshModal').hidden = true; });
+
+loadData();
+</script>
+</body>
+</html>

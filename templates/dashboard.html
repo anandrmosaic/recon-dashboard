@@ -44,6 +44,37 @@
 
       /* Transition */
       --t-fast: 150ms ease; --t-base: 200ms ease; --t-slow: 300ms ease;
+
+      color-scheme: light;
+    }
+
+    /* ── Dark mode — same data-theme attribute + localStorage key ('sbTheme')
+       as the ShipBob D2C Live tab, so both stay in sync automatically. ── */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #0b1017; --surface: #141b24; --surface-2: #19212c; --surface-3: #1c242f;
+        --border: #28323f; --border-light: #232b36;
+        --text: #eef2f7; --text-muted: #b6c0cd; --text-light: #8e9aab;
+        --primary-soft: #16281f; --primary-glow: rgba(45,90,61,0.25);
+        --red-soft: #3b1a1a; --red-mid: #4a2020;
+        --amber-soft: #3a2c0c; --amber-mid: #4a3a10;
+        --green-soft: #123222; --green-mid: #16432c;
+        --blue-soft: #172a4a; --blue-mid: #1d3560;
+        --purple-soft: #2a1f4a;
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b1017; --surface: #141b24; --surface-2: #19212c; --surface-3: #1c242f;
+      --border: #28323f; --border-light: #232b36;
+      --text: #eef2f7; --text-muted: #b6c0cd; --text-light: #8e9aab;
+      --primary-soft: #16281f; --primary-glow: rgba(45,90,61,0.25);
+      --red-soft: #3b1a1a; --red-mid: #4a2020;
+      --amber-soft: #3a2c0c; --amber-mid: #4a3a10;
+      --green-soft: #123222; --green-mid: #16432c;
+      --blue-soft: #172a4a; --blue-mid: #1d3560;
+      --purple-soft: #2a1f4a;
     }
 
     * { box-sizing: border-box; }
@@ -95,6 +126,13 @@
       display: flex; align-items: center; gap: 5px; backdrop-filter: blur(4px);
     }
     .btn-refresh:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.35); }
+    .btn-theme {
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+      color: #fff; width: 30px; height: 30px; border-radius: 50%;
+      cursor: pointer; transition: all var(--t-base); display: flex;
+      align-items: center; justify-content: center; backdrop-filter: blur(4px);
+    }
+    .btn-theme:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.35); }
     .btn-logout {
       background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
       color: rgba(255,255,255,0.82); padding: 7px 13px; border-radius: var(--r-full);
@@ -813,6 +851,7 @@
     <span class="last-updated" id="lastUpdated">Loading...</span>
     <span class="data-health" id="dataHealth" aria-live="polite">Checking data</span>
     <button class="btn-refresh" onclick="refreshData()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+    <button class="btn-theme" id="themeToggleBtn" onclick="toggleDashboardTheme()" aria-label="Switch light / dark theme"><i class="fas fa-moon" id="themeToggleIcon"></i></button>
     <a class="btn-logout" href="/logout"><i class="fas fa-sign-out-alt me-1"></i>Logout</a>
   </div>
 </div>
@@ -841,9 +880,8 @@
     <i class="fas fa-shipping-fast"></i> UPS Claims
     <span id="upsBadge" style="background:#e65100;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
-  <button class="tab-btn" data-tab="shipbob_d2c" onclick="switchTab('shipbob_d2c')">
-    <i class="fas fa-store"></i> ShipBob D2C
-    <span id="d2cBadge" style="background:#00695c;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
+  <button class="tab-btn" data-tab="shipbob_live" onclick="switchTab('shipbob_live')">
+    <i class="fas fa-store"></i> Shibob D2C
   </button>
 </div>
 
@@ -856,6 +894,36 @@
 </div>
 
 <script>
+/* ---------- theme (shared with the ShipBob D2C Live tab via the 'sbTheme'
+   localStorage key — both read/write the same key so they always match) ---------- */
+function _applyDashboardTheme(t) {
+  if (t) document.documentElement.dataset.theme = t;
+  const dark = document.documentElement.dataset.theme === 'dark' ||
+    (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+  const icon = document.getElementById('themeToggleIcon');
+  if (icon) icon.className = dark ? 'fas fa-sun' : 'fas fa-moon';
+}
+try {
+  const savedTheme = localStorage.getItem('sbTheme');
+  if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+} catch (e) {}
+_applyDashboardTheme();
+function toggleDashboardTheme() {
+  const dark = document.documentElement.dataset.theme === 'dark' ||
+    (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+  const next = dark ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('sbTheme', next); } catch (e) {}
+  _applyDashboardTheme();
+}
+// Keep in sync if the ShipBob D2C Live tab (same-origin iframe) changes the theme
+window.addEventListener('storage', e => {
+  if (e.key === 'sbTheme' && e.newValue) {
+    document.documentElement.dataset.theme = e.newValue;
+    _applyDashboardTheme();
+  }
+});
+
 let _rawData = null;
 let _lastUpdated = null;
 let _activeTab = 'dashboard';
@@ -1428,6 +1496,15 @@ function updateHeroStats(kpis) {
   document.getElementById('hPending').textContent    = formatUSD(kpis.pending_recovery);
 }
 
+// ShipBob D2C Live: the standalone dashboard (served by shipbob_live/bp.py at /shipbob/) shown inside this tab.
+// The iframe is kept when the 20-minute auto refresh re-renders, so the page inside does not reset.
+function renderShipBobLive() {
+  const mc = document.getElementById('mainContent');
+  if (!mc || document.getElementById('sbLiveFrame')) return;
+  mc.innerHTML = '<iframe id="sbLiveFrame" src="/shipbob/" title="ShipBob D2C Live" ' +
+    'style="width:100%;height:calc(100vh - 150px);min-height:720px;border:0;border-radius:12px;background:transparent"></iframe>';
+}
+
 function applyAndRender() {
   if (!_rawData) return;
   if (_activeTab === 'dashboard') {
@@ -1440,8 +1517,8 @@ function applyAndRender() {
     renderUPSClaimsTab(_rawData, _lastUpdated);
   } else if (_activeTab === 'inbound_recon') {
     renderInboundRecon(_rawData, _lastUpdated);
-  } else if (_activeTab === 'shipbob_d2c') {
-    renderShipBobD2C(_rawData, _lastUpdated);
+  } else if (_activeTab === 'shipbob_live') {
+    renderShipBobLive();
   } else {
     renderDashboardOverview(_rawData, _lastUpdated);
   }
@@ -7472,349 +7549,6 @@ async function saveEditModal() {
 document.getElementById('editModal').addEventListener('click', function(e) {
   if (e.target === this) closeEditModal();
 });
-
-// ╔═══════════════════════════════════════════════════════════════════════════╗
-// ║  SHIPBOB D2C CLAIMS TAB                                                   ║
-// ╚═══════════════════════════════════════════════════════════════════════════╝
-function renderShipBobD2C(data, lastUpdated) {
-  destroyCharts();
-  document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;
-  const mc = document.getElementById('mainContent');
-
-  const d2c          = (data && data.shipbob_d2c) || {};
-  const rows         = d2c.rows         || [];
-  const monthly      = d2c.monthly      || {};
-  const months       = d2c.months       || [];
-  const kpis         = d2c.kpis         || {};
-  const channels     = d2c.channels     || {};
-  const pivot1       = d2c.pivot1       || {};
-  const pivot1Months = d2c.pivot1_months|| [];
-
-  // ── Badge ────────────────────────────────────────────────────────────────
-  const progCount = (kpis.prog||{}).count||0;
-  const pendCount = (kpis.pend||{}).count||0;
-  const badge = document.getElementById('d2cBadge');
-  if (badge) { const n=progCount+pendCount; badge.textContent=n; badge.style.display=n>0?'inline':'none'; }
-
-  // ── No data state ────────────────────────────────────────────────────────
-  if (rows.length === 0) {
-    mc.innerHTML = `<div style="padding:60px 30px;text-align:center">
-      <div style="font-size:48px;margin-bottom:16px">📋</div>
-      <div style="font-size:22px;font-weight:700;color:var(--text);margin-bottom:10px">No ShipBob D2C Claim Data Yet</div>
-      <div style="font-size:14px;color:var(--muted);max-width:520px;margin:0 auto;line-height:1.6">
-        Create a tab called <strong>"ShipBob D2C Claims"</strong> in your recon Google Sheet,
-        paste the claim rows (non-Delivered rows) from your weekly ShipBob export, then click
-        <strong>Refresh</strong>.
-      </div>
-      <div style="margin-top:24px;background:#f0fff4;border:1px solid #a5d6a7;border-radius:12px;padding:18px 24px;display:inline-block;text-align:left;font-size:12px;color:#1b5e20">
-        <strong>Required columns (row 1 = header):</strong><br>
-        A: Month &nbsp;|&nbsp; B: Shipment ID &nbsp;|&nbsp; C: Channel &nbsp;|&nbsp; D: SKU &nbsp;|&nbsp; E: Sub Bucket<br>
-        F: Claim Status &nbsp;|&nbsp; G: Amt &nbsp;|&nbsp; H: Expected &nbsp;|&nbsp; I: Remark &nbsp;|&nbsp; J: Carrier
-      </div>
-    </div>`;
-    return;
-  }
-
-  // ── Computed totals ───────────────────────────────────────────────────────
-  const totRec     = (kpis.rec||{}).amt  || 0;
-  const totProg    = (kpis.prog||{}).exp || 0;
-  const totPend    = (kpis.pend||{}).exp || 0;
-  const totExpired = (kpis.expired||{}).exp || 0;
-  const totEligible= totRec + totProg + totPend;
-  const recPct     = totEligible > 0 ? ((totRec / totEligible) * 100).toFixed(1) : '0.0';
-  const recCases   = (kpis.rec||{}).count || 0;
-  const progCases  = (kpis.prog||{}).count|| 0;
-  const pendCases  = (kpis.pend||{}).count|| 0;
-
-  // ── Filter state ─────────────────────────────────────────────────────────
-  var _d2cBucket  = '';
-  var _d2cMonth   = '';
-  var _d2cChannel = '';
-
-  // ── KPI cards (colorful gradient style) ──────────────────────────────────
-  function kpiCard(icon, label, mainVal, subVal, gradA, gradB) {
-    return `<div class="hover-lift" style="background:linear-gradient(135deg,${gradA},${gradB});border-radius:16px;
-        padding:22px 20px;box-shadow:0 6px 20px rgba(0,0,0,.15);position:relative;overflow:hidden">
-      <div style="position:absolute;top:-14px;right:-14px;width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,.08)"></div>
-      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
-        <i class="fas ${icon}" style="color:rgba(255,255,255,.85);font-size:14px"></i>
-        <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.8px">${label}</span>
-      </div>
-      <div style="font-size:26px;font-weight:800;color:#fff;line-height:1.1;font-family:'Plus Jakarta Sans',sans-serif;margin-bottom:6px">${mainVal}</div>
-      <div style="font-size:11px;color:rgba(255,255,255,.72)">${subVal}</div>
-    </div>`;
-  }
-
-  const kpiHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px">
-    ${kpiCard('fa-check-circle','Raised & Received',   formatUSD(totRec),     recCases+' shipments · '+recPct+'% recovery',   '#1b5e20','#43a047')}
-    ${kpiCard('fa-hourglass-half','Pending Receipt',   formatUSD(totProg),    progCases+' unique orders open',                '#bf360c','#f4511e')}
-    ${kpiCard('fa-file-alt','Pending to Claim',        formatUSD(totPend),    pendCases+' unique orders unfiled',              '#b71c1c','#e53935')}
-    ${kpiCard('fa-dollar-sign','Total Eligible',       formatUSD(totEligible),'rec + pending receipt + pending claim',         '#1a237e','#3949ab')}
-    ${kpiCard('fa-percentage','Recovery Rate',         recPct+'%',            'of total eligible claimed back',                '#004d40','#00897b')}
-    ${totExpired>0?kpiCard('fa-exclamation-triangle','Window Expired',formatUSD(totExpired),(kpis.expired||{}).count+' cases — window closed','#4a148c','#8e24aa'):''}
-  </div>`;
-
-  // ── Pivot 1: Shipment Distribution by Sub Bucket × Month (ALL rows) ─────
-  const PIVOT1_BUCKETS = [
-    { label: 'Delivered',                     bg: '#1e88e5', fg: '#fff',    fw: '700' },
-    { label: 'Intransit',                     bg: '#1565c0', fg: '#fff',    fw: '700' },
-    { label: 'Claim raised and received',     bg: '#43a047', fg: '#fff',    fw: '700' },
-    { label: 'Claim raised but not received', bg: '#fdd835', fg: '#5d4037', fw: '700' },
-    { label: 'Pending to claim',              bg: '#e53935', fg: '#fff',    fw: '700' },
-    { label: 'Claim Window Expired',          bg: '#fff9c4', fg: '#5d4037', fw: '500' },
-    { label: 'Rto',                           bg: '#a1887f', fg: '#fff',    fw: '500' },
-    { label: 'Cancelled',                     bg: '#f5f5f5', fg: '#555',    fw: '400' },
-  ];
-  function buildPivot1() {
-    if (!pivot1Months.length) return '';
-    const mHdrs = pivot1Months.map(m =>
-      `<th style="padding:9px 12px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`
-    ).join('');
-    const rows1 = PIVOT1_BUCKETS.map(bc => {
-      const bData = pivot1[bc.label] || {};
-      const rowTotal = pivot1Months.reduce((s, m) => s + (bData[m] || 0), 0);
-      if (rowTotal === 0) return '';
-      const cells = pivot1Months.map(m => {
-        const v = bData[m] || 0;
-        return `<td style="padding:8px 12px;text-align:right;color:${bc.fg};font-variant-numeric:tabular-nums">${v > 0 ? v.toLocaleString() : ''}</td>`;
-      }).join('');
-      return `<tr>
-        <td style="padding:8px 14px;background:${bc.bg};color:${bc.fg};font-weight:${bc.fw};white-space:nowrap">${bc.label}</td>
-        ${cells.replace(/<td/g, `<td style="background:${bc.bg}"`).replace(/style="background:[^"]*"/g, (m, o, s) => {
-          // replace only the added background on cells, preserve original style
-          return '';
-        })}
-        <td style="padding:8px 12px;text-align:right;background:${bc.bg};color:${bc.fg};font-weight:700;font-variant-numeric:tabular-nums">${rowTotal.toLocaleString()}</td>
-      </tr>`;
-    }).join('');
-
-    // Rebuild rows properly without the broken replace
-    const rows1clean = PIVOT1_BUCKETS.map(bc => {
-      const bData = pivot1[bc.label] || {};
-      const rowTotal = pivot1Months.reduce((s, m) => s + (bData[m] || 0), 0);
-      if (rowTotal === 0) return '';
-      const cells = pivot1Months.map(m => {
-        const v = bData[m] || 0;
-        return `<td style="padding:8px 12px;text-align:right;background:${bc.bg};color:${bc.fg};font-variant-numeric:tabular-nums">${v > 0 ? v.toLocaleString() : ''}</td>`;
-      }).join('');
-      return `<tr>
-        <td style="padding:8px 14px;background:${bc.bg};color:${bc.fg};font-weight:${bc.fw};white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.15)">${bc.label}</td>
-        ${cells}
-        <td style="padding:8px 12px;text-align:right;background:${bc.bg};color:${bc.fg};font-weight:700;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,.15)">${rowTotal.toLocaleString()}</td>
-      </tr>`;
-    }).join('');
-
-    const grandCells = pivot1Months.map(m => {
-      const v = Object.values(pivot1).reduce((s, bd) => s + (bd[m] || 0), 0);
-      return `<td style="padding:9px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;background:#e8f5e9;color:#1b3a2d">${v.toLocaleString()}</td>`;
-    }).join('');
-    const grandTotal = Object.values(pivot1).reduce((s, bd) => s + Object.values(bd).reduce((ss, v) => ss + v, 0), 0);
-
-    return `<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e9ecef;margin-bottom:24px">
-      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <i class="fas fa-th" style="color:#1b3a2d"></i>
-        <span style="font-weight:700;font-size:13px;color:var(--text)">Shipment Distribution by Sub Bucket</span>
-        <span style="font-size:11px;color:#aaa;margin-left:auto">All ${grandTotal.toLocaleString()} shipments · ${pivot1Months.length} months</span>
-      </div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">
-        <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-          <th style="padding:9px 14px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:left">Row Labels</th>
-          ${mHdrs}
-          <th style="padding:9px 12px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">Grand Total</th>
-        </tr></thead>
-        <tbody>${rows1clean}</tbody>
-        <tfoot><tr>
-          <td style="padding:9px 14px;font-weight:700;font-size:12px;background:#e8f5e9;color:#1b3a2d">Grand Total</td>
-          ${grandCells}
-          <td style="padding:9px 12px;text-align:right;font-weight:800;font-size:13px;background:#e8f5e9;color:#1b3a2d">${grandTotal.toLocaleString()}</td>
-        </tr></tfoot>
-      </table></div>
-    </div>`;
-  }
-  const pivot1Html = buildPivot1();
-
-  // ── Month × Bucket YTD table ─────────────────────────────────────────────
-  const mthColHtml = months.map(m => `<th style="padding:9px 10px;text-align:right;white-space:nowrap">${m.slice(0,3)}</th>`).join('');
-  function mthRow(label, bk, color, amtFn) {
-    const cells = months.map(m => {
-      const v = (monthly[m]||{})[bk]||0;
-      return `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v>0?color:'#ccc'}">${v>0?formatUSD(v):'—'}</td>`;
-    }).join('');
-    const tot = months.reduce((s,m)=>s+((monthly[m]||{})[bk]||0),0);
-    const pct = totEligible>0?((tot/totEligible)*100).toFixed(1):'—';
-    return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:8px 14px;font-weight:700;color:${color};white-space:nowrap">${label}</td>
-      ${cells}
-      <td style="padding:8px 10px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${color}">${tot>0?formatUSD(tot):'—'}</td>
-      <td style="padding:8px 10px;text-align:right;color:#888;font-size:11px">${pct!=='—'?pct+'%':'—'}</td>
-    </tr>`;
-  }
-  const mthTotCells = months.map(m => {
-    const v = ['rec','prog','pend'].reduce((s,b)=>s+((monthly[m]||{})[b]||0),0);
-    return `<td style="padding:9px 10px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${v>0?formatUSD(v):'—'}</td>`;
-  }).join('');
-  const ytdHtml = `<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e9ecef;margin-bottom:24px">
-    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-      <i class="fas fa-table" style="color:#1b3a2d"></i>
-      <span style="font-weight:700;font-size:13px;color:var(--text)">Claims Bucket — Year-to-Date</span>
-      <span style="font-size:11px;color:#aaa;margin-left:auto">ShipBob D2C · ${months.length} months</span>
-    </div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">
-      <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-        <th style="padding:9px 14px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:left">Bucket</th>
-        ${mthColHtml}
-        <th style="padding:9px 10px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">TOTAL</th>
-        <th style="padding:9px 10px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">YTD%</th>
-      </tr></thead>
-      <tbody>
-        ${mthRow('✅ Claim Raised & Received','rec','#2e7d32')}
-        ${mthRow('⏳ Claim Raised, Pending Receipt','prog','#e65100')}
-        ${mthRow('📋 Pending to Claim','pend','#c62828')}
-      </tbody>
-      <tfoot><tr style="background:rgba(27,58,45,.07);border-top:2px solid var(--border)">
-        <td style="padding:9px 14px;font-weight:700;font-size:12px">Total Eligible</td>
-        ${mthTotCells}
-        <td style="padding:9px 10px;text-align:right;font-weight:800;font-size:13px;color:#1b3a2d">${formatUSD(totEligible)}</td>
-        <td style="padding:9px 10px;text-align:right;font-weight:700;color:#1b3a2d">100%</td>
-      </tr></tfoot>
-    </table></div>
-  </div>`;
-
-  // ── Channel breakdown ─────────────────────────────────────────────────────
-  const chArr = Object.keys(channels).sort();
-  const chRowsHtml = chArr.map(ch => {
-    const v = channels[ch];
-    const tot = (v.rec||0)+(v.prog||0)+(v.pend||0);
-    return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:8px 14px;font-weight:600">${ch}</td>
-      <td style="padding:8px 10px;text-align:right;color:#2e7d32;font-weight:600">${v.rec>0?formatUSD(v.rec):'—'}</td>
-      <td style="padding:8px 10px;text-align:right;color:#e65100">${v.prog>0?formatUSD(v.prog):'—'}</td>
-      <td style="padding:8px 10px;text-align:right;color:#c62828">${v.pend>0?formatUSD(v.pend):'—'}</td>
-      <td style="padding:8px 10px;text-align:right;font-weight:700">${formatUSD(tot)}</td>
-    </tr>`;
-  }).join('');
-  const chHtml = chArr.length ? `<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e9ecef;margin-bottom:24px">
-    <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
-      <i class="fas fa-layer-group" style="color:#1b3a2d"></i>
-      <span style="font-weight:700;font-size:13px;color:var(--text);margin-left:6px">By Channel</span>
-    </div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
-      <thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">
-        <th style="padding:9px 14px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:left">Channel</th>
-        <th style="padding:9px 10px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">✅ Received</th>
-        <th style="padding:9px 10px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">⏳ Pending Receipt</th>
-        <th style="padding:9px 10px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">📋 Pending Claim</th>
-        <th style="padding:9px 10px;color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-align:right">Total</th>
-      </tr></thead>
-      <tbody>${chRowsHtml}</tbody>
-    </table></div>
-  </div>` : '';
-
-  // ── Claim detail rows ─────────────────────────────────────────────────────
-  function buildDetailTable() {
-    var bkF = window._d2cBucket  || '';
-    var mF  = window._d2cMonth   || '';
-    var chF = window._d2cChannel || '';
-    var filtered = rows.filter(function(r) {
-      if (bkF && r.bucket_key !== bkF) return false;
-      if (mF  && r.month      !== mF)  return false;
-      if (chF && r.channel    !== chF) return false;
-      return r.bucket_key !== 'other' && r.bucket_key !== 'rto' && r.bucket_key !== 'cancelled';
-    });
-    const bkColor = {'rec':'#2e7d32','prog':'#e65100','pend':'#c62828','expired':'#b71c1c'};
-    const bkBg    = {'rec':'#e8f5e9','prog':'#fff3e0','pend':'#ffebee','expired':'#fce4ec'};
-    var tRows = filtered.map(function(r) {
-      const bk  = r.bucket_key;
-      const clr = bkColor[bk] || '#888';
-      const bg  = bkBg[bk]   || '#f5f5f5';
-      const sbLabel = r.sub_bucket || '—';
-      const amtVal  = r.amt > 0 ? formatUSD(r.amt) : '—';
-      const expVal  = r.exp > 0 ? formatUSD(r.exp) : '—';
-      const ageCell = (bk === 'prog' || bk === 'pend')
-        ? '<td style="padding:7px 10px;font-size:10px;text-align:right;font-variant-numeric:tabular-nums;color:' + (r.days > 60 ? '#c62828' : r.days > 30 ? '#e65100' : '#555') + ';font-weight:' + (r.days > 30 ? '700' : '400') + '">' + (r.days > 0 ? r.days + 'd' : '—') + '</td>'
-        : '<td style="padding:7px 10px;font-size:10px;color:#ccc">—</td>';
-      const qtyVal = r.total_qty > 0 ? r.total_qty : '—';
-      return '<tr style="border-bottom:1px solid var(--border)">' +
-        '<td style="padding:7px 10px;font-size:10px;white-space:nowrap;font-weight:600">' + (r.month||'—') + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px;font-family:monospace;white-space:nowrap">' + (r.shipment_id||'—') + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px">' + (r.channel||'—') + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + (r.line_name||r.sku||'') + '">' + (r.line_name||r.sku||'—') + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px;text-align:right;font-variant-numeric:tabular-nums">' + qtyVal + '</td>' +
-        '<td style="padding:7px 10px"><span style="background:' + bg + ';color:' + clr + ';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">' + sbLabel + '</span></td>' +
-        '<td style="padding:7px 10px;font-size:10px;text-align:right;font-weight:700;color:#2e7d32;font-variant-numeric:tabular-nums">' + amtVal + '</td>' +
-        '<td style="padding:7px 10px;font-size:10px;text-align:right;color:#e65100;font-variant-numeric:tabular-nums">' + expVal + '</td>' +
-        ageCell +
-        '<td style="padding:7px 10px;font-size:10px">' + (r.carrier||'—') + '</td>' +
-      '</tr>';
-    }).join('') || '<tr><td colspan="10" style="text-align:center;padding:30px;color:#aaa">No rows match the current filter</td></tr>';
-    return '<div style="padding:5px 14px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">' + filtered.length + ' rows</div>' +
-      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">' +
-        '<thead><tr style="background:linear-gradient(135deg,#1b3a2d,#2d5a3d)">' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;white-space:nowrap">Month</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left;white-space:nowrap">Shipment ID</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Channel</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Line Item</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Total Qty</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Sub Bucket</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Amt ($)</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Expected ($)</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:right;white-space:nowrap">Order Age</th>' +
-          '<th style="padding:8px 10px;color:rgba(255,255,255,.9);font-size:10px;font-weight:600;text-align:left">Carrier</th>' +
-        '</tr></thead>' +
-        '<tbody>' + tRows + '</tbody>' +
-      '</table></div>';
-  }
-
-  // ── Filter bar ───────────────────────────────────────────────────────────
-  function selStyle(active) {
-    return 'padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:11px;background:var(--card);color:var(--text);cursor:pointer' + (active ? ';border-color:#1b3a2d;font-weight:700' : '');
-  }
-  const monthOpts = [''].concat(months).map(m => `<option value="${m}"${_d2cMonth===m?'selected':''}>${m||'All months'}</option>`).join('');
-  const bucketOpts = [['','All buckets'],['rec','✅ Received'],['prog','⏳ Pending Receipt'],['pend','📋 Pending Claim'],['expired','⛔ Window Expired']]
-    .map(([v,l]) => `<option value="${v}"${_d2cBucket===v?'selected':''}>${l}</option>`).join('');
-  const chOpts = [''].concat(Object.keys(channels).sort()).map(c => `<option value="${c}"${_d2cChannel===c?'selected':''}>${c||'All channels'}</option>`).join('');
-
-  function filterBar() {
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 16px;background:var(--card);border-radius:10px;border:1px solid var(--border);margin-bottom:16px">
-      <i class="fas fa-filter" style="color:#1b3a2d;font-size:12px"></i>
-      <select id="d2cBucketSel" style="${selStyle(_d2cBucket)}" onchange="window._d2cBucket=this.value;document.getElementById('d2cDetail').innerHTML=window.buildD2CDetail()">${bucketOpts}</select>
-      <select id="d2cMonthSel"  style="${selStyle(_d2cMonth)}"  onchange="window._d2cMonth=this.value;document.getElementById('d2cDetail').innerHTML=window.buildD2CDetail()">${monthOpts}</select>
-      <select id="d2cChSel"     style="${selStyle(_d2cChannel)}" onchange="window._d2cChannel=this.value;document.getElementById('d2cDetail').innerHTML=window.buildD2CDetail()">${chOpts}</select>
-      <span style="font-size:11px;color:#aaa;margin-left:auto">${rows.filter(r=>r.bucket_key!=='other'&&r.bucket_key!=='rto'&&r.bucket_key!=='cancelled').length} total claim rows</span>
-    </div>`;
-  }
-
-  // ── Assemble ─────────────────────────────────────────────────────────────
-  mc.innerHTML = `<div style="padding:24px 28px">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">
-      <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#1b3a2d,#2d5a3d);display:flex;align-items:center;justify-content:center">
-        <i class="fas fa-store" style="color:#fff;font-size:18px"></i>
-      </div>
-      <div>
-        <div style="font-size:20px;font-weight:800;color:var(--text)">ShipBob D2C Claims</div>
-        <div style="font-size:12px;color:var(--muted)">${Object.values(pivot1).reduce((s,bd)=>s+Object.values(bd).reduce((ss,v)=>ss+v,0),0).toLocaleString()} total shipments · ${rows.length} claim rows · ${pivot1Months.length} months</div>
-      </div>
-    </div>
-    ${pivot1Html}
-    ${kpiHtml}
-    ${ytdHtml}
-    ${chHtml}
-    <div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e9ecef">
-      <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
-        <i class="fas fa-list" style="color:#1b3a2d"></i>
-        <span style="font-weight:700;font-size:13px;color:var(--text);margin-left:6px">Individual Claim Rows</span>
-      </div>
-      <div style="padding:14px 16px 0">${filterBar()}</div>
-      <div id="d2cDetail">${buildDetailTable()}</div>
-    </div>
-  </div>`;
-
-  // expose helpers so inline onchange handlers can call them
-  window._d2cBucket  = _d2cBucket;
-  window._d2cMonth   = _d2cMonth;
-  window._d2cChannel = _d2cChannel;
-  window.buildD2CDetail = buildDetailTable;
-}
 </script>
 </body>
 </html>

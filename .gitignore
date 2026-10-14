@@ -24,3 +24,9 @@ start_provision.bat
 inspect_*.py
 test_*.py
 generate_presentation_doc.py
+
+# ShipBob D2C Live: local state, cached Excel reads, built mails, recipients (never commit)
+shipbob_live/state/
+shipbob_live/cache/
+shipbob_live/output/
+shipbob_live/config.json
