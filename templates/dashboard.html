@@ -1682,15 +1682,13 @@ function renderDashboardOverview(data, lastUpdated) {
     bkLabels = ['Closed','Intransit','Pending','In Progress'];
   }
 
-  // ── Qty: parent (unique-label) vs child (per-SKU row) ──────────────────
-  const seenLabelQty = {};
-  rows.forEach(r => {
-    const lbl = r.label || r.from_label || '';
-    if (lbl && !(lbl in seenLabelQty)) seenLabelQty[lbl] = r.qty || 0;
-  });
-  const parentQty  = Object.values(seenLabelQty).reduce((s,v) => s+v, 0);
+  // ── Qty: parent (sheet column "Qty Sent") vs child (sheet column "Final
+  // Sent Qty") — both are plain sums across every row, no deduplication.
+  // US→US rows only have a single "Quantity" column (no parent/child split),
+  // so qty_sent falls back to qty there — same value either way.
+  const parentQty  = rows.reduce((s,r) => s + (r.qty_sent != null ? r.qty_sent : (r.qty||0)), 0);
   const childQty   = rows.reduce((s,r) => s + (r.qty||0), 0);
-  const uniqueIBRs = Object.keys(seenLabelQty).length;
+  const uniqueIBRs = new Set(rows.map(r => r.label || r.from_label || '').filter(Boolean)).size;
   const uniqueSKUs = new Set(rows.map(r => r.product || r.sku || '').filter(Boolean)).size;
 
   // ── Total short: Final Diff (Q-T) — confirmed shorts only ───────────────
@@ -2307,14 +2305,14 @@ function renderDashboardOverview(data, lastUpdated) {
       <div class="kpi-card" style="background:linear-gradient(135deg,#1565c0,#1976d2,#42a5f5)">
         <div class="kpi-icon"><i class="fas fa-box-open"></i></div>
         <div class="kpi-value">${(parentQty/1000).toFixed(1)}<span style="font-size:14px;font-weight:500">K</span></div>
-        <div class="kpi-label">Parent Qty Sent</div>
+        <div class="kpi-label">Parent Qty Sent <span style="opacity:.6;font-weight:400">(Qty Sent)</span></div>
         <div class="kpi-sub">${parentQty.toLocaleString()} units · ${uniqueIBRs} IBRs</div>
       </div>
 
       <div class="kpi-card" style="background:linear-gradient(135deg,#4a148c,#7b1fa2,#ab47bc)">
         <div class="kpi-icon"><i class="fas fa-sitemap"></i></div>
         <div class="kpi-value">${childQty.toLocaleString()}</div>
-        <div class="kpi-label">Child SKU Qty</div>
+        <div class="kpi-label">Child SKU Qty <span style="opacity:.6;font-weight:400">(Final Sent Qty)</span></div>
         <div class="kpi-sub">${uniqueSKUs || rows.length} unique SKU lines</div>
       </div>
 
