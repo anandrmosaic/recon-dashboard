@@ -27,26 +27,14 @@ SHEET_ID = CONFIG['recon_sheet_id']   # India→US and US→US both live here
 creds = get_sheets_credentials(CF, TF)
 
 # ── Date range ──────────────────────────────────────────────────────────────
-def env_date(name):
+def env_date(name, fallback):
     value = os.environ.get(name, '').strip()
     if not value:
-        return None
+        return fallback
     return datetime.strptime(value, '%Y-%m-%d').date()
 
-def _default_week_range(today=None):
-    """Most recently completed Friday->Thursday cycle (or the current one if
-    today is Thursday). Matches the scheduled task, which runs every Thursday
-    at 13:00 reporting on the week that just ended — used only when
-    PIVOT_START/PIVOT_END aren't explicitly passed in."""
-    today = today or date.today()
-    days_since_thursday = (today.weekday() - 3) % 7   # Thursday = weekday() 3
-    end = today - timedelta(days=days_since_thursday)
-    start = end - timedelta(days=6)
-    return start, end
-
-_auto_start, _auto_end = _default_week_range()
-START        = env_date('PIVOT_START') or _auto_start
-END          = env_date('PIVOT_END')   or _auto_end
+START        = env_date('PIVOT_START', date(2026, 9, 11))
+END          = env_date('PIVOT_END',   date(2026, 9, 17))
 MID_WK_END   = START - timedelta(days=1)
 LAST_WK_END  = MID_WK_END - timedelta(days=7)
 WEEK_NUM     = START.isocalendar()[1]

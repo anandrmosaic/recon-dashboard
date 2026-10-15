@@ -512,15 +512,6 @@ def api_provision_generate():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-# ── ShipBob D2C Live (module in ./shipbob_live; local only: needs the G: drive, switches itself off elsewhere) ──
-try:
-    from shipbob_live.bp import bp as shipbob_live_bp, start_watcher as start_shipbob_watcher
-    app.register_blueprint(shipbob_live_bp)
-except Exception as _e:          # never let this module break the rest of the dashboard
-    start_shipbob_watcher = None
-    print(f"[ShipBob Live] disabled: {_e}")
-
-
 if __name__ == '__main__':
     # Initial data load
     print("[Startup] Loading data from Google Sheets...")
@@ -556,6 +547,4 @@ if __name__ == '__main__':
 
     print("[Server] Dashboard running at http://localhost:5000")
     print("[Server] Send test email at http://localhost:5000/api/send-test-email")
-    if start_shipbob_watcher:
-        start_shipbob_watcher()       # watches the Excel and saves the ShipBob mail drafts (local only)
     app.run(debug=False, host='0.0.0.0', port=5000)
