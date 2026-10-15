@@ -399,7 +399,7 @@ details.sect#checks { background: color-mix(in srgb, var(--a-amber) 6%, var(--su
   <div id="loading">
     <div class="skel" style="height:96px;margin-bottom:16px"></div>
     <div class="skel" style="height:300px;margin-bottom:16px"></div>
-    <p style="text-align:center;color:var(--muted)" id="loadmsg">Reading the Excel from the G: drive… the first load takes about a minute.</p>
+    <p style="text-align:center;color:var(--muted)" id="loadmsg">Reading the data from the Google Sheet… the first load takes about a minute.</p>
   </div>
 
   <div id="app" hidden>
@@ -622,7 +622,7 @@ async function loadData(quiet) {
     const r = await fetch(BASE + '/api/data?unit=' + unit);
     if (r.ok) { D = await r.json(); await pollStatus(true); render(); if (!quiet) freshness(true); return; }
     const j = await r.json().catch(() => ({}));
-    if (j.error) { $('#loadmsg').textContent = 'Could not read the Excel: ' + j.error; return; }
+    if (j.error) { $('#loadmsg').textContent = 'Could not read the data: ' + j.error; return; }
     await new Promise(res => setTimeout(res, 2000));
   }
 }
@@ -632,7 +632,7 @@ async function pollStatus(silent) {
     if (ST.build && ST.build !== PAGE_BUILD && !PAGE_BUILD.startsWith('__')) { toast('A new version of the dashboard is ready. Reloading…'); setTimeout(() => location.reload(), 1200); return; }
     if (!silent && lastVersion !== null && ST.version !== lastVersion) {
       lastVersion = ST.version;
-      toast('The Excel changed. Dashboard updated.');
+      toast('The data changed. Dashboard updated.');
       await loadData(true); return;
     }
     lastVersion = ST.version;
@@ -646,7 +646,7 @@ $('#refreshBtn').onclick = async () => {
   const j = await (await fetch(BASE + '/api/refresh', {method: 'POST'})).json().catch(() => ({ok: false, error: 'server not reachable'}));
   b.disabled = false; b.classList.remove('spin'); $('span', b).textContent = 'Refresh';
   if (!j.ok) return toast('Refresh failed: ' + j.error);
-  await loadData(); toast('Data refreshed from the Excel.');
+  await loadData(); toast('Data refreshed.');
 };
 $$('#unitSeg button').forEach(b => b.onclick = async () => {
   unit = b.dataset.u; try { localStorage.setItem('sbUnit', unit); } catch (e) {}
@@ -762,9 +762,9 @@ function renderActs() {
   const a = D.actions, M = (ST && ST.mailer) || {kinds: {}};
   const drafted = KINDS.filter(kd => { const s = (M.kinds || {})[kd] || {}; return s.drafted_at && s.drafted_for === s.data_date; }).length;
   const tiles = [
-    {n: `${drafted}/${KINDS.length}`, cls: drafted === KINDS.length ? 'ok' : 'warn', l: 'Mails to review and send',
-     s: drafted === KINDS.length ? 'Both Gmail drafts are ready' : M.gmail_connected ? 'Create the drafts in the mail panel' : 'Connect Gmail in the mail panel',
-     go: () => drafted ? window.open('https://mail.google.com/mail/u/0/#drafts', '_blank', 'noopener') : $('#mail').scrollIntoView({behavior: 'smooth', block: 'center'})},
+    {n: M.readonly ? '–' : `${drafted}/${KINDS.length}`, cls: M.readonly ? 'info' : drafted === KINDS.length ? 'ok' : 'warn', l: 'Mails to review and send',
+     s: M.readonly ? 'Drafts are made on the office PC' : drafted === KINDS.length ? 'Both Gmail drafts are ready' : M.gmail_connected ? 'Create the drafts in the mail panel' : 'Connect Gmail in the mail panel',
+     go: () => M.readonly ? null : drafted ? window.open('https://mail.google.com/mail/u/0/#drafts', '_blank', 'noopener') : $('#mail').scrollIntoView({behavior: 'smooth', block: 'center'})},
     {v: a.past_sla, n: fmt(a.past_sla), cls: a.past_sla ? 'crit' : 'ok', l: 'Claims past SLA: chase ShipBob',
      s: a.past_sla ? `Raised, not received · ${a.sla_claim_days}+ days since the claim` : 'Nothing past the claim SLA',
      go: () => openTab('raised', {minClaim: a.sla_claim_days})},
@@ -788,6 +788,7 @@ const mailDetail = (kd, s) => kd === 'potential'
 function renderMail() {
   if (!D) return;
   const M = (ST && ST.mailer) || {kinds: {}};
+  if (M.readonly) { $('#mail').innerHTML = '<div class="auto">View only on this page. The ShipBob mail drafts are created from the office PC (localhost:5000), where Gmail is connected.</div>'; return; }
   const row = kd => {
     const s = (M.kinds || {})[kd] || {};
     const drafted = !!(s.drafted_at && s.drafted_for === s.data_date);
@@ -971,6 +972,7 @@ function renderReportsBase() {
 function renderMailLog() {
   if (!D) return;
   const M = (ST && ST.mailer) || {kinds: {}}, runs = ((ST && ST.auto_log) || []).slice(0, 8);
+  if (M.readonly) { $('#mailLog').innerHTML = '<div class="mlog t-slate"><div class="t">Mail drafts</div><div style="font-size:12.5px;color:var(--muted);margin-top:4px">They are created from the office PC (localhost:5000). This page is view only.</div></div>'; return; }
   $('#mailLog').innerHTML = KINDS.map(kd => {
     const s = (M.kinds || {})[kd] || {};
     const drafted = !!(s.drafted_at && s.drafted_for === s.data_date);

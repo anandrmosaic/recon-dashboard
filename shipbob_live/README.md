@@ -44,3 +44,11 @@ that tab (iframe). The older **"ShipBob D2C"** tab (reads the Google Sheet tab "
   Order Status, Carrier, Tracking Information). This module does not read that tab, so both stay independent;
   both use the same Excel as the source.
 * Gmail: one-time "Connect Gmail" in the page (scope `gmail.compose`); token at the path in `config.json`.
+
+## Data source: Google Sheet (current)
+* `config.json` -> `"data_source": "sheet"` (+ `sheet_id`). The module reads the tab **ShipBob D2C Claims** (read-only, by header name)
+  and takes freshness from the tab **ShipBob D2C Sync Info** (A1:C1 = synced at, file name, row count). The watcher re-reads when that cell changes.
+* Set `"data_source": "excel"` to go back to reading the G: drive Excel files (the code for both stays).
+* Product prices are not in the sheet: they come from `shipbob_live/product_prices.csv` (copy of the Excel 'Product price' tab). New product -> add a row there.
+* Columns the sheet does not carry (Purchase Date, Source, Fulfillment Center, Claim status) are not used by any number.
+* Checked: sheet mode vs Excel mode give identical Main/Sub/Age/Expected/Received for all 65,576 shipments.

@@ -56,7 +56,10 @@ def build_id():
 # ------------------------------------------------------------------ data + automation
 def source_sig():
     try:
-        return tuple((p, os.path.getmtime(p)) for p in engine.find_sources(engine.load_config()))
+        cfg = engine.load_config()
+        if engine.uses_sheet(cfg):          # the upload script rewrites this tab's A1:C1 after every sync
+            return ("sheet",) + engine.sheet_sync_info(cfg)
+        return tuple((p, os.path.getmtime(p)) for p in engine.find_sources(cfg))
     except Exception:
         return None
 

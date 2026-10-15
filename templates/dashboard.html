@@ -845,6 +845,9 @@
     <i class="fas fa-store"></i> ShipBob D2C
     <span id="d2cBadge" style="background:#00695c;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px;display:none"></span>
   </button>
+  <button class="tab-btn" data-tab="shipbob_live" onclick="switchTab('shipbob_live')">
+    <i class="fas fa-truck-fast"></i> ShipBob D2C Live
+  </button>
 </div>
 
 <!-- Main Content -->
@@ -1442,6 +1445,8 @@ function applyAndRender() {
     renderInboundRecon(_rawData, _lastUpdated);
   } else if (_activeTab === 'shipbob_d2c') {
     renderShipBobD2C(_rawData, _lastUpdated);
+  } else if (_activeTab === 'shipbob_live') {
+    renderShipBobLive();
   } else {
     renderDashboardOverview(_rawData, _lastUpdated);
   }
@@ -7476,6 +7481,11 @@ document.getElementById('editModal').addEventListener('click', function(e) {
 // ╔═══════════════════════════════════════════════════════════════════════════╗
 // ║  SHIPBOB D2C CLAIMS TAB                                                   ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
+function renderShipBobLive() {
+  document.getElementById('mainContent').innerHTML =
+    '<iframe src="/shipbob/" title="ShipBob D2C Live" style="width:100%;height:calc(100vh - 150px);min-height:600px;border:0;border-radius:10px;background:#fff"></iframe>';
+}
+
 function renderShipBobD2C(data, lastUpdated) {
   destroyCharts();
   document.getElementById('lastUpdated').textContent = 'Updated: ' + lastUpdated;

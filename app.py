@@ -512,6 +512,22 @@ def api_provision_generate():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# ShipBob D2C Live. Local PC: full version (pandas, Gmail drafts). Render has no pandas, so the lite version
+# (pure Python, reads the Google Sheet, view only) is used. Any failure only switches this page off.
+start_shipbob_watcher = lambda: None
+try:
+    try:
+        if os.environ.get('SHIPBOB_MODE') == 'lite':
+            raise ImportError('SHIPBOB_MODE=lite')
+        from shipbob_live import bp as _sb_bp
+    except ImportError:
+        from shipbob_live import bp_lite as _sb_bp
+    app.register_blueprint(_sb_bp.bp)
+    start_shipbob_watcher = _sb_bp.start_watcher
+except Exception as _e:
+    print(f"[ShipBob Live] disabled: {_e}")
+
+
 if __name__ == '__main__':
     # Initial data load
     print("[Startup] Loading data from Google Sheets...")
@@ -547,4 +563,5 @@ if __name__ == '__main__':
 
     print("[Server] Dashboard running at http://localhost:5000")
     print("[Server] Send test email at http://localhost:5000/api/send-test-email")
+    start_shipbob_watcher()
     app.run(debug=False, host='0.0.0.0', port=5000)

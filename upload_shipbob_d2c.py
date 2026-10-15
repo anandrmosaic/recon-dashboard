@@ -1,11 +1,14 @@
 # upload_shipbob_d2c.py
 # ─────────────────────
 # Reads ShipBob Excel source file(s) from G:\My Drive\Shibob D2C Claim\
-# Writes ALL rows with exactly 16 columns (A–P) to the "ShipBob D2C Claims"
+# Writes ALL rows with exactly 20 columns (A–T) to the "ShipBob D2C Claims"
 # tab in the recon Google Sheet, in the order below. ("Claim status" was
 # dropped from the source Excel and this sheet on request — it was never
 # read anywhere downstream, so removing it has no effect on the dashboard
-# or the weekly pivot reports.)
+# or the weekly pivot reports. Store Order ID, Order Status, Carrier and
+# Tracking Information were added on request, straight from the source
+# Excel's Dump sheet — no new logic needed, those columns already exist
+# there.)
 #
 # Source resolution: PINNED_FILES (closed historical periods that are never
 # re-exported, e.g. "April-May") are always included by exact name. Everything
@@ -45,13 +48,17 @@ PINNED_FILES = [
     'Shipbob Order Data -- April-May 2026.xlsx',
 ]
 
-# Exactly 17 columns, strictly in this order (A → Q)
+# Exactly 20 columns, strictly in this order (A → T)
 COLUMNS = [
     'Shipment ID',
+    'Store Order ID',
     'Import Date',
     'Month',
     'Days of order',
     'Fulfillment Cost',
+    'Order Status',
+    'Carrier',
+    'Tracking Information',
     'Line Item Name',
     'Line Item Qty',
     'Total Item Quantity',
@@ -150,8 +157,11 @@ def read_excel(path):
         v = raw[i]
         if v is None:
             return ''
-        if hasattr(v, 'strftime'):          # datetime / date cell → YYYY-MM-DD
-            return v.strftime('%Y-%m-%d')
+        if hasattr(v, 'strftime'):          # datetime / date cell → YYYY-MM-DD HH:MM:SS
+            # Full timestamp (not just date) -- the ShipBob D2C Live module needs
+            # time-of-day on Import Date for accurate order-age calculations.
+            # Only column with a real datetime value in COLUMNS, so this is safe.
+            return v.strftime('%Y-%m-%d %H:%M:%S')
         if isinstance(v, float):
             if v == int(v):
                 return str(int(v))          # whole number → no decimal
@@ -175,7 +185,32 @@ def read_excel(path):
 
 
 # ── Write to Google Sheets ────────────────────────────────────────────────────
-def upload_to_sheets(data_rows):
+SYNC_INFO_TAB = 'ShipBob D2C Sync Info'
+
+
+def write_sync_info(ss, source_paths, row_count):
+    """New tab only -- last sync time / source file / row count, for the
+    dashboard to show when the sheet was last synced. Never touches any
+    other existing tab."""
+    import datetime
+    current_file = next((os.path.basename(p) for p in source_paths
+                         if os.path.basename(p) not in PINNED_FILES), os.path.basename(source_paths[-1]))
+    meta = ss.get(spreadsheetId=SHEET_ID).execute()
+    tab_names = [s['properties']['title'] for s in meta['sheets']]
+    if SYNC_INFO_TAB not in tab_names:
+        ss.batchUpdate(
+            spreadsheetId=SHEET_ID,
+            body={'requests': [{'addSheet': {'properties': {'title': SYNC_INFO_TAB}}}]}
+        ).execute()
+    ss.values().update(
+        spreadsheetId=SHEET_ID,
+        range=f"'{SYNC_INFO_TAB}'!A1:C1",
+        valueInputOption='RAW',
+        body={'values': [[datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), current_file, row_count]]},
+    ).execute()
+
+
+def upload_to_sheets(data_rows, source_paths=None):
     from auth import get_sheets_credentials
     from googleapiclient.discovery import build
 
@@ -243,6 +278,14 @@ def upload_to_sheets(data_rows):
         print(f'  → batch {start // CHUNK + 1}: rows {start + 1}–{end}')
 
     print(f'\n✅ Done — {len(data_rows):,} rows written to "{TAB_NAME}"')
+
+    if source_paths:
+        try:
+            write_sync_info(ss, source_paths, len(data_rows))
+            print(f'  Updated "{SYNC_INFO_TAB}" tab')
+        except Exception as e:
+            print(f'  ⚠ Could not update "{SYNC_INFO_TAB}" tab: {e}')
+
     print('Go to the dashboard and hit Refresh.')
 
 
@@ -261,7 +304,7 @@ if __name__ == '__main__':
             print('No rows found in Excel — nothing uploaded.')
             sys.exit(0)
 
-        upload_to_sheets(data_rows)
+        upload_to_sheets(data_rows, source_paths=paths)
 
     except Exception as e:
         print(f'\n❌ Error: {e}')

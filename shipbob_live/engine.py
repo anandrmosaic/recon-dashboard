@@ -92,6 +92,69 @@ def _read_dump(path):
     return out
 
 
+# ------------------------------------------------------------------ Google Sheet source (read-only)
+SHEET_TAB = "ShipBob D2C Claims"
+SYNC_TAB = "ShipBob D2C Sync Info"
+PRICES_FILE = os.path.join(BASE, "product_prices.csv")
+
+
+def uses_sheet(cfg):
+    return str(cfg.get("data_source", "excel")).lower() == "sheet"
+
+
+def _sheets_values(cfg, rng, render="UNFORMATTED_VALUE"):
+    """values.get only - this module never writes to the sheet."""
+    import sys
+    app_dir = os.path.dirname(BASE)
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
+    from auth import get_sheets_credentials
+    from googleapiclient.discovery import build
+    creds = get_sheets_credentials(cfg.get("sheets_credentials_file", cfg.get("credentials_file")),
+                                   cfg.get("sheets_token_file", "C:/Users/Admin/recon-token.json"))
+    svc = build("sheets", "v4", credentials=creds, cache_discovery=False)
+    r = svc.spreadsheets().values().get(spreadsheetId=cfg["sheet_id"], range=rng,
+                                        valueRenderOption=render).execute()
+    return r.get("values", [])
+
+
+def sheet_sync_info(cfg):
+    """(synced_at, file name, row count) from the 'ShipBob D2C Sync Info' tab - written by the upload script."""
+    v = _sheets_values(cfg, f"'{SYNC_TAB}'!A1:C1", "FORMATTED_VALUE")
+    row = (v[0] if v else []) + ["", "", ""]
+    return str(row[0]), str(row[1]), str(row[2])
+
+
+def _read_prices():
+    if not os.path.exists(PRICES_FILE):
+        return {}
+    p = pd.read_csv(PRICES_FILE)
+    return {_norm(n): float(v) for n, v in zip(p["Product"], p["Price"]) if pd.notna(v)}
+
+
+def _read_sheet(cfg):
+    """All rows of the 'ShipBob D2C Claims' tab, columns matched by header name (order does not matter)."""
+    v = _sheets_values(cfg, f"'{SHEET_TAB}'!A1:Z200000")
+    if len(v) < 2:
+        raise RuntimeError(f"Sheet tab '{SHEET_TAB}' is empty")
+    hdr = [str(c).strip() for c in v[0]]
+    need = ["Shipment ID", "Import Date", "Line Item Name", "Delivery Status", "Sub Bucket", "Main Bucket"]
+    miss = [c for c in need if c not in hdr]
+    if miss:
+        raise RuntimeError(f"Sheet tab is missing column(s): {miss}")
+    w = len(hdr)
+    d = pd.DataFrame([(r + [""] * w)[:w] for r in v[1:]], columns=hdr)
+    d = d.replace("", np.nan)
+    for c in COLS:                      # columns the sheet does not carry (not used by any number) stay empty
+        if c not in d.columns:
+            d[c] = np.nan
+    d["Shipment ID"] = pd.to_numeric(d["Shipment ID"], errors="coerce")
+    d = d[d["Shipment ID"].notna()].copy()
+    d["Shipment ID"] = d["Shipment ID"].astype("int64")
+    d["Import Date"] = pd.to_datetime(d["Import Date"], errors="coerce")
+    return d[COLS]
+
+
 def _norm(name):
     """Match key for product names: ignores case, spacing, punctuation, the 'I'
     used in place of '|', a trailing 's' and the Keratin/Keratine spelling."""
@@ -102,14 +165,22 @@ def _norm(name):
 
 # ------------------------------------------------------------------ classify
 def build_frame(cfg):
-    sources = find_sources(cfg)
+    from_sheet = uses_sheet(cfg)
     parts, prices = [], {}
-    for i, path in enumerate(sources):
-        dump, pr = _read_dump(path)
-        dump = dump.copy()
-        dump["_src"] = i
+    if from_sheet:
+        sources = [f"Google Sheet - {SHEET_TAB}"]
+        dump = _read_sheet(cfg)
+        dump["_src"] = 0
         parts.append(dump)
-        prices.update(pr)
+        prices = _read_prices()
+    else:
+        sources = find_sources(cfg)
+        for i, path in enumerate(sources):
+            dump, pr = _read_dump(path)
+            dump = dump.copy()
+            dump["_src"] = i
+            parts.append(dump)
+            prices.update(pr)
     raw = pd.concat(parts, ignore_index=True)
     raw = raw[raw["Shipment ID"].notna()]
     # a shipment appearing in two files: keep the newer file's rows
@@ -200,14 +271,23 @@ def build_frame(cfg):
                            in_dispute=("Main", lambda m: int((m == "Under Dispute").sum())))
                       .sort_values("line_items", ascending=False).reset_index()
                       .rename(columns={"Line Item Name": "product"}).to_dict("records"))
-    files = [{"name": os.path.basename(f), "modified": datetime.fromtimestamp(os.path.getmtime(f))} for f in sources]
+    if from_sheet:
+        at, fname, _n = sheet_sync_info(cfg)
+        try:
+            synced = datetime.strptime(at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            synced = datetime.now()
+        files = [{"name": f"Google Sheet ({fname})" if fname else sources[0], "modified": synced}]
+        sources = [f["name"] for f in files]
+    else:
+        files = [{"name": os.path.basename(f), "modified": datetime.fromtimestamp(os.path.getmtime(f))} for f in sources]
     inp = []   # newest export dropped in Input folder (it is moved to Processed once refreshed)
-    for folder in ("Input folder", os.path.join("Input folder", "Processed")):
+    for folder in (() if from_sheet else ("Input folder", os.path.join("Input folder", "Processed"))):
         for ext in ("*.csv", "*.xlsx"):
             inp += glob.glob(os.path.join(cfg["source_folder"], folder, ext))
     inp = [f for f in inp if not os.path.basename(f).startswith("~$")]
     latest_input = max(inp, key=os.path.getmtime) if inp else None
-    meta = {"missing_prices": missing_prices, "as_of": as_of, "sources": [os.path.basename(s) for s in sources],
+    meta = {"missing_prices": missing_prices, "as_of": as_of, "sources": [os.path.basename(s) for s in sources], "data_source": "sheet" if from_sheet else "excel",
             "files": files, "lines": lines,
             "latest_input": ({"name": os.path.basename(latest_input),
                               "modified": datetime.fromtimestamp(os.path.getmtime(latest_input))}
