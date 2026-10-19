@@ -1,8 +1,20 @@
 import base64
+import json
+import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 from googleapiclient.discovery import build
+
+THREAD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'operational_pivot_thread.json')
+
+
+def load_reply_thread():
+    """{"message_id", "references", "subject"} of the ongoing thread to reply into, or None if not set up."""
+    if not os.path.exists(THREAD_FILE):
+        return None
+    with open(THREAD_FILE, encoding='utf-8') as f:
+        return json.load(f)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -776,3 +788,231 @@ def build_enhanced_email_html(data, dashboard_url):
 </div>
 </body>
 </html>"""
+
+
+# ── Operational Pivot report (Shipment Flow / GRN Reconciliation / Claim
+# Exposure) — ports the dashboard's buildOperationalPivot() JS logic exactly,
+# for both India->US and US->US, as a static (non-expandable) email table. ──
+
+MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+               'August', 'September', 'October', 'November', 'December']
+
+_OPS_VIEWS = [
+    {'key': 'flow', 'label': 'Shipment Flow',
+     'note': 'Units by operational status.',
+     'cols': [('closed', 'Closed'), ('short', 'Short GRN'), ('intransit', 'Intransit'), ('grand', 'Grand Total')]},
+    {'key': 'grn', 'label': 'GRN Reconciliation',
+     'note': 'Short-GRN units compared with GRN completed and the remaining final difference.',
+     'cols': [('sent', 'Final Sent Qty'), ('grn', 'GRN Done'), ('diff', 'Final Diff')]},
+    {'key': 'claims', 'label': 'Claim Exposure',
+     'note': 'Final difference split between raised-but-not-received and still pending to claim.',
+     'cols': [('raised', 'Claim Raised but not Received'), ('pending', 'Pending to Claim'), ('grand', 'Grand Total')]},
+]
+
+_SHORT_BUCKETS = {'short_grn_pending', 'short_grn_progress', 'short_grn_awaiting_ibr', 'pending', 'in_progress', 'partial'}
+_PROGRESS_BUCKETS = {'short_grn_progress', 'short_grn_awaiting_ibr', 'in_progress', 'partial'}
+
+
+def _ops_fmt(value):
+    value = value or 0
+    return f"{int(round(value)):,}" if value > 0 else '—'
+
+
+def build_operational_pivot_model(rows, since_month=None):
+    """Same aggregation as the dashboard's buildOperationalPivot(), including
+    the per-channel split under each month."""
+    since_idx = MONTH_ORDER.index(since_month) if since_month else 0
+    model = {'flow': {}, 'grn': {}, 'claims': {}}
+
+    def add(d, key, value):
+        d[key] = d.get(key, 0) + (value or 0)
+
+    def bucket_slots(view, month, channel):
+        m = model[view].setdefault(month, {'_total': {}, '_channels': {}})
+        c = m['_channels'].setdefault(channel, {})
+        return m['_total'], c
+
+    for r in (rows or []):
+        month = r.get('month')
+        if not month or month not in MONTH_ORDER:
+            continue
+        if MONTH_ORDER.index(month) < since_idx:
+            continue
+        bucket = str(r.get('bucket_key') or '').lower()
+        channel = r.get('channel') or r.get('to_channel') or r.get('from_channel') or 'Other'
+        qty = max(0, r.get('qty') or 0)
+        grn = max(0, r.get('grn') or 0)
+        diff = max(0, r.get('diff') or 0)
+
+        # Rows marked Intransit but with a "Canceled" Channel Shipment Status
+        # (column X) never actually shipped -- excluded entirely so the email
+        # doesn't show an inflated/confusing "still in transit" number.
+        if bucket == 'intransit' and 'cancel' in str(r.get('channel_shipment_status') or '').lower():
+            continue
+
+        flow_t, flow_c = bucket_slots('flow', month, channel)
+        if bucket == 'closed':
+            add(flow_t, 'closed', qty); add(flow_c, 'closed', qty)
+        elif bucket == 'intransit':
+            add(flow_t, 'intransit', qty); add(flow_c, 'intransit', qty)
+        elif bucket in _SHORT_BUCKETS:
+            add(flow_t, 'short', qty); add(flow_c, 'short', qty)
+
+        if bucket not in _SHORT_BUCKETS:
+            continue
+        grn_t, grn_c = bucket_slots('grn', month, channel)
+        add(grn_t, 'sent', qty); add(grn_c, 'sent', qty)
+        add(grn_t, 'grn', grn); add(grn_c, 'grn', grn)
+        add(grn_t, 'diff', diff); add(grn_c, 'diff', diff)
+        claims_t, claims_c = bucket_slots('claims', month, channel)
+        if bucket in _PROGRESS_BUCKETS:
+            add(claims_t, 'raised', diff); add(claims_c, 'raised', diff)
+        else:
+            add(claims_t, 'pending', diff); add(claims_c, 'pending', diff)
+
+    months = sorted(set(model['flow']) | set(model['grn']) | set(model['claims']),
+                     key=lambda m: MONTH_ORDER.index(m))
+    return model, months
+
+
+def _ops_row_vals(cols, src):
+    vals = {}
+    for key, _ in cols:
+        vals[key] = (sum(src.get(k, 0) for k, _ in cols[:-1])
+                     if key == 'grand' else src.get(key, 0))
+    return vals
+
+
+def _ops_table_html(view, model, months):
+    cols = view['cols']
+    grand = {}
+    rows_html = []
+    for month in months:
+        src = model[view['key']].get(month, {'_total': {}, '_channels': {}})
+        vals = _ops_row_vals(cols, src['_total'])
+        for key, _ in cols:
+            grand[key] = grand.get(key, 0) + vals[key]
+        rows_html.append(
+            '<tr style="background:#f7faf8">' +
+            f'<td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:left;font-weight:700;color:#1b3a2d">{month}</td>' +
+            ''.join(f'<td style="padding:7px 10px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;color:#1b3a2d">{_ops_fmt(vals[k])}</td>' for k, _ in cols) +
+            '</tr>'
+        )
+        for channel in sorted(src['_channels']):
+            cvals = _ops_row_vals(cols, src['_channels'][channel])
+            rows_html.append(
+                '<tr>' +
+                f'<td style="padding:5px 10px 5px 26px;border-bottom:1px solid #f5f5f5;text-align:left;color:#666;font-size:11px">{channel}</td>' +
+                ''.join(_td(_ops_fmt(cvals[k]), 'right') for k, _ in cols) +
+                '</tr>'
+            )
+    total_row = (
+        '<tr style="background:#1b3a2d">' +
+        f'<td style="padding:8px 10px;color:#fff;font-weight:700">Grand Total</td>' +
+        ''.join(f'<td style="padding:8px 10px;text-align:right;color:#fff;font-weight:700">{_ops_fmt(grand.get(k,0))}</td>'
+                for k, _ in cols) + '</tr>'
+    )
+    header = ('<tr style="background:#edf7f1">' +
+              _th('Month / Channel', 'left') +
+              ''.join(_th(label, 'right') for _, label in cols) + '</tr>')
+    return f"""
+    <p style="margin:18px 0 6px;font-size:13px;font-weight:700;color:#1b3a2d">{view['label']}</p>
+    <p style="margin:0 0 8px;font-size:11px;color:#888">{view['note']}</p>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px">
+      <thead>{header}</thead>
+      <tbody>{''.join(rows_html)}{total_row}</tbody>
+    </table>"""
+
+
+def build_operational_pivot_email_html(india_us_rows, us2us_rows, since_month='July'):
+    ius_model, ius_months = build_operational_pivot_model(india_us_rows, since_month)
+    u2u_model, u2u_months = build_operational_pivot_model(us2us_rows, since_month)
+
+    def route_section(title, model, months):
+        if not months:
+            return f'<p style="font-size:12px;color:#999">{title}: no data from {since_month} onward.</p>'
+        tables = ''.join(_ops_table_html(v, model, months) for v in _OPS_VIEWS)
+        return f"""
+        <div style="margin-bottom:28px">
+          <p style="margin:0 0 4px;font-size:15px;font-weight:800;color:#1b3a2d">{title}</p>
+          <p style="margin:0 0 4px;font-size:11px;color:#aaa">{since_month} – {months[-1]} · {len(months)} months</p>
+          {tables}
+        </div>"""
+
+    body = route_section('India → US', ius_model, ius_months) + route_section('Internal US 2 US', u2u_model, u2u_months)
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,Helvetica,sans-serif;color:#222">
+  <div style="max-width:720px;margin:0 auto;padding:24px 20px">
+    <div style="background:#1b3a2d;padding:18px 22px;border-radius:10px 10px 0 0">
+      <p style="margin:0;color:#fff;font-size:16px;font-weight:800">Operational Pivot Report</p>
+      <p style="margin:4px 0 0;color:rgba(255,255,255,.65);font-size:11px">Shipment Flow · GRN Reconciliation · Claim Exposure — {since_month} to date</p>
+    </div>
+    <div style="background:#fff;padding:20px 22px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 10px 10px">
+      {body}
+      <p style="margin-top:20px;font-size:10px;color:#aaa">Generated {datetime.now().strftime('%d %b %Y, %I:%M %p IST')} · India→USA Shipment Tracker</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+def send_operational_pivot_email(creds, india_us_rows, us2us_rows, recipients, sender, since_month='July',
+                                  thread=None, dry_run=False):
+    """thread: optional {"message_id", "references", "subject"} from an existing Gmail thread (see
+    load_reply_thread()) -- when given, the mail is sent as a reply into that thread instead of a new one.
+    dry_run: build the message and print it instead of calling Gmail, to check the headers before sending for real.
+    """
+    subject = thread["subject"] if thread else f"Operational Pivot Report — {since_month} to date ({datetime.now().strftime('%d %b %Y')})"
+    html = build_operational_pivot_email_html(india_us_rows, us2us_rows, since_month)
+
+    service = None if dry_run else build('gmail', 'v1', credentials=creds)
+    for recipient in recipients:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = sender
+        msg['To'] = recipient
+        if thread:
+            msg['In-Reply-To'] = thread["message_id"]
+            msg['References'] = thread["references"]
+        msg.attach(MIMEText(html, 'html'))
+        if dry_run:
+            print(f"--- DRY RUN: would send to {recipient} ---")
+            for h in ('Subject', 'From', 'To', 'In-Reply-To', 'References'):
+                if msg[h]:
+                    print(f"{h}: {msg[h]}")
+            print(f"(html body: {len(html)} chars, not shown)\n")
+            continue
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        service.users().messages().send(userId='me', body={'raw': raw}).execute()
+
+    if not dry_run:
+        print(f"[Email] Operational Pivot Report sent to {len(recipients)} recipient(s) at {datetime.now()}")
+
+
+def draft_operational_pivot_email(creds, india_us_rows, us2us_rows, recipients, sender, since_month='July', thread=None):
+    """Save the report as a Gmail DRAFT (never sent automatically) -- one draft per recipient. If `thread` is
+    given (see load_reply_thread()), each draft is created as a reply inside that existing Gmail thread, so it
+    shows up ready to send in-context rather than as a new conversation. Returns the list of created draft ids."""
+    subject = thread["subject"] if thread else f"Operational Pivot Report — {since_month} to date ({datetime.now().strftime('%d %b %Y')})"
+    html = build_operational_pivot_email_html(india_us_rows, us2us_rows, since_month)
+
+    service = build('gmail', 'v1', credentials=creds)
+    draft_ids = []
+    for recipient in recipients:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = sender
+        msg['To'] = recipient
+        if thread:
+            msg['In-Reply-To'] = thread["message_id"]
+            msg['References'] = thread["references"]
+        msg.attach(MIMEText(html, 'html'))
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        draft = service.users().drafts().create(userId='me', body={'message': {'raw': raw}}).execute()
+        draft_ids.append(draft['id'])
+
+    print(f"[Email] Operational Pivot Report saved as {len(draft_ids)} Gmail draft(s) at {datetime.now()} "
+          f"(not sent -- open Gmail > Drafts to review and send)")
+    return draft_ids

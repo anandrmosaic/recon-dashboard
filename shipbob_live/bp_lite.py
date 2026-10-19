@@ -1,6 +1,10 @@
 """
 ShipBob D2C Live, lite blueprint for Render (no pandas): same page and API as bp.py, but the data comes from the
-Google Sheet tab "ShipBob D2C Claims" (engine_lite.py) and it is view only: no Gmail drafts, no Excel folder.
+Google Sheet tab "ShipBob D2C Claims" (engine_lite.py).
+
+Mail drafts here are manual-only, same as the local app: nothing is created automatically, there is no watcher
+triggering Gmail. A draft is only ever made when the user clicks the button in the page
+(POST /api/mailer/<kind>/draft), using mailer_lite.py (also pandas-free).
 
 app.py picks this one when pandas is not installed (or SHIPBOB_MODE=lite). All routes sit behind the login gate.
 """
@@ -15,6 +19,7 @@ from flask import Blueprint, Response, jsonify, request, send_file
 from openpyxl import Workbook
 
 from . import engine_lite as engine
+from . import mailer_lite as mailer
 
 bp = Blueprint("shipbob_live", __name__, url_prefix="/shipbob")
 
@@ -106,7 +111,7 @@ def status():
     return jsonify({
         "version": STATE["version"], "loading": STATE["loading"], "error": STATE["error"],
         "as_of": meta["as_of"].strftime("%d %b %Y, %H:%M") if meta else None,
-        "mailer": {"readonly": True, "gmail_connected": False, "kinds": {}}, "last_auto": [], "auto_log": [],
+        "mailer": mailer.status(), "last_auto": [], "auto_log": [],
         "watch_seconds": WATCH_SECONDS, "build": build_id(),
     })
 
@@ -141,9 +146,66 @@ def download(name):
 
 
 @bp.route("/download/mailer/<kind>")
-@bp.route("/api/mailer/<kind>/<act>", methods=["POST"])
-@bp.route("/api/mailer/<kind>", methods=["POST"])
+def download_mail(kind):
+    path = mailer.kstate(kind).get("excel_path") if kind in mailer.KINDS else None
+    if not path or not os.path.exists(path):
+        return "No Excel built yet for this mail", 404
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+
+
+# ------------------------------------------------------------------ mailer actions (manual only -- no watcher/auto_run)
+def _fail(e):
+    traceback.print_exc()
+    return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _kind(kind):
+    if kind not in mailer.KINDS:
+        raise ValueError(f"unknown mail '{kind}'")
+    return kind
+
+
+@bp.route("/api/mailer/<kind>/build", methods=["POST"])
+def mailer_build(kind):
+    if STATE["ships"] is None:
+        return jsonify({"ok": False, "error": "Data not loaded yet"}), 503
+    try:
+        r = mailer.build(_kind(kind), STATE["ships"], STATE["meta"])
+        return jsonify({"ok": True, "new": r["new"], "all": r["all"], "path": r["path"]})
+    except Exception as e:
+        return _fail(e)
+
+
+@bp.route("/api/mailer/<kind>/draft", methods=["POST"])
+def mailer_draft(kind):
+    if STATE["ships"] is None:
+        return jsonify({"ok": False, "error": "Data not loaded yet"}), 503
+    try:
+        r = mailer.build(_kind(kind), STATE["ships"], STATE["meta"])
+        d = mailer.create_draft(r)
+        return jsonify({"ok": True, "new": r["new"], "all": r["all"], **d})
+    except Exception as e:
+        return _fail(e)
+
+
+@bp.route("/api/mailer/<kind>/mark-sent", methods=["POST"])
+def mailer_mark_sent(kind):
+    try:
+        n = mailer.mark_sent(_kind(kind))
+        return jsonify({"ok": True, "marked": n})
+    except Exception as e:
+        return _fail(e)
+
+
 @bp.route("/api/mailer/connect-gmail", methods=["POST"])
+def mailer_connect():
+    try:
+        mailer.connect_gmail()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return _fail(e)
+
+
 @bp.route("/api/mailer/open-folder", methods=["POST"])
-def mail_off(kind=None, act=None):
-    return jsonify({"ok": False, "error": "Mail drafts are created from the office PC (localhost:5000), not here."}), 404
+def open_folder():
+    return jsonify({"ok": False, "error": "No local Excel folder on this server."}), 404

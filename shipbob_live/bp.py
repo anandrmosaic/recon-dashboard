@@ -100,16 +100,17 @@ def run_auto(force=False):
 
 
 def _watch():
-    if refresh():
-        run_auto()
+    # Manual-drafting mode: the watcher only refreshes the displayed data.
+    # It never calls run_auto() -- drafts are only ever created when the user
+    # clicks the button in the page (POST /api/mailer/<kind>/draft).
+    refresh()
     while True:
         time.sleep(WATCH_SECONDS)
         sig = source_sig()
         if sig and sig != STATE["sig"]:
             print("[ShipBob Live] Excel changed, rebuilding...")
             time.sleep(5)            # let the file finish saving / syncing
-            if refresh():
-                run_auto()
+            refresh()
 
 
 def start_watcher():
@@ -170,7 +171,8 @@ def api_refresh():
         return _off()
     if not refresh():
         return jsonify({"ok": False, "error": STATE["error"]}), 500
-    run_auto()
+    # Manual-drafting mode: refreshing data never touches Gmail. Drafts are
+    # only ever created via the dedicated button (POST /api/mailer/<kind>/draft).
     return jsonify({"ok": True})
 
 

@@ -1089,6 +1089,7 @@ def get_india_us_data(creds, sheet_id):
     if remarks_col < 0:
         remarks_col = 30  # hardcoded: column AE (31st column, 0-indexed 30)
     ship_status_col = fc('ship partner portal')
+    channel_status_col = fc('channel shipment status')
 
     print(f"[IndiaUS] Cols — month:{month_col} bucket:{bucket_col} sub:{sub_col} "
           f"exp:{exp_col} act:{act_col} qty:{qty_col} channel:{channel_col} remarks:{remarks_col}")
@@ -1211,6 +1212,7 @@ def get_india_us_data(creds, sheet_id):
             'bucket':               bucket,
             'sub_remark':           sub,
             'bucket_key':           bucket_key,
+            'channel_shipment_status': str(g(row, channel_status_col)).strip(),
         })
 
     months_present = sorted(

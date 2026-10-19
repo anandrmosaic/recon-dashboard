@@ -30,3 +30,6 @@ shipbob_live/state/
 shipbob_live/cache/
 shipbob_live/output/
 shipbob_live/config.json
+
+# Operational Pivot Report: local thread-reply state
+operational_pivot_thread.json
