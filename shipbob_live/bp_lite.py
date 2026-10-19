@@ -28,7 +28,7 @@ TEMPLATE = os.path.join(HERE, "templates", "shipbob_live.html")
 WATCH_SECONDS = 120
 START = int(time.time())
 
-STATE = {"ships": None, "meta": None, "payloads": None, "error": None, "loading": False, "version": 0, "sig": None}
+STATE = {"ships": None, "meta": None, "payloads": {}, "error": None, "loading": False, "version": 0, "sig": None}
 LOCK = threading.Lock()
 _started = False
 
@@ -38,6 +38,10 @@ def build_id():
 
 
 def refresh():
+    """Rebuild the shipment list. The page's two views (per-line-item / per-shipment) are NOT built here --
+    they're ~66k rows each and building both on every reload doubled this step's peak memory, which is very
+    likely what was tipping Render's free-tier memory limit and causing the repeated OOM restarts. Each view
+    is now built lazily, the first time a request actually asks for it (see data() below)."""
     if not LOCK.acquire(blocking=False):          # a rebuild is already running
         return False
     try:
@@ -45,8 +49,7 @@ def refresh():
         cfg = engine.load_config()
         sig = engine.source_sig(cfg)
         ships, meta = engine.build(cfg)
-        payloads = {u: json.dumps(engine.payload(ships, meta, u), default=str) for u in engine.UNITS}
-        STATE.update(ships=ships, meta=meta, payloads=payloads, error=None, sig=sig, version=STATE["version"] + 1)
+        STATE.update(ships=ships, meta=meta, payloads={}, error=None, sig=sig, version=STATE["version"] + 1)
         return True
     except Exception as e:
         traceback.print_exc()
@@ -99,10 +102,15 @@ def index():
 
 @bp.route("/api/data")
 def data():
-    if STATE["payloads"] is None:
+    if STATE["ships"] is None:
         return jsonify({"loading": True, "error": STATE["error"]}), 503
     unit = request.args.get("unit", "lines")
-    return Response(STATE["payloads"][unit if unit in engine.UNITS else "lines"], mimetype="application/json")
+    unit = unit if unit in engine.UNITS else "lines"
+    cached = STATE["payloads"].get(unit)
+    if cached is None:
+        cached = json.dumps(engine.payload(STATE["ships"], STATE["meta"], unit), default=str)
+        STATE["payloads"][unit] = cached
+    return Response(cached, mimetype="application/json")
 
 
 @bp.route("/api/status")
