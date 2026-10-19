@@ -396,11 +396,29 @@ def _email_claims(pp, n_new, meta, cfg):
     return subject, blocks
 
 
-# ------------------------------------------------------------------ gmail (identical to mailer.py; no pandas here)
+# ------------------------------------------------------------------ gmail
+# Render has no local config.json / writable token file and no browser for interactive consent, so there a
+# pre-authorized token is read from the GMAIL_TOKEN_JSON env var instead (same pattern as auth.py). Locally,
+# shipbob_live/config.json's gmail_token_file + the interactive browser flow is used, same as mailer.py.
+def _env_creds():
+    token_json = os.environ.get("GMAIL_TOKEN_JSON")
+    if not token_json:
+        return None
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    creds = Credentials.from_authorized_user_info(json.loads(token_json), GMAIL_SCOPES)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    return creds
+
+
 def gmail_connected(cfg=None):
+    creds = _env_creds()
+    if creds is not None:
+        return bool(creds.valid or creds.refresh_token)
     cfg = cfg or engine.load_config()
-    token = cfg["gmail_token_file"]
-    if not os.path.exists(token):
+    token = cfg.get("gmail_token_file")
+    if not token or not os.path.exists(token):
         return False
     try:
         from google.oauth2.credentials import Credentials
@@ -411,11 +429,18 @@ def gmail_connected(cfg=None):
 
 
 def _gmail_creds(cfg, interactive=False):
+    creds = _env_creds()
+    if creds is not None:
+        return creds
+
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
 
-    token = cfg["gmail_token_file"]
+    token = cfg.get("gmail_token_file")
+    if not token:
+        raise RuntimeError("Gmail is not set up here. On Render, set the GMAIL_TOKEN_JSON environment variable; "
+                            "locally, set gmail_token_file in shipbob_live/config.json.")
     creds = Credentials.from_authorized_user_file(token, GMAIL_SCOPES) if os.path.exists(token) else None
     if creds and not creds.valid and creds.refresh_token:
         creds.refresh(Request())
@@ -430,6 +455,8 @@ def _gmail_creds(cfg, interactive=False):
 
 
 def connect_gmail(cfg=None):
+    if os.environ.get("GMAIL_TOKEN_JSON"):
+        return bool(_env_creds())
     _gmail_creds(cfg or engine.load_config(), interactive=True)
     return True
 
